@@ -119,7 +119,7 @@ pub struct ConstantPool {
     pub names: Names<String>,
     pub tweakdb_ids: Names<TweakDbId>,
     pub resources: Names<Resource>,
-    definitions: Vec<Definition>,
+    pub(crate) definitions: Vec<Definition>,
 }
 
 impl ConstantPool {
@@ -594,6 +594,7 @@ impl<A> PoolIndex<A> {
         self.value == 0
     }
 
+    #[inline(always)]
     pub fn cast<B>(&self) -> PoolIndex<B> {
         PoolIndex {
             value: self.value,
@@ -639,6 +640,18 @@ impl<A> PartialEq for PoolIndex<A> {
 }
 
 impl<A> Eq for PoolIndex<A> {}
+
+impl<A> PartialOrd for PoolIndex<A> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.value.partial_cmp(&other.value)
+    }
+}
+
+impl<A> Ord for PoolIndex<A> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.value.cmp(&other.value)
+    }
+}
 
 impl<A> Hash for PoolIndex<A> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
