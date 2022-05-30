@@ -1,8 +1,5 @@
 project: redscript
-target: redscript
-
-image: ghcr.io/ebell495/redscript:latest
-duration: 300
+target: redscript-cli
 
 cmds:
     - cmd: ./redscript-cli decompile -i @@ -o /dev/null
