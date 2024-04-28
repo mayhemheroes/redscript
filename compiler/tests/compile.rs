@@ -262,8 +262,8 @@ fn compile_defaults() {
         class Class {
             let a: Int32 = 10;
             let b: Enum = Enum.Zero;
-            let b: String = "str";
-            let c: CName = n"name";
+            let c: String = "str";
+            let d: CName = n"name";
         }
     "#;
 

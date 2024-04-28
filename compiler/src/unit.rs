@@ -456,6 +456,7 @@ impl<'a> CompilationUnit<'a> {
             .with_is_struct(is_struct);
         let mut functions = vec![];
         let mut fields = vec![];
+        let mut field_names = HashSet::new();
 
         for member in source.members {
             match member {
@@ -497,6 +498,10 @@ impl<'a> CompilationUnit<'a> {
                     }
 
                     let name_idx = self.pool.names.add(let_.declaration.name.to_heap());
+                    if !field_names.insert(name_idx) {
+                        self.report(Cause::FieldRedefinition.with_span(let_.declaration.span))?;
+                    }
+
                     let field_idx = self.pool.stub_definition(name_idx);
 
                     self.define_field(field_idx, class_idx, flags, visibility, let_, scope)?;
