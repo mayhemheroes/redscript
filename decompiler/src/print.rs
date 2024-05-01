@@ -4,6 +4,7 @@ use std::str::FromStr;
 use itertools::Itertools;
 use redscript::ast::{BinOp, Constant, Expr, Ident, Literal, Seq, SourceAst, SwitchCase, TypeName, UnOp};
 use redscript::bundle::ConstantPool;
+use redscript::bytecode::Instr;
 use redscript::definition::{AnyDefinition, Definition, Function, Type};
 
 use crate::error::Error;
@@ -219,7 +220,15 @@ fn write_function_body<W: Write>(
             for (offset, instr) in fun.code.iter() {
                 let op = format!("{:?}", instr).to_lowercase();
                 write_indent(out, depth + 1)?;
-                writeln!(out, "{}: {}", offset.value, op)?;
+                match instr {
+                    Instr::InvokeStatic(_, _, fun, _) => {
+                        writeln!(out, "{}: {} // {}", offset.value, op, pool.def_name(fun)?)?;
+                    }
+                    Instr::InvokeVirtual(_, _, name, _) => {
+                        writeln!(out, "{}: {} // {}", offset.value, op, pool.names.get(name)?)?;
+                    }
+                    _ => writeln!(out, "{}: {}", offset.value, op)?,
+                }
             }
         }
     }
