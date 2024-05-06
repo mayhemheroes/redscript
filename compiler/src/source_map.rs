@@ -28,7 +28,6 @@ impl Files {
     pub fn from_files(paths: impl IntoIterator<Item = PathBuf>) -> io::Result<Self> {
         let mut files = Self::new();
         for path in paths {
-            dbg!(&path);
             let sources = std::fs::read_to_string(&path)?;
             files.add(path, sources);
         }

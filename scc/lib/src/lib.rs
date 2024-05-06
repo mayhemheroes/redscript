@@ -74,7 +74,6 @@ fn try_compile(settings: &SccSettings) -> anyhow::Result<SccResult> {
         fs::copy(fallback_backup_path, &backup_path).context("Failed to copy the backup file")?;
     }
 
-    dbg!(&script_paths);
     let files = Files::from_dirs(&script_paths).context("Could not load script sources")?;
 
     match try_compile_files(&settings.r6_dir, &cache_path, output_cache_path, files) {
