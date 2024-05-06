@@ -595,7 +595,7 @@ impl Encode for SourceFile {
 }
 
 #[bitfield(bits = 16)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct FieldFlags {
     pub is_native: bool,
     pub is_editable: bool,
@@ -625,7 +625,7 @@ impl Encode for FieldFlags {
 }
 
 #[bitfield(bits = 8)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct LocalFlags {
     pub is_const: bool,
     #[skip]
@@ -645,7 +645,7 @@ impl Encode for LocalFlags {
 }
 
 #[bitfield(bits = 8)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct ParameterFlags {
     pub is_optional: bool,
     pub is_out: bool,
@@ -668,7 +668,7 @@ impl Encode for ParameterFlags {
 }
 
 #[bitfield(bits = 16)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct ClassFlags {
     pub is_native: bool,
     pub is_abstract: bool,
@@ -696,7 +696,7 @@ impl Encode for ClassFlags {
 }
 
 #[bitfield(bits = 32)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct FunctionFlags {
     pub is_static: bool,
     pub is_exec: bool,

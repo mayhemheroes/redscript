@@ -21,10 +21,7 @@ struct InvalidUseOfTemporaryVisitor<'a> {
 impl InvalidUseOfTemporaryVisitor<'_> {
     fn on_expr(&mut self, expr: &TypedExpr) {
         match expr {
-            Expr::Member(inner, Member::StructField(_), _) if inner.is_prvalue() => {
-                self.results.push(Diagnostic::InvalidUseOfTemporary(inner.span()));
-            }
-            Expr::ArrayElem(inner, _, _) if inner.is_prvalue() => {
+            Expr::Member(inner, Member::StructField(_), _) | Expr::ArrayElem(inner, _, _) if inner.is_prvalue() => {
                 self.results.push(Diagnostic::InvalidUseOfTemporary(inner.span()));
             }
             Expr::Call(Callable::Intrinsic(op, _), _, args, _) => match (op, &args[..]) {

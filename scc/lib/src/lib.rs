@@ -18,7 +18,7 @@ use redscript::ast::Span;
 use redscript::bundle::{ConstantPool, ScriptBundle};
 use redscript::definition::{Definition, Enum};
 use redscript_compiler::error::Error;
-use redscript_compiler::source_map::{Files, SourceFilter};
+use redscript_compiler::source_map::Files;
 use redscript_compiler::unit::CompilationUnit;
 use timestamp::CompileTimestamp;
 
@@ -74,7 +74,8 @@ fn try_compile(settings: &SccSettings) -> anyhow::Result<SccResult> {
         fs::copy(fallback_backup_path, &backup_path).context("Failed to copy the backup file")?;
     }
 
-    let files = Files::from_dirs(&script_paths, &SourceFilter::None).context("Could not load script sources")?;
+    dbg!(&script_paths);
+    let files = Files::from_dirs(&script_paths).context("Could not load script sources")?;
 
     match try_compile_files(&settings.r6_dir, &cache_path, output_cache_path, files) {
         Ok(output) => {

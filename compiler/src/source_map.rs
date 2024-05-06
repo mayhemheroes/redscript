@@ -2,7 +2,6 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::{fmt, io, iter};
 
-use hashbrown::HashSet;
 use itertools::{Either, Itertools};
 use redscript::ast::{Pos, Span};
 use walkdir::{DirEntry, WalkDir};
@@ -17,18 +16,19 @@ impl Files {
         Self::default()
     }
 
-    pub fn from_dirs(paths: &[impl AsRef<Path>], filter: &SourceFilter) -> io::Result<Self> {
-        let files = paths.iter().flat_map(|path| filtered_file_iter(path.as_ref(), filter));
+    pub fn from_dirs(paths: impl IntoIterator<Item = impl AsRef<Path>>) -> io::Result<Self> {
+        let files = paths.into_iter().flat_map(|path| dir_file_iter(path.as_ref()));
         Self::from_files(files)
     }
 
-    pub fn from_dir(path: &Path, filter: &SourceFilter) -> io::Result<Self> {
-        Self::from_files(filtered_file_iter(path, filter))
+    pub fn from_dir(path: impl AsRef<Path>) -> io::Result<Self> {
+        Self::from_files(dir_file_iter(path.as_ref()))
     }
 
-    pub fn from_files(paths: impl Iterator<Item = PathBuf>) -> io::Result<Self> {
+    pub fn from_files(paths: impl IntoIterator<Item = PathBuf>) -> io::Result<Self> {
         let mut files = Self::new();
         for path in paths {
+            dbg!(&path);
             let sources = std::fs::read_to_string(&path)?;
             files.add(path, sources);
         }
@@ -80,7 +80,7 @@ impl Files {
     }
 }
 
-fn filtered_file_iter<'a>(path: &'a Path, filter: &'a SourceFilter) -> impl Iterator<Item = PathBuf> + 'a {
+fn dir_file_iter(path: &Path) -> impl Iterator<Item = PathBuf> {
     if path.is_file() {
         Either::Left(iter::once(path.to_path_buf()))
     } else {
@@ -88,8 +88,8 @@ fn filtered_file_iter<'a>(path: &'a Path, filter: &'a SourceFilter) -> impl Iter
             .follow_links(true)
             .into_iter()
             .filter_map(Result::ok)
-            .map(DirEntry::into_path)
-            .filter(move |p| filter.apply(p.strip_prefix(path).unwrap()));
+            .filter(|entry| entry.path().extension() == Some(OsStr::new("reds")))
+            .map(DirEntry::into_path);
         Either::Right(iter)
     }
 }
@@ -223,32 +223,5 @@ impl<'a> SourceLoc<'a> {
 impl<'a> fmt::Display for SourceLoc<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}", self.file.path.display(), self.start)
-    }
-}
-
-pub enum SourceFilter {
-    None,
-    Exclude(HashSet<String>),
-}
-
-impl SourceFilter {
-    fn apply(&self, rel_path: &Path) -> bool {
-        let is_correct_extension = rel_path.extension() == Some(OsStr::new("reds"));
-        let is_matching = match self {
-            Self::None => true,
-            Self::Exclude(exclusions) => {
-                let without_ext = rel_path.with_extension("");
-                let top_level_name = without_ext
-                    .components()
-                    .next()
-                    .and_then(|comp| comp.as_os_str().to_str());
-                match top_level_name {
-                    Some(name) => !exclusions.contains(name),
-                    None => false,
-                }
-            }
-        };
-
-        is_correct_extension && is_matching
     }
 }

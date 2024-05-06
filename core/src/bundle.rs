@@ -586,7 +586,7 @@ impl Encode for DefinitionType {
 }
 
 #[bitfield]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct Timestamp {
     #[skip]
     padding: B10,

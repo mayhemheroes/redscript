@@ -7,7 +7,7 @@ use argh::FromArgs;
 use flexi_logger::{LevelFilter, LogSpecBuilder, Logger};
 use redscript::bundle::ScriptBundle;
 use redscript::definition::AnyDefinition;
-use redscript_compiler::source_map::{Files, SourceFilter};
+use redscript_compiler::source_map::Files;
 use redscript_compiler::unit::CompilationUnit;
 use redscript_decompiler::files::FileIndex;
 use redscript_decompiler::print::{write_definition, OutputMode};
@@ -106,8 +106,7 @@ fn run() -> anyhow::Result<()> {
 fn compile(opts: CompileOpts) -> anyhow::Result<()> {
     let mut bundle = load_bundle(&opts.bundle)?;
 
-    let files = Files::from_dirs(&opts.src, &SourceFilter::None)
-        .map_err(|err| anyhow::anyhow!("Failed to load the source files: {err}"))?;
+    let files = Files::from_dirs(&opts.src).map_err(|err| anyhow::anyhow!("Failed to load the source files: {err}"))?;
 
     match CompilationUnit::new_with_defaults(&mut bundle.pool)
         .map_err(|err| anyhow::anyhow!("Failed to create the compilation unit: {err}"))?
@@ -175,8 +174,8 @@ fn lint(opts: LintOpts) -> anyhow::Result<()> {
     match opts.bundle {
         Some(bundle_path) => {
             let mut bundle = load_bundle(&bundle_path)?;
-            let files = Files::from_dirs(&opts.src, &SourceFilter::None)
-                .map_err(|err| anyhow::anyhow!("Failed to load the source files: {err}"))?;
+            let files =
+                Files::from_dirs(&opts.src).map_err(|err| anyhow::anyhow!("Failed to load the source files: {err}"))?;
 
             if CompilationUnit::new_with_defaults(&mut bundle.pool)
                 .map_err(|err| anyhow::anyhow!("Failed to create the compilation unit: {err}"))?
