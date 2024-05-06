@@ -75,8 +75,8 @@ impl Files {
         self.entries.is_empty()
     }
 
-    pub fn display<'p>(&self, root: &'p Path) -> FilesDispay<'_, 'p> {
-        FilesDispay { files: self, root }
+    pub fn display<'p>(&self, root: &'p Path) -> FilesDisplay<'_, 'p> {
+        FilesDisplay { files: self, root }
     }
 }
 
@@ -95,12 +95,12 @@ fn filtered_file_iter<'a>(path: &'a Path, filter: &'a SourceFilter) -> impl Iter
 }
 
 #[derive(Debug)]
-pub struct FilesDispay<'a, 'p> {
+pub struct FilesDisplay<'a, 'p> {
     files: &'a Files,
     root: &'p Path,
 }
 
-impl<'a, 'p> fmt::Display for FilesDispay<'a, 'p> {
+impl fmt::Display for FilesDisplay<'_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.files
             .entries
