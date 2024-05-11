@@ -300,9 +300,27 @@ impl<'a> TypeChecker<'a> {
                 let cond_type = scope.resolve_type(&TypeName::BOOL, self.pool).with_span(*span)?;
                 let checked_cond = self.check_and_convert(cond, &cond_type, scope)?;
                 let checked_if = self.check_seq(if_, &mut scope.clone())?;
-                let checked_else = else_
+
+                // process chained else-if branches without recursion
+                let mut else_ifs = vec![];
+                let mut final_else = else_;
+                while let Some(else_) = final_else {
+                    let [Expr::If(cond, if_, else_, span)] = &else_.exprs[..] else {
+                        break;
+                    };
+                    let checked_cond = self.check_and_convert(cond, &cond_type, scope)?;
+                    let checked_if = self.check_seq(if_, &mut scope.clone())?;
+                    else_ifs.push((checked_cond, checked_if, span));
+                    final_else = else_;
+                }
+
+                let final_else = final_else
                     .as_ref()
-                    .map_or_else(|| Ok(None), |body| self.check_seq(body, &mut scope.clone()).map(Some))?;
+                    .map(|body| self.check_seq(body, &mut scope.clone()))
+                    .transpose()?;
+                let checked_else = else_ifs.into_iter().rev().fold(final_else, |acc, (cond, body, &span)| {
+                    Some(Seq::new(vec![Expr::If(cond.into(), body, acc, span)]))
+                });
 
                 Expr::If(Box::new(checked_cond), checked_if, checked_else, *span)
             }
