@@ -195,7 +195,12 @@ impl Scope {
             .or_else(|_| self.resolve_symbol(name).map(Reference::Symbol))
     }
 
-    pub fn get_type_index(&mut self, type_: &TypeId, pool: &mut ConstantPool) -> Result<PoolIndex<Type>, Cause> {
+    fn get_type_index_with(
+        &mut self,
+        type_: &TypeId,
+        pool: &mut ConstantPool,
+        validate: bool,
+    ) -> Result<PoolIndex<Type>, Cause> {
         let name = type_.repr(pool)?;
         if let Some(type_idx) = self.types.find(&name) {
             Ok(*type_idx)
@@ -204,22 +209,38 @@ impl Scope {
             let value = match type_ {
                 TypeId::Prim(_) | TypeId::Variant => Type::Prim,
                 TypeId::Class(_) | TypeId::Struct(_) | TypeId::Enum(_) => Type::Class,
-                TypeId::Ref(inner) if matches!(**inner, TypeId::Class(_)) => {
-                    Type::Ref(self.get_type_index(inner, pool)?)
+                TypeId::Ref(inner) if matches!(**inner, TypeId::Class(_)) || !validate => {
+                    Type::Ref(self.get_type_index_with(inner, pool, validate)?)
                 }
-                TypeId::WeakRef(inner) if matches!(**inner, TypeId::Class(_)) => {
-                    Type::WeakRef(self.get_type_index(inner, pool)?)
+                TypeId::WeakRef(inner) if matches!(**inner, TypeId::Class(_)) || !validate => {
+                    Type::WeakRef(self.get_type_index_with(inner, pool, validate)?)
                 }
                 TypeId::Ref(_) | TypeId::WeakRef(_) => return Err(Cause::InvalidRef),
-                TypeId::Array(inner) => Type::Array(self.get_type_index(inner, pool)?),
-                TypeId::StaticArray(inner, size) => Type::StaticArray(self.get_type_index(inner, pool)?, *size),
-                TypeId::ScriptRef(inner) => Type::ScriptRef(self.get_type_index(inner, pool)?),
+                TypeId::Array(inner) => Type::Array(self.get_type_index_with(inner, pool, validate)?),
+                TypeId::StaticArray(inner, size) => {
+                    Type::StaticArray(self.get_type_index_with(inner, pool, validate)?, *size)
+                }
+                TypeId::ScriptRef(inner) => Type::ScriptRef(self.get_type_index_with(inner, pool, validate)?),
                 TypeId::Null | TypeId::Void => panic!(),
             };
             let type_idx = pool.add_definition(Definition::type_(name_idx, value));
             self.add_type(name, type_idx);
             Ok(type_idx)
         }
+    }
+
+    #[inline]
+    pub fn get_type_index(&mut self, type_: &TypeId, pool: &mut ConstantPool) -> Result<PoolIndex<Type>, Cause> {
+        self.get_type_index_with(type_, pool, true)
+    }
+
+    #[inline]
+    pub fn get_type_index_unchecked(
+        &mut self,
+        type_: &TypeId,
+        pool: &mut ConstantPool,
+    ) -> Result<PoolIndex<Type>, Cause> {
+        self.get_type_index_with(type_, pool, false)
     }
 
     pub fn resolve_type(&self, name: &TypeName, pool: &ConstantPool) -> Result<TypeId, Cause> {

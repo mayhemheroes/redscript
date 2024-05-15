@@ -676,7 +676,15 @@ impl<'a> CompilationUnit<'a> {
         }
 
         let type_ = self.try_resolve_type(&source.type_, scope, decl.span)?;
-        let type_idx = scope.get_type_index(&type_, self.pool).with_span(decl.span)?;
+        let type_idx = match scope.get_type_index(&type_, self.pool) {
+            Ok(idx) => idx,
+            // permit invalid refs here until the next release to avoid breaking existing code
+            Err(Cause::InvalidRef) => {
+                self.diagnostics.push(Diagnostic::InvalidRefDeprecation(decl.span));
+                return Ok(());
+            }
+            Err(_) => scope.get_type_index_unchecked(&type_, self.pool).with_span(decl.span)?,
+        };
         let flags = FieldFlags::new()
             .with_is_browsable(true)
             .with_is_native(is_native)

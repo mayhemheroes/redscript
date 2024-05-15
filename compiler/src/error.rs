@@ -109,7 +109,10 @@ pub enum Cause {
     NoMethodWithMatchingSignature,
     #[error("no method with this name exists on the target type")]
     NoMethodWithMatchingName,
-    #[error("the type this reference points to is not a class")]
+    #[error(
+        "the type here contains a reference to a non-class type, refs and wrefs must always point \
+         to a class"
+    )]
     InvalidRef,
 }
 
