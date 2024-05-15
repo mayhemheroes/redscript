@@ -678,12 +678,17 @@ impl<'a> CompilationUnit<'a> {
         let type_ = self.try_resolve_type(&source.type_, scope, decl.span)?;
         let type_idx = match scope.get_type_index(&type_, self.pool) {
             Ok(idx) => idx,
-            // permit invalid refs here until the next release to avoid breaking existing code
-            Err(Cause::InvalidRef) => {
-                self.diagnostics.push(Diagnostic::InvalidRefDeprecation(decl.span));
-                return Ok(());
+            // permit invalid types here until the next release to avoid breaking existing code
+            Err(Cause::NonClassRef) => {
+                self.diagnostics.push(Diagnostic::NonClassRefDeprecation(decl.span));
+                scope.get_type_index_unchecked(&type_, self.pool).with_span(decl.span)?
             }
-            Err(_) => scope.get_type_index_unchecked(&type_, self.pool).with_span(decl.span)?,
+            Err(Cause::ClassWithNoIndirection) => {
+                self.diagnostics
+                    .push(Diagnostic::ClassWithNoIndirectionDeprecation(decl.span));
+                scope.get_type_index_unchecked(&type_, self.pool).with_span(decl.span)?
+            }
+            Err(err) => return Err(err.with_span(decl.span)),
         };
         let flags = FieldFlags::new()
             .with_is_browsable(true)

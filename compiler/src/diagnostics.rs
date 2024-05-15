@@ -49,7 +49,12 @@ pub enum Diagnostic {
         "the type here contains a reference to a non-class type, refs and wrefs must always point \
          to a class, future versions of the compiler will reject this code"
     )]
-    InvalidRefDeprecation(Span),
+    NonClassRefDeprecation(Span),
+    #[error(
+        "the type here contains a class with no indirection, class types must be used through ref \
+         or wref, future versions of the compiler will reject this code"
+    )]
+    ClassWithNoIndirectionDeprecation(Span),
     #[error("syntax error, expected {0}")]
     SyntaxError(ExpectedSet, Span),
     #[error("{0}")]
@@ -112,7 +117,8 @@ impl Diagnostic {
                 | Self::UnusedLocal(_)
                 | Self::MissingReturn(_)
                 | Self::AddMethodConflict(_)
-                | Self::InvalidRefDeprecation(_)
+                | Self::NonClassRefDeprecation(_)
+                | Self::ClassWithNoIndirectionDeprecation(_)
         )
     }
 
@@ -127,7 +133,8 @@ impl Diagnostic {
             | Self::StatementFallthrough(span)
             | Self::InvalidUseOfTemporary(span)
             | Self::AddMethodConflict(span)
-            | Self::InvalidRefDeprecation(span)
+            | Self::NonClassRefDeprecation(span)
+            | Self::ClassWithNoIndirectionDeprecation(span)
             | Self::CompileError(_, span)
             | Self::SyntaxError(_, span)
             | Self::CteError(_, span) => *span,

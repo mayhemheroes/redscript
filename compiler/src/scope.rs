@@ -215,7 +215,7 @@ impl Scope {
                 TypeId::WeakRef(inner) if matches!(**inner, TypeId::Class(_)) || !validate => {
                     Type::WeakRef(self.get_type_index_with(inner, pool, validate)?)
                 }
-                TypeId::Ref(_) | TypeId::WeakRef(_) => return Err(Cause::InvalidRef),
+                TypeId::Ref(_) | TypeId::WeakRef(_) => return Err(Cause::NonClassRef),
                 TypeId::Array(inner) => Type::Array(self.get_type_index_with(inner, pool, validate)?),
                 TypeId::StaticArray(inner, size) => {
                     Type::StaticArray(self.get_type_index_with(inner, pool, validate)?, *size)
@@ -231,6 +231,9 @@ impl Scope {
 
     #[inline]
     pub fn get_type_index(&mut self, type_: &TypeId, pool: &mut ConstantPool) -> Result<PoolIndex<Type>, Cause> {
+        if matches!(type_, TypeId::Class(_)) {
+            return Err(Cause::ClassWithNoIndirection);
+        }
         self.get_type_index_with(type_, pool, true)
     }
 

@@ -113,7 +113,12 @@ pub enum Cause {
         "the type here contains a reference to a non-class type, refs and wrefs must always point \
          to a class"
     )]
-    InvalidRef,
+    NonClassRef,
+    #[error(
+        "the type here contains a class with no indirection, class types must be used through ref \
+         or wref"
+    )]
+    ClassWithNoIndirection,
 }
 
 impl Cause {
@@ -155,7 +160,7 @@ impl Cause {
             Self::UnexpectedNative => "UNEXPECTED_NATIVE",
             Self::UnsupportedPersistent(_) => "INVALID_PERSISTENT",
             Self::InvalidConstant => "INVALID_CONSTANT",
-            Self::InvalidRef => "INVALID_TYPE",
+            Self::NonClassRef | Self::ClassWithNoIndirection => "INVALID_TYPE",
             Self::UnsupportedFeature(_) | Self::UnsupportedOperation(_, _) | Self::UnexpectedToken(_) => "UNSUPPORTED",
         }
     }
