@@ -109,6 +109,8 @@ pub enum Cause {
     NoMethodWithMatchingSignature,
     #[error("no method with this name exists on the target type")]
     NoMethodWithMatchingName,
+    #[error("the type this reference points to is not a class")]
+    InvalidRef,
 }
 
 impl Cause {
@@ -150,6 +152,7 @@ impl Cause {
             Self::UnexpectedNative => "UNEXPECTED_NATIVE",
             Self::UnsupportedPersistent(_) => "INVALID_PERSISTENT",
             Self::InvalidConstant => "INVALID_CONSTANT",
+            Self::InvalidRef => "INVALID_TYPE",
             Self::UnsupportedFeature(_) | Self::UnsupportedOperation(_, _) | Self::UnexpectedToken(_) => "UNSUPPORTED",
         }
     }

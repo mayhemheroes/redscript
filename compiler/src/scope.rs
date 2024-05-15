@@ -204,8 +204,13 @@ impl Scope {
             let value = match type_ {
                 TypeId::Prim(_) | TypeId::Variant => Type::Prim,
                 TypeId::Class(_) | TypeId::Struct(_) | TypeId::Enum(_) => Type::Class,
-                TypeId::Ref(inner) => Type::Ref(self.get_type_index(inner, pool)?),
-                TypeId::WeakRef(inner) => Type::WeakRef(self.get_type_index(inner, pool)?),
+                TypeId::Ref(inner) if matches!(**inner, TypeId::Class(_)) => {
+                    Type::Ref(self.get_type_index(inner, pool)?)
+                }
+                TypeId::WeakRef(inner) if matches!(**inner, TypeId::Class(_)) => {
+                    Type::WeakRef(self.get_type_index(inner, pool)?)
+                }
+                TypeId::Ref(_) | TypeId::WeakRef(_) => return Err(Cause::InvalidRef),
                 TypeId::Array(inner) => Type::Array(self.get_type_index(inner, pool)?),
                 TypeId::StaticArray(inner, size) => Type::StaticArray(self.get_type_index(inner, pool)?, *size),
                 TypeId::ScriptRef(inner) => Type::ScriptRef(self.get_type_index(inner, pool)?),
