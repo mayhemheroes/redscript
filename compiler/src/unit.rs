@@ -1,7 +1,8 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use hashbrown::{HashMap, HashSet};
+use itertools::Itertools;
 use redscript::ast::{Constant, Expr, Ident, Literal, Pos, Seq, SourceAst, Span, TypeName};
 use redscript::bundle::{ConstantPool, PoolIndex};
 use redscript::bytecode::{Code, Instr};
@@ -36,7 +37,7 @@ pub struct CompilationUnit<'a> {
     field_defaults: Vec<FieldDefault>,
     wrappers: ProxyMap,
     proxies: ProxyMap,
-    source_refs: Vec<SourceRef>,
+    source_refs: BTreeMap<PoolIndex<Definition>, Pos>,
     diagnostics: Vec<Diagnostic>,
     file_map: HashMap<PathBuf, PoolIndex<SourceFile>>,
     diagnostic_passes: Vec<Box<dyn DiagnosticPass + Send>>,
@@ -71,7 +72,7 @@ impl<'a> CompilationUnit<'a> {
             field_defaults: vec![],
             wrappers: HashMap::new(),
             proxies: HashMap::new(),
-            source_refs: vec![],
+            source_refs: BTreeMap::new(),
             diagnostics: vec![],
             file_map: HashMap::new(),
             diagnostic_passes: passes,
@@ -98,7 +99,11 @@ impl<'a> CompilationUnit<'a> {
         Ok(TypecheckOutput {
             functions,
             diagnostics: self.diagnostics,
-            source_refs: self.source_refs,
+            source_refs: self
+                .source_refs
+                .into_iter()
+                .map(|(idx, pos)| SourceRef::new(idx, pos))
+                .collect(),
         })
     }
 
@@ -320,7 +325,11 @@ impl<'a> CompilationUnit<'a> {
 
         let mut diagnostics = self.diagnostics;
         diagnostics.sort_by_key(Diagnostic::is_fatal);
-        let mut source_refs = self.source_refs;
+        let mut source_refs = self
+            .source_refs
+            .into_iter()
+            .map(|(idx, pos)| SourceRef::new(idx, pos))
+            .collect_vec();
 
         Self::cleanup_pool(self.pool, &mut source_refs);
 
@@ -337,17 +346,19 @@ impl<'a> CompilationUnit<'a> {
                 let path = module.with_child(decl.name.clone());
                 let visibility = decl.qualifiers.visibility().unwrap_or(Visibility::Private);
 
-                if let Ok(Symbol::Class(_, _) | Symbol::Struct(_, _)) =
+                if let Ok(Symbol::Class(idx, _) | Symbol::Struct(idx, _)) =
                     self.symbols.get_symbol(&path).with_span(source.span)
                 {
                     if !permissive {
-                        return Err(Cause::SymbolRedefinition.with_span(source.span));
+                        let pos = self.source_refs.get(&idx.cast()).copied();
+                        return Err(Cause::SymbolRedefinition(pos).with_span(source.span));
                     }
                 }
 
                 let name_index = self.pool.names.add(path.render().to_heap());
                 let index = self.pool.stub_definition(name_index);
                 self.symbols.add_class(&path, index, visibility);
+                self.source_refs.insert(index.cast(), source.span.low);
 
                 // add to globals when no module
                 if module.is_empty() {
@@ -367,17 +378,19 @@ impl<'a> CompilationUnit<'a> {
                 let path = module.with_child(decl.name.clone());
                 let visibility = decl.qualifiers.visibility().unwrap_or(Visibility::Private);
 
-                if let Ok(Symbol::Class(_, _) | Symbol::Struct(_, _)) =
+                if let Ok(Symbol::Class(idx, _) | Symbol::Struct(idx, _)) =
                     self.symbols.get_symbol(&path).with_span(source.span)
                 {
                     if !permissive {
-                        return Err(Cause::SymbolRedefinition.with_span(source.span));
+                        let pos = self.source_refs.get(&idx.cast()).copied();
+                        return Err(Cause::SymbolRedefinition(pos).with_span(source.span));
                     }
                 }
 
                 let name_index = self.pool.names.add(path.render().to_heap());
                 let index = self.pool.stub_definition(name_index);
                 self.symbols.add_struct(&path, index, visibility);
+                self.source_refs.insert(index.cast(), source.span.low);
 
                 // add to globals when no module
                 if module.is_empty() {
@@ -540,7 +553,6 @@ impl<'a> CompilationUnit<'a> {
         let name_idx = self.pool.definition(class_idx)?.name;
 
         self.pool.put_definition(class_idx, Definition::class(name_idx, class));
-        self.source_refs.push(SourceRef::new(class_idx.cast(), source.span.low));
         Ok(())
     }
 
@@ -629,8 +641,7 @@ impl<'a> CompilationUnit<'a> {
         }
 
         self.pool.put_definition(spec.fun_idx, definition);
-        self.source_refs
-            .push(SourceRef::new(spec.fun_idx.cast(), spec.source.span.low));
+        self.source_refs.insert(spec.fun_idx.cast(), spec.source.span.low);
         Ok(())
     }
 
@@ -703,7 +714,7 @@ impl<'a> CompilationUnit<'a> {
         }
 
         self.pool.put_definition(field_idx, definition);
-        self.source_refs.push(SourceRef::new(field_idx.cast(), decl.span.low));
+        self.source_refs.insert(field_idx.cast(), decl.span.low);
         Ok(())
     }
 
@@ -724,7 +735,7 @@ impl<'a> CompilationUnit<'a> {
         };
         let name_index = self.pool.definition(index)?.name;
         self.pool.put_definition(index, Definition::enum_(name_index, enum_));
-        self.source_refs.push(SourceRef::new(index.cast(), source.span.low));
+        self.source_refs.insert(index.cast(), source.span.low);
         Ok(())
     }
 

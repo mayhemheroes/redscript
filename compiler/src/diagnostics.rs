@@ -55,36 +55,37 @@ pub enum Diagnostic {
 
 impl Diagnostic {
     pub fn log(&self, files: &Files) {
-        let mut output = String::new();
-        self.display(files, &mut output).expect("Format failed");
-
         if self.is_fatal() {
-            log::error!("{}", output);
+            log::error!("{}", self.display(files));
         } else {
-            log::warn!("{}", output);
+            log::warn!("{}", self.display(files));
         }
     }
 
-    pub fn display<W: fmt::Write>(&self, files: &Files, out: &mut W) -> fmt::Result {
-        let loc = files.lookup(self.span()).expect("Unknown file");
-        let line = loc.enclosing_line().trim_end().replace('\t', " ");
+    pub fn display<'a>(&'a self, files: &'a Files) -> impl fmt::Display + 'a {
+        DisplayFn::new(move |f: &mut fmt::Formatter<'_>| {
+            let loc = files.lookup(self.span()).expect("Unknown file");
+            let line = loc.enclosing_line().trim_end().replace('\t', " ");
+            let underline_len = if loc.start.line == loc.end.line {
+                (loc.end.col - loc.start.col).max(1)
+            } else {
+                3
+            };
 
-        let padding = " ".repeat(loc.start.col);
-        let underline_len = if loc.start.line == loc.end.line {
-            (loc.end.col - loc.start.col).max(1)
-        } else {
-            3
-        };
-        let underline = "^".repeat(underline_len);
+            if let Self::CompileError(cause, _) = self {
+                write!(f, "[{}] ", cause.code())?;
+            }
 
-        if let Self::CompileError(cause, _) = self {
-            write!(out, "[{}] ", cause.code())?;
-        }
+            writeln!(f, "At {loc}:",)?;
+            writeln!(f, "{line}")?;
+            writeln!(f, "{:w$}{:^<underline_len$}", "", "", w = loc.start.col)?;
 
-        writeln!(out, "At {loc}:",)?;
-        writeln!(out, "{line}")?;
-        writeln!(out, "{padding}{underline}")?;
-        writeln!(out, "{self}")
+            if let Self::CompileError(cause, _) = self {
+                writeln!(f, "{}", cause.display(files))
+            } else {
+                writeln!(f, "{self}")
+            }
+        })
     }
 
     pub fn from_error(error: Error) -> Result<Self, Error> {
@@ -180,5 +181,23 @@ impl FunctionMetadata {
             was_callback,
             span,
         }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct DisplayFn<F>(F);
+
+impl<F> DisplayFn<F> {
+    pub fn new(f: F) -> Self {
+        Self(f)
+    }
+}
+
+impl<F> fmt::Display for DisplayFn<F>
+where
+    F: Fn(&mut fmt::Formatter<'_>) -> fmt::Result,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0(f)
     }
 }

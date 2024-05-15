@@ -1,6 +1,5 @@
-use std::fmt::Display;
-use std::io;
 use std::path::PathBuf;
+use std::{fmt, io};
 
 use enum_as_inner::EnumAsInner;
 use modular_bitfield::prelude::*;
@@ -748,7 +747,7 @@ pub enum Visibility {
     Private = 2,
 }
 
-impl Display for Visibility {
+impl fmt::Display for Visibility {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let res = match self {
             Visibility::Public => "public",

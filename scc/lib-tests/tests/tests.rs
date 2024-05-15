@@ -102,30 +102,6 @@ fn compiles_successfully() {
         let source_ref = (api.output_get_source_ref.unwrap())(output, 0);
         assert!(!source_ref.is_null());
         let type_ = (api.source_ref_type.unwrap())(output, source_ref);
-        assert_eq!(type_, 3);
-        let name = (api.source_ref_name.unwrap())(output, source_ref);
-        assert_eq!(
-            std::str::from_utf8(std::slice::from_raw_parts(name.str_ as _, name.len)).unwrap(),
-            "Dummy;"
-        );
-        let parent_name = (api.source_ref_parent_name.unwrap())(output, source_ref);
-        assert_eq!(
-            std::str::from_utf8(std::slice::from_raw_parts(parent_name.str_ as _, parent_name.len)).unwrap(),
-            "TestClass"
-        );
-        let path = (api.source_ref_path.unwrap())(output, source_ref);
-        assert_eq!(
-            std::str::from_utf8(std::slice::from_raw_parts(path.str_ as _, path.len)).unwrap(),
-            script_path.path().to_string_lossy()
-        );
-        let line = (api.source_ref_line.unwrap())(output, source_ref);
-        assert_eq!(line, 0);
-        let is_native = (api.source_ref_is_native.unwrap())(output, source_ref);
-        assert!(!is_native);
-
-        let source_ref = (api.output_get_source_ref.unwrap())(output, 1);
-        assert!(!source_ref.is_null());
-        let type_ = (api.source_ref_type.unwrap())(output, source_ref);
         assert_eq!(type_, 1);
         let name = (api.source_ref_name.unwrap())(output, source_ref);
         assert_eq!(
@@ -146,6 +122,30 @@ fn compiles_successfully() {
         assert_eq!(line, 0);
         let is_native = (api.source_ref_is_native.unwrap())(output, source_ref);
         assert!(is_native);
+
+        let source_ref = (api.output_get_source_ref.unwrap())(output, 1);
+        assert!(!source_ref.is_null());
+        let type_ = (api.source_ref_type.unwrap())(output, source_ref);
+        assert_eq!(type_, 3);
+        let name = (api.source_ref_name.unwrap())(output, source_ref);
+        assert_eq!(
+            std::str::from_utf8(std::slice::from_raw_parts(name.str_ as _, name.len)).unwrap(),
+            "Dummy;"
+        );
+        let parent_name = (api.source_ref_parent_name.unwrap())(output, source_ref);
+        assert_eq!(
+            std::str::from_utf8(std::slice::from_raw_parts(parent_name.str_ as _, parent_name.len)).unwrap(),
+            "TestClass"
+        );
+        let path = (api.source_ref_path.unwrap())(output, source_ref);
+        assert_eq!(
+            std::str::from_utf8(std::slice::from_raw_parts(path.str_ as _, path.len)).unwrap(),
+            script_path.path().to_string_lossy()
+        );
+        let line = (api.source_ref_line.unwrap())(output, source_ref);
+        assert_eq!(line, 0);
+        let is_native = (api.source_ref_is_native.unwrap())(output, source_ref);
+        assert!(!is_native);
 
         api.free_result.unwrap()(result);
     }

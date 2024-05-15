@@ -6,6 +6,8 @@ use itertools::{Either, Itertools};
 use redscript::ast::{Pos, Span};
 use walkdir::{DirEntry, WalkDir};
 
+use crate::diagnostics::DisplayFn;
+
 #[derive(Debug, Default)]
 pub struct Files {
     entries: Vec<File>,
@@ -74,8 +76,17 @@ impl Files {
         self.entries.is_empty()
     }
 
-    pub fn display<'p>(&self, root: &'p Path) -> FilesDisplay<'_, 'p> {
-        FilesDisplay { files: self, root }
+    pub fn display<'a>(&'a self, root: &'a Path) -> impl fmt::Display + 'a {
+        DisplayFn::new(move |f: &mut fmt::Formatter<'_>| {
+            write!(
+                f,
+                "{}",
+                self.entries
+                    .iter()
+                    .map(|entry| entry.path.strip_prefix(root).unwrap_or(&entry.path).display())
+                    .format("\n")
+            )
+        })
     }
 }
 
@@ -90,23 +101,6 @@ fn dir_file_iter(path: &Path) -> impl Iterator<Item = PathBuf> {
             .filter(|entry| entry.path().extension() == Some(OsStr::new("reds")))
             .map(DirEntry::into_path);
         Either::Right(iter)
-    }
-}
-
-#[derive(Debug)]
-pub struct FilesDisplay<'a, 'p> {
-    files: &'a Files,
-    root: &'p Path,
-}
-
-impl fmt::Display for FilesDisplay<'_, '_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.files
-            .entries
-            .iter()
-            .map(|entry| entry.path.strip_prefix(self.root).unwrap_or(&entry.path).display())
-            .format("\n")
-            .fmt(f)
     }
 }
 

@@ -1,7 +1,6 @@
 use std::cmp::Ordering;
-use std::fmt::{self, Debug, Display};
-use std::iter;
 use std::ops::{Add, Not, Sub};
+use std::{fmt, iter};
 
 use enum_as_inner::EnumAsInner;
 use itertools::Itertools;
@@ -15,12 +14,12 @@ use crate::Ref;
 pub enum Expr<Name>
 where
     Name: NameKind,
-    Name::Reference: Debug,
-    Name::Callable: Debug,
-    Name::Local: Debug,
-    Name::Function: Debug,
-    Name::Member: Debug,
-    Name::Type: Debug,
+    Name::Reference: fmt::Debug,
+    Name::Callable: fmt::Debug,
+    Name::Local: fmt::Debug,
+    Name::Function: fmt::Debug,
+    Name::Member: fmt::Debug,
+    Name::Type: fmt::Debug,
 {
     Ident(Name::Reference, Span),
     Constant(Constant, Span),
@@ -74,12 +73,12 @@ impl NameKind for SourceAst {
 impl<N> Expr<N>
 where
     N: NameKind,
-    N::Reference: Debug,
-    N::Callable: Debug,
-    N::Local: Debug,
-    N::Function: Debug,
-    N::Member: Debug,
-    N::Type: Debug,
+    N::Reference: fmt::Debug,
+    N::Callable: fmt::Debug,
+    N::Local: fmt::Debug,
+    N::Function: fmt::Debug,
+    N::Member: fmt::Debug,
+    N::Type: fmt::Debug,
 {
     pub const EMPTY: Self = Expr::Seq(Seq { exprs: vec![] });
 
@@ -255,12 +254,12 @@ pub enum UnOp {
 pub struct SwitchCase<N>
 where
     N: NameKind,
-    N::Reference: Debug,
-    N::Callable: Debug,
-    N::Local: Debug,
-    N::Function: Debug,
-    N::Member: Debug,
-    N::Type: Debug,
+    N::Reference: fmt::Debug,
+    N::Callable: fmt::Debug,
+    N::Local: fmt::Debug,
+    N::Function: fmt::Debug,
+    N::Member: fmt::Debug,
+    N::Type: fmt::Debug,
 {
     pub matcher: Expr<N>,
     pub body: Seq<N>,
@@ -270,12 +269,12 @@ where
 pub struct Seq<N>
 where
     N: NameKind,
-    N::Reference: Debug,
-    N::Callable: Debug,
-    N::Local: Debug,
-    N::Function: Debug,
-    N::Member: Debug,
-    N::Type: Debug,
+    N::Reference: fmt::Debug,
+    N::Callable: fmt::Debug,
+    N::Local: fmt::Debug,
+    N::Function: fmt::Debug,
+    N::Member: fmt::Debug,
+    N::Type: fmt::Debug,
 {
     pub exprs: Vec<Expr<N>>,
 }
@@ -283,12 +282,12 @@ where
 impl<N> Seq<N>
 where
     N: NameKind,
-    N::Reference: Debug,
-    N::Callable: Debug,
-    N::Local: Debug,
-    N::Function: Debug,
-    N::Member: Debug,
-    N::Type: Debug,
+    N::Reference: fmt::Debug,
+    N::Callable: fmt::Debug,
+    N::Local: fmt::Debug,
+    N::Function: fmt::Debug,
+    N::Member: fmt::Debug,
+    N::Type: fmt::Debug,
 {
     pub fn new(exprs: Vec<Expr<N>>) -> Seq<N> {
         Seq { exprs }
@@ -521,7 +520,7 @@ impl TypeName {
     }
 }
 
-impl Display for TypeName {
+impl fmt::Display for TypeName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.mangled().as_ref())
     }

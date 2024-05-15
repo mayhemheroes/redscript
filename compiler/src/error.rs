@@ -1,12 +1,14 @@
-use std::fmt::Display;
-use std::{io, usize};
+use std::{fmt, io, usize};
 
 use itertools::Itertools;
 use peg::error::ExpectedSet;
-use redscript::ast::{Ident, Span};
+use redscript::ast::{Ident, Pos, Span};
 use redscript::bundle::PoolError;
 use redscript::bytecode::IntrinsicOp;
 use thiserror::Error;
+
+use crate::diagnostics::DisplayFn;
+use crate::source_map::Files;
 
 const MAX_RESOLUTION_ERRORS: usize = 6;
 
@@ -79,7 +81,7 @@ pub enum Cause {
     #[error("{0} is not supported")]
     UnsupportedFeature(&'static str),
     #[error("symbol with this name is already defined")]
-    SymbolRedefinition,
+    SymbolRedefinition(Option<Pos>),
     #[error("field with this name is already defined")]
     FieldRedefinition,
     #[error("this function must have a body")]
@@ -141,7 +143,7 @@ impl Cause {
             Self::InvalidStaticMethodCall(_) => "INVALID_STATIC_USE",
             Self::InvalidNonStaticMethodCall(_) => "INVALID_NONSTATIC_USE",
             Self::UnexpectedThis => "UNEXPECTED_THIS",
-            Self::SymbolRedefinition => "SYM_REDEFINITION",
+            Self::SymbolRedefinition(_) => "SYM_REDEFINITION",
             Self::FieldRedefinition => "FIELD_REDEFINITION",
             Self::MissingBody => "MISSING_BODY",
             Self::UnexpectedBody => "UNEXPECTED_BODY",
@@ -150,6 +152,23 @@ impl Cause {
             Self::InvalidConstant => "INVALID_CONSTANT",
             Self::UnsupportedFeature(_) | Self::UnsupportedOperation(_, _) | Self::UnexpectedToken(_) => "UNSUPPORTED",
         }
+    }
+
+    #[inline]
+    pub fn display<'a>(&'a self, files: &'a Files) -> impl fmt::Display + 'a {
+        DisplayFn::new(move |f: &mut fmt::Formatter<'_>| match self {
+            &Cause::SymbolRedefinition(Some(pos)) => {
+                let loc = files.lookup(Span::new(pos, pos)).expect("Unknown file");
+                write!(f, "the name of this type conflicts with a type defined at {loc}",)
+            }
+            &Cause::SymbolRedefinition(None) => {
+                write!(
+                    f,
+                    "the name of this type conflicts with a type defined in pre-compiled scripts"
+                )
+            }
+            other => write!(f, "{}", other),
+        })
     }
 }
 
@@ -169,7 +188,7 @@ pub enum FunctionMatchError {
 
 struct NthArg(usize);
 
-impl Display for NthArg {
+impl fmt::Display for NthArg {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self.0 {
             0 => write!(f, "1st"),
