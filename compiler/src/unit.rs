@@ -577,7 +577,13 @@ impl<'a> CompilationUnit<'a> {
             Some(type_) if type_ == TypeName::VOID => None,
             Some(type_) => {
                 let type_ = self.try_resolve_type(&type_, scope, decl.span)?;
-                Some(scope.get_type_index(&type_, self.pool).with_span(decl.span)?)
+                match scope.get_type_index(&type_, self.pool) {
+                    Ok(idx) => Some(idx),
+                    Err(err) => {
+                        self.report(err.with_span(decl.span))?;
+                        None
+                    }
+                }
             }
         };
 
@@ -585,7 +591,13 @@ impl<'a> CompilationUnit<'a> {
 
         for param in &spec.source.parameters {
             let type_ = self.try_resolve_type(&param.type_, scope, decl.span)?;
-            let type_idx = scope.get_type_index(&type_, self.pool).with_span(decl.span)?;
+            let type_idx = match scope.get_type_index(&type_, self.pool) {
+                Ok(idx) => idx,
+                Err(err) => {
+                    self.report(err.with_span(decl.span))?;
+                    continue;
+                }
+            };
             let flags = ParameterFlags::new()
                 .with_is_optional(param.qualifiers.contain(Qualifier::Optional))
                 .with_is_out(param.qualifiers.contain(Qualifier::Out))
