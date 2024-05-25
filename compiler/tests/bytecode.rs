@@ -567,6 +567,34 @@ fn compile_string_literals() {
 }
 
 #[test]
+fn compile_deref_asref() {
+    let sources = r#"
+        func Testing(str: String) {
+            let a = ToString(str);
+            let b = AsRef(str);
+            let c = Deref(b);
+        }
+        "#;
+
+    let check = check_code![
+        pat!(Assign),
+        mem!(Local(a)),
+        mem!(ToString(str_type)),
+        mem!(Param(str)),
+        pat!(Assign),
+        mem!(Local(b)),
+        mem!(AsRef(str_type)),
+        mem!(Param(str)),
+        pat!(Assign),
+        mem!(Local(c)),
+        mem!(Deref(str_type)),
+        mem!(Local(b)),
+        pat!(Nop)
+    ];
+    TestContext::compiled(vec![sources]).unwrap().run("Testing", check);
+}
+
+#[test]
 fn compile_is_defined() {
     let sources = "
         func Testing() {

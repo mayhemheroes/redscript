@@ -553,7 +553,8 @@ impl<'a> Assembler<'a> {
                 self.emit(Instr::AsRef(get_arg_type(0)?));
             }
             IntrinsicOp::Deref => {
-                self.emit(Instr::Deref(get_arg_type(0)?));
+                let type_idx = scope.get_type_index(return_type, pool).with_span(span)?;
+                self.emit(Instr::Deref(type_idx));
             }
             IntrinsicOp::RefToWeakRef => {
                 self.emit(Instr::RefToWeakRef);
