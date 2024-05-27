@@ -346,9 +346,7 @@ impl<'a> CompilationUnit<'a> {
                 let path = module.with_child(decl.name.clone());
                 let visibility = decl.qualifiers.visibility().unwrap_or(Visibility::Private);
 
-                if let Ok(Symbol::Class(idx, _) | Symbol::Struct(idx, _)) =
-                    self.symbols.get_symbol(&path).with_span(source.span)
-                {
+                if let Some(Symbol::Class(idx, _) | Symbol::Struct(idx, _)) = self.symbols.get_symbol(&path) {
                     if !permissive {
                         let pos = self.source_refs.get(&idx.cast()).copied();
                         return Err(Cause::SymbolRedefinition(pos).with_span(source.span));
@@ -378,9 +376,7 @@ impl<'a> CompilationUnit<'a> {
                 let path = module.with_child(decl.name.clone());
                 let visibility = decl.qualifiers.visibility().unwrap_or(Visibility::Private);
 
-                if let Ok(Symbol::Class(idx, _) | Symbol::Struct(idx, _)) =
-                    self.symbols.get_symbol(&path).with_span(source.span)
-                {
+                if let Some(Symbol::Class(idx, _) | Symbol::Struct(idx, _)) = self.symbols.get_symbol(&path) {
                     if !permissive {
                         let pos = self.source_refs.get(&idx.cast()).copied();
                         return Err(Cause::SymbolRedefinition(pos).with_span(source.span));

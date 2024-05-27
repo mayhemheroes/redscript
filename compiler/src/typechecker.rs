@@ -564,7 +564,7 @@ impl<'a> TypeChecker<'a> {
         Ok(Expr::Call(
             Callable::Intrinsic(intrinsic, type_),
             [].into(),
-            checked_args.into_boxed_slice(),
+            checked_args.into(),
             span,
         ))
     }
@@ -668,18 +668,13 @@ impl<'a> TypeChecker<'a> {
         span: Span,
     ) -> Result<(PoolIndex<Function>, Vec<TypeId>, bool), MatcherError> {
         let fun = pool.function(fun_index)?;
-        let mut params = fun
-            .parameters
-            .iter()
-            .map(|idx| pool.parameter(*idx).map_err(Error::PoolError));
+        let mut params = fun.parameters.iter().peekable();
 
         let has_static_receiver = receiver.is_some_and(|receiver| {
             fun.flags.is_static()
                 && params
-                    .by_ref()
-                    .peekable()
-                    .next_if(|p| {
-                        p.as_ref().is_ok_and(|p| {
+                    .next_if(|&&p| {
+                        pool.parameter(p).is_ok_and(|p| {
                             scope
                                 .resolve_type_from_pool(p.type_, pool)
                                 .is_ok_and(|t| &t == receiver)
@@ -691,7 +686,7 @@ impl<'a> TypeChecker<'a> {
         let min_params = params
             .clone()
             .rev()
-            .skip_while(|p| p.as_ref().is_ok_and(|p| p.flags.is_optional()))
+            .skip_while(|&&p| pool.parameter(p).is_ok_and(|p| p.flags.is_optional()))
             .count();
 
         if arg_count < min_params || arg_count > fun.parameters.len() {
@@ -704,7 +699,11 @@ impl<'a> TypeChecker<'a> {
         }
 
         let types = params
-            .map(|res| res.and_then(|param| scope.resolve_type_from_pool(param.type_, pool).with_span(span)))
+            .map(|&p| {
+                pool.parameter(p)
+                    .map_err(Error::PoolError)
+                    .and_then(|p| scope.resolve_type_from_pool(p.type_, pool).with_span(span))
+            })
             .try_collect()?;
         Ok((fun_index, types, has_static_receiver))
     }

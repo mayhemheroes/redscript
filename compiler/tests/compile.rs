@@ -300,10 +300,10 @@ fn compile_defaults() {
 }
 
 #[test]
-fn fail_on_static_receiver_mismatch() {
+fn fail_on_instance_call_of_static_method() {
     let sources = r#"
         class Dummy {
-            static func Test(self: wref<Dummy>) {}
+            static func Test() {}
         }
 
         func Testing() {
