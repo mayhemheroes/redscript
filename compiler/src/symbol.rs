@@ -71,8 +71,10 @@ impl SymbolMap {
     pub fn populate_import(&self, import: Import, scope: &mut Scope, visibility: Visibility) -> Result<(), Error> {
         match import {
             Import::Exact(_, path, span) => {
-                if let Some(symbol) = self.get_symbol(&path).with_span(span)?.visible(visibility) {
+                if let Some(symbol) = self.get_symbol(&path).and_then(|s| s.visible(visibility)) {
                     scope.add_symbol(path.last().unwrap(), symbol);
+                } else {
+                    return Err(Cause::UnresolvedImport(path.render()).with_span(span));
                 }
             }
             Import::All(_, path, span) => {
@@ -85,8 +87,10 @@ impl SymbolMap {
             Import::Selected(_, path, names, span) => {
                 for name in names {
                     let path = path.with_child(name);
-                    if let Some(symbol) = self.get_symbol(&path).with_span(span)?.visible(visibility) {
+                    if let Some(symbol) = self.get_symbol(&path).and_then(|s| s.visible(visibility)) {
                         scope.add_symbol(path.last().unwrap(), symbol);
+                    } else {
+                        return Err(Cause::UnresolvedImport(path.render()).with_span(span));
                     }
                 }
             }
@@ -94,11 +98,9 @@ impl SymbolMap {
         Ok(())
     }
 
-    pub fn get_symbol(&self, path: &ModulePath) -> Result<Symbol, Cause> {
-        self.symbols
-            .get(path)
-            .cloned()
-            .ok_or_else(|| Cause::UnresolvedImport(path.render()))
+    #[inline]
+    pub fn get_symbol(&self, path: &ModulePath) -> Option<Symbol> {
+        self.symbols.get(path).cloned()
     }
 
     fn get_direct_children(&self, path: &ModulePath) -> Result<impl Iterator<Item = (Ident, &Symbol)>, Cause> {
@@ -107,9 +109,8 @@ impl SymbolMap {
             .get_node(path)
             .ok_or_else(|| Cause::UnresolvedModule(path.render()))?;
         let res = node
-            .iter()
-            .filter(|(parts, _)| parts.len() == 1)
-            .map(|(mut parts, sym)| (parts.pop().unwrap().clone(), sym));
+            .children_with_keys()
+            .filter_map(|(k, v)| Some((k.clone(), v.value()?)));
         Ok(res)
     }
 }
