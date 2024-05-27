@@ -109,7 +109,6 @@ impl Scope {
     }
 
     pub fn resolve_enum_member(
-        &self,
         ident: Ident,
         enum_idx: PoolIndex<Enum>,
         pool: &ConstantPool,
@@ -124,7 +123,6 @@ impl Scope {
     }
 
     pub fn resolve_method(
-        &self,
         ident: Ident,
         class_idx: PoolIndex<Class>,
         pool: &ConstantPool,
@@ -152,7 +150,6 @@ impl Scope {
     }
 
     pub fn resolve_direct_method(
-        &self,
         ident: Ident,
         class_idx: PoolIndex<Class>,
         pool: &ConstantPool,

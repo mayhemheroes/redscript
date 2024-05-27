@@ -71,10 +71,10 @@ pub enum Cause {
     UnexpectedValueReturn,
     #[error("invalid use of {0}, unexpected {1}")]
     InvalidIntrinsicUse(Intrinsic, Ident),
-    #[error("method {0} is static")]
-    InvalidStaticMethodCall(Ident),
-    #[error("method {0} is not static")]
-    InvalidNonStaticMethodCall(Ident),
+    #[error("this method is static, it cannot be used on an instance of an object")]
+    InvalidStaticMethodCall,
+    #[error("this method is not static, it must be used on an instance of an object")]
+    InvalidNonStaticMethodCall,
     #[error("no 'this' available in a static context")]
     UnexpectedThis,
     #[error("{0} is not supported")]
@@ -149,8 +149,8 @@ impl Cause {
             Self::InvalidAnnotationArgs => "INVALID_ANN_USE",
             Self::InvalidMemberAccess(_) => "INVALID_MEMBER_ACCESS",
             Self::VoidCannotBeUsed => "INVALID_VOID_USE",
-            Self::InvalidStaticMethodCall(_) => "INVALID_STATIC_USE",
-            Self::InvalidNonStaticMethodCall(_) => "INVALID_NONSTATIC_USE",
+            Self::InvalidStaticMethodCall => "INVALID_STATIC_USE",
+            Self::InvalidNonStaticMethodCall => "INVALID_NONSTATIC_USE",
             Self::UnexpectedThis => "UNEXPECTED_THIS",
             Self::SymbolRedefinition(_) => "SYM_REDEFINITION",
             Self::FieldRedefinition => "FIELD_REDEFINITION",

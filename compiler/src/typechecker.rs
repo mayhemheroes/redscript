@@ -1,4 +1,5 @@
 use std::iter;
+use std::ops::Not;
 use std::str::FromStr;
 
 use itertools::{izip, Itertools};
@@ -142,8 +143,15 @@ impl<'a> TypeChecker<'a> {
                     self.check_intrinsic(intrinsic, args, expected.as_ref(), scope, *span)?
                 } else {
                     let candidates = scope.resolve_function(name.clone()).with_span(*span)?;
-                    let match_ =
-                        self.resolve_overload(name.clone(), candidates, args.iter(), expected.as_ref(), scope, *span)?;
+                    let match_ = self.resolve_overload(
+                        name.clone(),
+                        candidates,
+                        args.iter(),
+                        expected.as_ref(),
+                        None,
+                        scope,
+                        *span,
+                    )?;
                     Expr::Call(
                         Callable::Function(match_.index),
                         [].into(),
@@ -152,28 +160,49 @@ impl<'a> TypeChecker<'a> {
                     )
                 }
             }
-            Expr::MethodCall(context, name, args, span) => {
-                let checked_context = self.check(context, None, scope)?;
-                let type_ = type_of(&checked_context, scope, self.pool)?;
-                let class = match type_.unwrapped() {
+            Expr::MethodCall(receiver, name, args, span) => {
+                let checked_receiver = self.check(receiver, None, scope)?;
+                let receiver_type = type_of(&checked_receiver, scope, self.pool)?;
+                let class = match receiver_type.unwrapped() {
                     TypeId::Struct(class) | TypeId::Class(class) => *class,
                     type_ => return Err(Cause::InvalidMemberAccess(type_.pretty(self.pool)?).with_span(*span)),
                 };
-                let candidates = scope.resolve_method(name.clone(), class, self.pool).with_span(*span)?;
-                let match_ = self.resolve_overload(name.clone(), candidates, args.iter(), expected, scope, *span)?;
+                let receiver = matches!(checked_receiver, Expr::Ident(Reference::Symbol(_), _))
+                    .not()
+                    .then_some(&receiver_type);
+                let candidates = Scope::resolve_method(name.clone(), class, self.pool).with_span(*span)?;
 
-                let converted_context = if let TypeId::WeakRef(inner) = type_ {
-                    insert_conversion(checked_context, &TypeId::Ref(inner), Conversion::WeakRefToRef)
+                let match_ =
+                    self.resolve_overload(name.clone(), candidates, args.iter(), expected, receiver, scope, *span)?;
+
+                if match_.insert_receiver {
+                    Expr::Call(
+                        Callable::Function(match_.index),
+                        [].into(),
+                        iter::once(checked_receiver).chain(match_.args).collect(),
+                        *span,
+                    )
                 } else {
-                    checked_context
-                };
-                Expr::MethodCall(Box::new(converted_context), match_.index, match_.args, *span)
+                    let is_static = self.pool.function(match_.index).is_ok_and(|f| f.flags.is_static());
+                    if receiver.is_some() && is_static {
+                        return Err(Cause::InvalidStaticMethodCall.with_span(*span));
+                    } else if receiver.is_none() && !is_static {
+                        return Err(Cause::InvalidNonStaticMethodCall.with_span(*span));
+                    }
+
+                    let converted_receiver = if let TypeId::WeakRef(inner) = receiver_type {
+                        insert_conversion(checked_receiver, &TypeId::Ref(inner), Conversion::WeakRefToRef)
+                    } else {
+                        checked_receiver
+                    };
+                    Expr::MethodCall(Box::new(converted_receiver), match_.index, match_.args, *span)
+                }
             }
             Expr::BinOp(lhs, rhs, op, span) => {
                 let name = Ident::from_static(op.into());
                 let args = IntoIterator::into_iter([lhs.as_ref(), rhs.as_ref()]);
                 let candidates = scope.resolve_function(name.clone()).with_span(*span)?;
-                let match_ = self.resolve_overload(name, candidates, args, expected, scope, *span)?;
+                let match_ = self.resolve_overload(name, candidates, args, expected, None, scope, *span)?;
                 Expr::Call(
                     Callable::Function(match_.index),
                     [].into(),
@@ -185,7 +214,7 @@ impl<'a> TypeChecker<'a> {
                 let name = Ident::from_static(op.into());
                 let args = iter::once(expr.as_ref());
                 let candidates = scope.resolve_function(name.clone()).with_span(*span)?;
-                let match_ = self.resolve_overload(name, candidates, args, expected, scope, *span)?;
+                let match_ = self.resolve_overload(name, candidates, args, expected, None, scope, *span)?;
                 Expr::Call(
                     Callable::Function(match_.index),
                     [].into(),
@@ -207,9 +236,7 @@ impl<'a> TypeChecker<'a> {
                         Member::StructField(field)
                     }
                     TypeId::Enum(enum_) => {
-                        let member = scope
-                            .resolve_enum_member(name.clone(), *enum_, self.pool)
-                            .with_span(*span)?;
+                        let member = Scope::resolve_enum_member(name.clone(), *enum_, self.pool).with_span(*span)?;
                         Member::EnumMember(*enum_, member)
                     }
                     type_ => return Err(Cause::InvalidMemberAccess(type_.pretty(self.pool)?).with_span(*span)),
@@ -558,12 +585,14 @@ impl<'a> TypeChecker<'a> {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn resolve_overload<'b>(
         &mut self,
         name: Ident,
         overloads: FunctionCandidates,
         args: impl ExactSizeIterator<Item = &'b Expr<SourceAst>> + Clone,
         expected: Option<&TypeId>,
+        receiver: Option<&TypeId>,
         scope: &mut Scope,
         span: Span,
     ) -> Result<FunctionMatch, Error> {
@@ -572,7 +601,7 @@ impl<'a> TypeChecker<'a> {
         let mut overload_errors = vec![];
 
         for overload in &overloads.functions {
-            match Self::validate_call(*overload, arg_count, scope, self.pool, span) {
+            match Self::validate_call(*overload, arg_count, receiver, scope, self.pool, span) {
                 Ok(res) => eligible.push(res),
                 Err(MatcherError::MatchError(err)) => overload_errors.push(err),
                 Err(MatcherError::Other(err)) => return Err(err),
@@ -580,7 +609,7 @@ impl<'a> TypeChecker<'a> {
         }
 
         let match_ = match eligible.into_iter().exactly_one() {
-            Ok((fun_index, types)) => {
+            Ok((fun_index, types, has_static_receiver)) => {
                 let checked_args: Vec<_> = args
                     .clone()
                     .zip(&types)
@@ -588,7 +617,7 @@ impl<'a> TypeChecker<'a> {
                     .try_collect()?;
 
                 match Self::validate_args(fun_index, &checked_args, &types, expected, scope, self.pool, span) {
-                    Ok(conversions) => Ok(FunctionMatch::new(fun_index, checked_args, conversions)),
+                    Ok(convs) => Ok(FunctionMatch::new(fun_index, checked_args, convs, has_static_receiver)),
                     Err(MatcherError::MatchError(err)) => {
                         overload_errors.push(err);
                         Err(Cause::NoMatchingOverload(name, overload_errors.into_boxed_slice()).with_span(span))
@@ -600,9 +629,9 @@ impl<'a> TypeChecker<'a> {
                 let checked_args: Vec<_> = args.clone().map(|expr| self.check(expr, None, scope)).try_collect()?;
 
                 let mut matches = vec![];
-                for (fun_index, types) in eligible {
+                for (fun_index, types, has_static_receiver) in eligible {
                     match Self::validate_args(fun_index, &checked_args, &types, expected, scope, self.pool, span) {
-                        Ok(convs) => matches.push((fun_index, convs)),
+                        Ok(convs) => matches.push((fun_index, convs, has_static_receiver)),
                         Err(MatcherError::MatchError(err)) => overload_errors.push(err),
                         Err(MatcherError::Other(err)) => return Err(err),
                     }
@@ -610,8 +639,10 @@ impl<'a> TypeChecker<'a> {
 
                 let mut it = matches.into_iter();
                 match it.next() {
-                    None => Err(Cause::NoMatchingOverload(name, overload_errors.into_boxed_slice()).with_span(span)),
-                    Some((fun_index, convs)) => Ok(FunctionMatch::new(fun_index, checked_args, convs)),
+                    None => Err(Cause::NoMatchingOverload(name, overload_errors.into()).with_span(span)),
+                    Some((fun_index, convs, has_static_receiver)) => {
+                        Ok(FunctionMatch::new(fun_index, checked_args, convs, has_static_receiver))
+                    }
                 }
             }
         };
@@ -622,7 +653,7 @@ impl<'a> TypeChecker<'a> {
 
                 let dummy_args: Vec<_> = args.map(|expr| self.check(expr, None, scope)).try_collect()?;
                 let convs = iter::repeat(ArgConversion::identity()).take(dummy_args.len()).collect();
-                Ok(FunctionMatch::new(overloads.functions[0], dummy_args, convs))
+                Ok(FunctionMatch::new(overloads.functions[0], dummy_args, convs, false))
             }
             Err(err) => Err(err),
         }
@@ -631,16 +662,37 @@ impl<'a> TypeChecker<'a> {
     fn validate_call(
         fun_index: PoolIndex<Function>,
         arg_count: usize,
+        receiver: Option<&TypeId>,
         scope: &Scope,
         pool: &ConstantPool,
         span: Span,
-    ) -> Result<(PoolIndex<Function>, Vec<TypeId>), MatcherError> {
+    ) -> Result<(PoolIndex<Function>, Vec<TypeId>, bool), MatcherError> {
         let fun = pool.function(fun_index)?;
-        let params = fun
+        let mut params = fun
             .parameters
             .iter()
             .map(|idx| pool.parameter(*idx).map_err(Error::PoolError));
-        let min_params = params.clone().filter_ok(|param| !param.flags.is_optional()).count();
+
+        let has_static_receiver = receiver.is_some_and(|receiver| {
+            fun.flags.is_static()
+                && params
+                    .by_ref()
+                    .peekable()
+                    .next_if(|p| {
+                        p.as_ref().is_ok_and(|p| {
+                            scope
+                                .resolve_type_from_pool(p.type_, pool)
+                                .is_ok_and(|t| &t == receiver)
+                        })
+                    })
+                    .is_some()
+        });
+
+        let min_params = params
+            .clone()
+            .rev()
+            .skip_while(|p| p.as_ref().is_ok_and(|p| p.flags.is_optional()))
+            .count();
 
         if arg_count < min_params || arg_count > fun.parameters.len() {
             let err = FunctionMatchError::ArgumentCountMismatch {
@@ -654,7 +706,7 @@ impl<'a> TypeChecker<'a> {
         let types = params
             .map(|res| res.and_then(|param| scope.resolve_type_from_pool(param.type_, pool).with_span(span)))
             .try_collect()?;
-        Ok((fun_index, types))
+        Ok((fun_index, types, has_static_receiver))
     }
 
     fn validate_args(
@@ -972,16 +1024,26 @@ impl ArgConversion {
 pub struct FunctionMatch {
     pub index: PoolIndex<Function>,
     pub args: Vec<TypedExpr>,
+    pub insert_receiver: bool,
 }
 
 impl FunctionMatch {
-    fn new(index: PoolIndex<Function>, args: Vec<TypedExpr>, conversions: Vec<ArgConversion>) -> Self {
+    fn new(
+        index: PoolIndex<Function>,
+        args: Vec<TypedExpr>,
+        conversions: Vec<ArgConversion>,
+        has_static_receiver: bool,
+    ) -> Self {
         let args = args
             .into_iter()
             .zip(conversions)
             .map(|(expr, conv)| insert_conversion(expr, &conv.target, conv.conversion))
             .collect();
-        Self { index, args }
+        Self {
+            index,
+            args,
+            insert_receiver: has_static_receiver,
+        }
     }
 }
 

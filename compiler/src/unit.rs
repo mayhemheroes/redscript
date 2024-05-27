@@ -838,10 +838,7 @@ impl<'a> CompilationUnit<'a> {
                         Symbol::Struct(idx, _) | Symbol::Class(idx, _) => idx,
                         _ => return Err(Cause::ClassNotFound(class_name.clone()).with_span(ann.span)),
                     };
-                    let candidates = self
-                        .scope
-                        .resolve_direct_method(name.clone(), target_class_idx, self.pool)
-                        .ok();
+                    let candidates = Scope::resolve_direct_method(name.clone(), target_class_idx, self.pool).ok();
                     let fun_idx = candidates
                         .as_ref()
                         .and_then(|cd| cd.by_id(&sig, self.pool))
@@ -889,10 +886,7 @@ impl<'a> CompilationUnit<'a> {
                         Symbol::Struct(idx, _) | Symbol::Class(idx, _) => idx,
                         _ => return Err(Cause::ClassNotFound(class_name.clone()).with_span(ann.span)),
                     };
-                    let candidates = self
-                        .scope
-                        .resolve_direct_method(name.clone(), target_class_idx, self.pool)
-                        .ok();
+                    let candidates = Scope::resolve_direct_method(name.clone(), target_class_idx, self.pool).ok();
                     let fun_idx = candidates
                         .as_ref()
                         .and_then(|cd| cd.by_id(&sig, self.pool))
@@ -946,9 +940,7 @@ impl<'a> CompilationUnit<'a> {
                         _ => return Err(Cause::ClassNotFound(class_name.clone()).with_span(ann.span)),
                     };
 
-                    if self
-                        .scope
-                        .resolve_direct_method(name.clone(), target_class_idx, self.pool)
+                    if Scope::resolve_direct_method(name.clone(), target_class_idx, self.pool)
                         .ok()
                         .and_then(|cd| cd.by_id(&sig, self.pool))
                         .is_some()

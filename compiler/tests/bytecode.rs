@@ -904,3 +904,49 @@ fn compile_initializers() {
     ];
     TestContext::compiled(vec![sources]).unwrap().run("Testing", check);
 }
+
+#[test]
+fn compile_static_receivers() {
+    let sources = r#"
+        struct Dummy1 {
+            static func Test(self: Dummy1) {}
+        }
+
+        class Dummy2 {
+            static func Test(self: ref<Dummy2>) {}
+        }
+
+        func Testing() {
+            let a = new Dummy1();
+            a.Test();
+            Dummy1.Test(a);
+
+            let b = new Dummy2();
+            b.Test();
+            Dummy2.Test(b);
+        }
+        "#;
+
+    let check = check_code![
+        pat!(Assign),
+        mem!(Local(a)),
+        pat!(Construct(_, _)),
+        mem!(InvokeStatic(_0, _1, func1, _2)),
+        mem!(Local(a)),
+        pat!(ParamEnd),
+        mem!(InvokeStatic(_0, _1, func1, _2)),
+        mem!(Local(a)),
+        pat!(ParamEnd),
+        pat!(Assign),
+        mem!(Local(b)),
+        mem!(New(class)),
+        mem!(InvokeStatic(_0, _1, func2, _2)),
+        mem!(Local(b)),
+        pat!(ParamEnd),
+        mem!(InvokeStatic(_0, _1, func2, _2)),
+        mem!(Local(b)),
+        pat!(ParamEnd),
+        pat!(Nop)
+    ];
+    TestContext::compiled(vec![sources]).unwrap().run("Testing", check);
+}

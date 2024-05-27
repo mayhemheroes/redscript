@@ -81,7 +81,7 @@ macro_rules! pat {
     }
 }
 
-/// macro for matching an instruction and memorizing it's arguments by names
+/// macro for matching an instruction and memorizing its arguments by names
 #[macro_export]
 macro_rules! mem {
     ($id:ident($($args:ident),+)) => {
@@ -98,6 +98,10 @@ macro_rules! mem {
 #[macro_export]
 macro_rules! match_index {
     (__, $ctx:ident) => {};
+    (_0, $ctx:ident) => {};
+    (_1, $ctx:ident) => {};
+    (_2, $ctx:ident) => {};
+    (_3, $ctx:ident) => {};
     ($id:ident, $ctx:ident) => {
         $ctx.match_index($id.cast(), stringify!($id))
     };

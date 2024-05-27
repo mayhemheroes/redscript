@@ -252,34 +252,19 @@ impl<'a> Assembler<'a> {
                     self.assemble_intrinsic(op, args.into_vec(), &type_, scope, pool, span)?;
                 }
             },
-            Expr::MethodCall(expr, fun_idx, args, span) => {
-                let fun = pool.function(fun_idx)?;
-                match *expr {
-                    Expr::Ident(Reference::Symbol(Symbol::Class(_, _) | Symbol::Struct(_, _)), span) => {
-                        if fun.flags.is_static() {
-                            self.assemble_call(fun_idx, args, scope, pool, true, span)?;
-                        } else {
-                            return Err(
-                                Cause::InvalidNonStaticMethodCall(Ident::from_heap(pool.def_name(fun_idx)?))
-                                    .with_span(span),
-                            );
-                        }
-                    }
-                    _ if fun.flags.is_static() => {
-                        return Err(
-                            Cause::InvalidStaticMethodCall(Ident::from_heap(pool.def_name(fun_idx)?)).with_span(span),
-                        );
-                    }
-                    expr => {
-                        let force_static_call = matches!(&expr, Expr::Super(_));
-                        let exit_label = self.new_label();
-                        self.emit(Instr::Context(exit_label));
-                        self.assemble(expr, scope, pool, None)?;
-                        self.assemble_call(fun_idx, args, scope, pool, force_static_call, span)?;
-                        self.emit_label(exit_label);
-                    }
+            Expr::MethodCall(expr, fun_idx, args, span) => match *expr {
+                Expr::Ident(Reference::Symbol(Symbol::Class(_, _) | Symbol::Struct(_, _)), span) => {
+                    self.assemble_call(fun_idx, args, scope, pool, true, span)?;
                 }
-            }
+                expr => {
+                    let force_static_call = matches!(&expr, Expr::Super(_));
+                    let exit_label = self.new_label();
+                    self.emit(Instr::Context(exit_label));
+                    self.assemble(expr, scope, pool, None)?;
+                    self.assemble_call(fun_idx, args, scope, pool, force_static_call, span)?;
+                    self.emit_label(exit_label);
+                }
+            },
 
             Expr::Null(_) => {
                 self.emit(Instr::Null);

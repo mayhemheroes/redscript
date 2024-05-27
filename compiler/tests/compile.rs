@@ -298,3 +298,50 @@ fn compile_defaults() {
         ]
     );
 }
+
+#[test]
+fn fail_on_static_receiver_mismatch() {
+    let sources = r#"
+        class Dummy {
+            static func Test(self: wref<Dummy>) {}
+        }
+
+        func Testing() {
+            let a = new Dummy();
+            a.Test();
+        }
+        "#;
+
+    let (_, errs) = compiled(vec![sources]).unwrap();
+    assert!(
+        matches!(
+            &errs[..],
+            &[Diagnostic::CompileError(Cause::InvalidStaticMethodCall, _)]
+        ),
+        "{:?}",
+        errs
+    );
+}
+
+#[test]
+fn fail_on_static_call_of_instance_method() {
+    let sources = r#"
+        class Dummy {
+            func Test() {}
+        }
+
+        func Testing() {
+            Dummy.Test();
+        }
+        "#;
+
+    let (_, errs) = compiled(vec![sources]).unwrap();
+    assert!(
+        matches!(
+            &errs[..],
+            &[Diagnostic::CompileError(Cause::InvalidNonStaticMethodCall, _)]
+        ),
+        "{:?}",
+        errs
+    );
+}
