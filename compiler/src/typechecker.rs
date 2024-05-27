@@ -423,12 +423,12 @@ impl<'a> TypeChecker<'a> {
             (IntrinsicOp::ArrayFindFirst, TypeId::Array(elem)) => {
                 checked_args.push(first_arg);
                 checked_args.push(self.check_and_convert(&args[1], &elem, scope)?);
-                *elem
+                scope.resolve_type(&TypeName::INT32, self.pool).with_span(span)?
             }
             (IntrinsicOp::ArrayFindLast, TypeId::Array(elem)) => {
                 checked_args.push(first_arg);
                 checked_args.push(self.check_and_convert(&args[1], &elem, scope)?);
-                *elem
+                scope.resolve_type(&TypeName::INT32, self.pool).with_span(span)?
             }
             (IntrinsicOp::ArrayContains, TypeId::Array(elem)) => {
                 checked_args.push(first_arg);
