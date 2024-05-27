@@ -1,7 +1,6 @@
 use std::fmt::{self, Debug};
 use std::{io, usize};
 
-use strum::{Display, EnumString, IntoStaticStr};
 use thiserror::Error;
 
 use crate::bundle::{CName, PoolIndex, Resource, TweakDbId};
@@ -1088,79 +1087,6 @@ impl Encode for Code<Offset> {
             output.encode(instr)?;
         }
         Ok(())
-    }
-}
-
-#[derive(Debug, Clone, Copy, EnumString, Display, IntoStaticStr)]
-pub enum IntrinsicOp {
-    Equals,
-    NotEquals,
-    ArrayClear,
-    ArraySize,
-    ArrayResize,
-    ArrayFindFirst,
-    ArrayFindLast,
-    ArrayContains,
-    ArrayCount,
-    ArrayPush,
-    ArrayPop,
-    ArrayInsert,
-    ArrayRemove,
-    ArrayGrow,
-    ArrayErase,
-    ArrayLast,
-    ArraySort,
-    ArraySortByPredicate,
-    ToString,
-    EnumInt,
-    IntEnum,
-    ToVariant,
-    FromVariant,
-    VariantIsRef,
-    VariantIsArray,
-    VariantTypeName,
-    AsRef,
-    Deref,
-    RefToWeakRef,
-    WeakRefToRef,
-    IsDefined,
-}
-
-impl IntrinsicOp {
-    pub fn arg_count(&self) -> u8 {
-        match self {
-            IntrinsicOp::ArrayInsert => 3,
-            IntrinsicOp::Equals
-            | IntrinsicOp::NotEquals
-            | IntrinsicOp::ArrayResize
-            | IntrinsicOp::ArrayFindFirst
-            | IntrinsicOp::ArrayFindLast
-            | IntrinsicOp::ArrayContains
-            | IntrinsicOp::ArrayCount
-            | IntrinsicOp::ArrayPush
-            | IntrinsicOp::ArrayRemove
-            | IntrinsicOp::ArrayGrow
-            | IntrinsicOp::ArrayErase
-            | IntrinsicOp::ArraySortByPredicate => 2,
-            IntrinsicOp::ArrayPop
-            | IntrinsicOp::ArrayClear
-            | IntrinsicOp::ArraySize
-            | IntrinsicOp::ArrayLast
-            | IntrinsicOp::ArraySort
-            | IntrinsicOp::ToString
-            | IntrinsicOp::EnumInt
-            | IntrinsicOp::IntEnum
-            | IntrinsicOp::ToVariant
-            | IntrinsicOp::FromVariant
-            | IntrinsicOp::VariantIsRef
-            | IntrinsicOp::VariantIsArray
-            | IntrinsicOp::VariantTypeName
-            | IntrinsicOp::AsRef
-            | IntrinsicOp::Deref
-            | IntrinsicOp::RefToWeakRef
-            | IntrinsicOp::WeakRefToRef
-            | IntrinsicOp::IsDefined => 1,
-        }
     }
 }
 

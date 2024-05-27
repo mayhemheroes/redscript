@@ -534,3 +534,78 @@ pub enum Kind {
     ScriptRef,
     Array,
 }
+
+#[derive(Debug, Clone, Copy, EnumString, Display, IntoStaticStr)]
+pub enum Intrinsic {
+    Equals,
+    NotEquals,
+    ArrayClear,
+    ArraySize,
+    ArrayResize,
+    ArrayFindFirst,
+    ArrayFindLast,
+    ArrayContains,
+    ArrayCount,
+    ArrayPush,
+    ArrayPop,
+    ArrayInsert,
+    ArrayRemove,
+    ArrayGrow,
+    ArrayErase,
+    ArrayLast,
+    ArraySort,
+    ArraySortByPredicate,
+    ToString,
+    EnumInt,
+    IntEnum,
+    ToVariant,
+    FromVariant,
+    VariantIsRef,
+    VariantIsArray,
+    VariantTypeName,
+    AsRef,
+    Deref,
+    RefToWeakRef,
+    WeakRefToRef,
+    IsDefined,
+    NameOf,
+}
+
+impl Intrinsic {
+    pub fn arg_count(&self) -> u8 {
+        match self {
+            Intrinsic::ArrayInsert => 3,
+            Intrinsic::Equals
+            | Intrinsic::NotEquals
+            | Intrinsic::ArrayResize
+            | Intrinsic::ArrayFindFirst
+            | Intrinsic::ArrayFindLast
+            | Intrinsic::ArrayContains
+            | Intrinsic::ArrayCount
+            | Intrinsic::ArrayPush
+            | Intrinsic::ArrayRemove
+            | Intrinsic::ArrayGrow
+            | Intrinsic::ArrayErase
+            | Intrinsic::ArraySortByPredicate => 2,
+            Intrinsic::ArrayPop
+            | Intrinsic::ArrayClear
+            | Intrinsic::ArraySize
+            | Intrinsic::ArrayLast
+            | Intrinsic::ArraySort
+            | Intrinsic::ToString
+            | Intrinsic::EnumInt
+            | Intrinsic::IntEnum
+            | Intrinsic::ToVariant
+            | Intrinsic::FromVariant
+            | Intrinsic::VariantIsRef
+            | Intrinsic::VariantIsArray
+            | Intrinsic::VariantTypeName
+            | Intrinsic::AsRef
+            | Intrinsic::Deref
+            | Intrinsic::RefToWeakRef
+            | Intrinsic::WeakRefToRef
+            | Intrinsic::IsDefined
+            | Intrinsic::NameOf => 1,
+        }
+    }
+}

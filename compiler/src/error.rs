@@ -2,9 +2,8 @@ use std::{fmt, io, usize};
 
 use itertools::Itertools;
 use peg::error::ExpectedSet;
-use redscript::ast::{Ident, Pos, Span};
+use redscript::ast::{Ident, Intrinsic, Pos, Span};
 use redscript::bundle::PoolError;
-use redscript::bytecode::IntrinsicOp;
 use thiserror::Error;
 
 use crate::diagnostics::DisplayFn;
@@ -71,7 +70,7 @@ pub enum Cause {
     #[error("function cannot return a value")]
     UnexpectedValueReturn,
     #[error("invalid use of {0}, unexpected {1}")]
-    InvalidIntrinsicUse(IntrinsicOp, Ident),
+    InvalidIntrinsicUse(Intrinsic, Ident),
     #[error("method {0} is static")]
     InvalidStaticMethodCall(Ident),
     #[error("method {0} is not static")]

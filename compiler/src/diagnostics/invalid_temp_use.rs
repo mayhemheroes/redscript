@@ -1,5 +1,4 @@
-use redscript::ast::Expr;
-use redscript::bytecode::IntrinsicOp;
+use redscript::ast::{Expr, Intrinsic};
 
 use super::{Diagnostic, ExprDiagnosticPass, FunctionMetadata};
 use crate::typechecker::{Callable, Member, TypedExpr, TypedExprExt};
@@ -26,13 +25,13 @@ impl InvalidUseOfTemporaryVisitor<'_> {
             }
             Expr::Call(Callable::Intrinsic(op, _), _, args, _) => match (op, &args[..]) {
                 (
-                    IntrinsicOp::ArrayContains
-                    | IntrinsicOp::ArrayCount
-                    | IntrinsicOp::ArrayFindFirst
-                    | IntrinsicOp::ArrayFindLast
-                    | IntrinsicOp::ArrayLast
-                    | IntrinsicOp::ArrayPop
-                    | IntrinsicOp::ArraySize,
+                    Intrinsic::ArrayContains
+                    | Intrinsic::ArrayCount
+                    | Intrinsic::ArrayFindFirst
+                    | Intrinsic::ArrayFindLast
+                    | Intrinsic::ArrayLast
+                    | Intrinsic::ArrayPop
+                    | Intrinsic::ArraySize,
                     [inner, ..],
                 ) if inner.is_prvalue() => self.results.push(Diagnostic::InvalidUseOfTemporary(inner.span())),
                 _ => {}

@@ -1,8 +1,7 @@
 use std::vec;
 
-use redscript::ast::{BinOp, Constant, Expr, Ident, Literal, Seq, Span, TypeName};
+use redscript::ast::{BinOp, Constant, Expr, Ident, Intrinsic, Literal, Seq, Span, TypeName};
 use redscript::bundle::{ConstantPool, PoolIndex};
-use redscript::bytecode::IntrinsicOp;
 use redscript::definition::{Definition, Local, LocalFlags};
 use redscript::Ref;
 
@@ -74,7 +73,7 @@ impl<'a> ExprTransformer<TypedAst> for Desugar<'a> {
         let array_ref = Expr::Ident(local.clone(), pos);
 
         self.add_prefix(Expr::Call(
-            Callable::Intrinsic(IntrinsicOp::ArrayResize, TypeId::Void),
+            Callable::Intrinsic(Intrinsic::ArrayResize, TypeId::Void),
             [].into(),
             [array_ref, Expr::Constant(Constant::U64(exprs.len() as u64), pos)].into(),
             pos,
@@ -109,7 +108,7 @@ impl<'a> ExprTransformer<TypedAst> for Desugar<'a> {
             .return_type(&TypeName::STRING);
         let add_str = self.get_function(add_str).with_span(span)?;
 
-        let as_ref = Callable::Intrinsic(IntrinsicOp::AsRef, TypeId::ScriptRef(Box::new(str_type.clone())));
+        let as_ref = Callable::Intrinsic(Intrinsic::AsRef, TypeId::ScriptRef(Box::new(str_type.clone())));
         let as_ref = |exp: TypedExpr| Expr::Call(as_ref.clone(), [].into(), [exp].into(), span);
 
         for (part, str) in parts {
@@ -120,7 +119,7 @@ impl<'a> ExprTransformer<TypedAst> for Desugar<'a> {
                 TypeId::ScriptRef(idx) if idx.pretty(self.pool)? == TypeName::STRING.name() => part,
                 typ if typ.pretty(self.pool)? == TypeName::STRING.name() => as_ref(part),
                 _ => {
-                    let to_string = Callable::Intrinsic(IntrinsicOp::ToString, str_type.clone());
+                    let to_string = Callable::Intrinsic(Intrinsic::ToString, str_type.clone());
                     as_ref(Expr::Call(to_string, [].into(), [part].into(), span))
                 }
             };
@@ -164,7 +163,7 @@ impl<'a> ExprTransformer<TypedAst> for Desugar<'a> {
             span,
         ));
 
-        let array_size = Callable::Intrinsic(IntrinsicOp::ArraySize, counter_type);
+        let array_size = Callable::Intrinsic(Intrinsic::ArraySize, counter_type);
         let assign_add = FunctionSignatureBuilder::new(BinOp::AssignAdd.to_string())
             .parameter(&TypeName::INT32, true)
             .parameter(&TypeName::INT32, false)

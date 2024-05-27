@@ -689,6 +689,33 @@ fn compile_empty_return() {
 }
 
 #[test]
+fn compile_nameof() {
+    let sources = r#"
+        module My.Mod
+
+        class Dummy {}
+
+        func Testing() {
+            let a = n"My.Mod.Dummy";
+            let b = NameOf(Dummy);
+        }
+        "#;
+
+    let check = check_code![
+        pat!(Assign),
+        mem!(Local(a)),
+        mem!(NameConst(dummy)),
+        pat!(Assign),
+        mem!(Local(b)),
+        mem!(NameConst(dummy)),
+        pat!(Nop)
+    ];
+    TestContext::compiled(vec![sources])
+        .unwrap()
+        .run("My.Mod.Testing", check);
+}
+
+#[test]
 fn compile_string_interpolation() {
     let sources = r#"
         func Testing(year: Int32) -> String {

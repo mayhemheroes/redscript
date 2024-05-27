@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 
 use error::Error;
-use redscript::ast::{Constant, Expr, Ident, Literal, Seq, SourceAst, Span, SwitchCase, Target, TypeName};
+use redscript::ast::{Constant, Expr, Ident, Intrinsic, Literal, Seq, SourceAst, Span, SwitchCase, Target, TypeName};
 use redscript::bundle::{ConstantPool, PoolIndex};
-use redscript::bytecode::{CodeCursor, CursorError, Instr, IntrinsicOp, Location, Offset};
+use redscript::bytecode::{CodeCursor, CursorError, Instr, Location, Offset};
 use redscript::definition::{Definition, Function};
 
 pub mod error;
@@ -70,7 +70,7 @@ impl<'a> Decompiler<'a> {
         Ok(Seq::new(body))
     }
 
-    fn consume_intrisnic_typed(&mut self, op: IntrinsicOp, type_args: Vec<TypeName>) -> Result<Expr<SourceAst>, Error> {
+    fn consume_intrisnic_typed(&mut self, op: Intrinsic, type_args: Vec<TypeName>) -> Result<Expr<SourceAst>, Error> {
         let params = self.consume_n(op.arg_count() as usize)?;
         Ok(Expr::Call(
             Ident::from_static(op.into()),
@@ -80,7 +80,7 @@ impl<'a> Decompiler<'a> {
         ))
     }
 
-    fn consume_intrisnic(&mut self, op: IntrinsicOp) -> Result<Expr<SourceAst>, Error> {
+    fn consume_intrisnic(&mut self, op: Intrinsic) -> Result<Expr<SourceAst>, Error> {
         self.consume_intrisnic_typed(op, vec![])
     }
 
@@ -349,73 +349,73 @@ impl<'a> Decompiler<'a> {
                 self.consume_with(Some(expr), None)?
             }
             Instr::Equals(_) | Instr::RefStringEqualsString(_) | Instr::StringEqualsRefString(_) => {
-                self.consume_intrisnic(IntrinsicOp::Equals)?
+                self.consume_intrisnic(Intrinsic::Equals)?
             }
             Instr::NotEquals(_) | Instr::RefStringNotEqualsString(_) | Instr::StringNotEqualsRefString(_) => {
-                self.consume_intrisnic(IntrinsicOp::NotEquals)?
+                self.consume_intrisnic(Intrinsic::NotEquals)?
             }
             Instr::New(class) => Expr::New(TypeName::basic_owned(self.pool.def_name(class)?), [].into(), Span::ZERO),
             Instr::Delete => self.consume_call("Delete", 1)?,
             Instr::This => Expr::This(Span::ZERO),
-            Instr::ArrayClear(_) => self.consume_intrisnic(IntrinsicOp::ArrayClear)?,
-            Instr::ArraySize(_) | Instr::StaticArraySize(_) => self.consume_intrisnic(IntrinsicOp::ArraySize)?,
-            Instr::ArrayResize(_) => self.consume_intrisnic(IntrinsicOp::ArrayResize)?,
+            Instr::ArrayClear(_) => self.consume_intrisnic(Intrinsic::ArrayClear)?,
+            Instr::ArraySize(_) | Instr::StaticArraySize(_) => self.consume_intrisnic(Intrinsic::ArraySize)?,
+            Instr::ArrayResize(_) => self.consume_intrisnic(Intrinsic::ArrayResize)?,
             Instr::ArrayFindFirst(_)
             | Instr::ArrayFindFirstFast(_)
             | Instr::StaticArrayFindFirst(_)
-            | Instr::StaticArrayFindFirstFast(_) => self.consume_intrisnic(IntrinsicOp::ArrayFindFirst)?,
+            | Instr::StaticArrayFindFirstFast(_) => self.consume_intrisnic(Intrinsic::ArrayFindFirst)?,
             Instr::ArrayFindLast(_)
             | Instr::ArrayFindLastFast(_)
             | Instr::StaticArrayFindLast(_)
-            | Instr::StaticArrayFindLastFast(_) => self.consume_intrisnic(IntrinsicOp::ArrayFindLast)?,
+            | Instr::StaticArrayFindLastFast(_) => self.consume_intrisnic(Intrinsic::ArrayFindLast)?,
             Instr::ArrayContains(_)
             | Instr::ArrayContainsFast(_)
             | Instr::StaticArrayContains(_)
-            | Instr::StaticArrayContainsFast(_) => self.consume_intrisnic(IntrinsicOp::ArrayContains)?,
+            | Instr::StaticArrayContainsFast(_) => self.consume_intrisnic(Intrinsic::ArrayContains)?,
             Instr::ArrayCount(_)
             | Instr::ArrayCountFast(_)
             | Instr::StaticArrayCount(_)
-            | Instr::StaticArrayCountFast(_) => self.consume_intrisnic(IntrinsicOp::ArrayCount)?,
-            Instr::ArrayPush(_) => self.consume_intrisnic(IntrinsicOp::ArrayPush)?,
-            Instr::ArrayPop(_) => self.consume_intrisnic(IntrinsicOp::ArrayPop)?,
-            Instr::ArrayInsert(_) => self.consume_intrisnic(IntrinsicOp::ArrayInsert)?,
-            Instr::ArrayRemove(_) | Instr::ArrayRemoveFast(_) => self.consume_intrisnic(IntrinsicOp::ArrayRemove)?,
-            Instr::ArrayGrow(_) => self.consume_intrisnic(IntrinsicOp::ArrayGrow)?,
-            Instr::ArrayErase(_) | Instr::ArrayEraseFast(_) => self.consume_intrisnic(IntrinsicOp::ArrayErase)?,
-            Instr::ArrayLast(_) | Instr::StaticArrayLast(_) => self.consume_intrisnic(IntrinsicOp::ArrayLast)?,
-            Instr::ArraySort(_) => self.consume_intrisnic(IntrinsicOp::ArraySort)?,
-            Instr::ArraySortByPredicate(_) => self.consume_intrisnic(IntrinsicOp::ArraySortByPredicate)?,
+            | Instr::StaticArrayCountFast(_) => self.consume_intrisnic(Intrinsic::ArrayCount)?,
+            Instr::ArrayPush(_) => self.consume_intrisnic(Intrinsic::ArrayPush)?,
+            Instr::ArrayPop(_) => self.consume_intrisnic(Intrinsic::ArrayPop)?,
+            Instr::ArrayInsert(_) => self.consume_intrisnic(Intrinsic::ArrayInsert)?,
+            Instr::ArrayRemove(_) | Instr::ArrayRemoveFast(_) => self.consume_intrisnic(Intrinsic::ArrayRemove)?,
+            Instr::ArrayGrow(_) => self.consume_intrisnic(Intrinsic::ArrayGrow)?,
+            Instr::ArrayErase(_) | Instr::ArrayEraseFast(_) => self.consume_intrisnic(Intrinsic::ArrayErase)?,
+            Instr::ArrayLast(_) | Instr::StaticArrayLast(_) => self.consume_intrisnic(Intrinsic::ArrayLast)?,
+            Instr::ArraySort(_) => self.consume_intrisnic(Intrinsic::ArraySort)?,
+            Instr::ArraySortByPredicate(_) => self.consume_intrisnic(Intrinsic::ArraySortByPredicate)?,
             Instr::ArrayElement(_) | Instr::StaticArrayElement(_) => {
                 let arr = self.consume()?;
                 let idx = self.consume()?;
                 Expr::ArrayElem(Box::new(arr), Box::new(idx), Span::ZERO)
             }
             Instr::RefToBool | Instr::WeakRefToBool | Instr::VariantIsDefined => {
-                self.consume_intrisnic(IntrinsicOp::IsDefined)?
+                self.consume_intrisnic(Intrinsic::IsDefined)?
             }
-            Instr::EnumToI32(_, _) => self.consume_intrisnic(IntrinsicOp::EnumInt)?,
+            Instr::EnumToI32(_, _) => self.consume_intrisnic(Intrinsic::EnumInt)?,
             Instr::I32ToEnum(typ, _) => {
                 let type_name = TypeName::from_repr(&self.pool.def_name(typ)?);
-                self.consume_intrisnic_typed(IntrinsicOp::IntEnum, vec![type_name])?
+                self.consume_intrisnic_typed(Intrinsic::IntEnum, vec![type_name])?
             }
             Instr::DynamicCast(typ, _) => {
                 let type_name = TypeName::from_repr(&self.pool.def_name(typ)?);
                 let expr = self.consume()?;
                 Expr::Cast(type_name, Box::new(expr), Span::ZERO)
             }
-            Instr::ToString(_) | Instr::VariantToString => self.consume_intrisnic(IntrinsicOp::ToString)?,
-            Instr::ToVariant(_) => self.consume_intrisnic(IntrinsicOp::ToVariant)?,
+            Instr::ToString(_) | Instr::VariantToString => self.consume_intrisnic(Intrinsic::ToString)?,
+            Instr::ToVariant(_) => self.consume_intrisnic(Intrinsic::ToVariant)?,
             Instr::FromVariant(typ) => {
                 let type_name = TypeName::from_repr(&self.pool.def_name(typ)?);
-                self.consume_intrisnic_typed(IntrinsicOp::FromVariant, vec![type_name])?
+                self.consume_intrisnic_typed(Intrinsic::FromVariant, vec![type_name])?
             }
-            Instr::VariantIsRef => self.consume_intrisnic(IntrinsicOp::VariantIsRef)?,
-            Instr::VariantIsArray => self.consume_intrisnic(IntrinsicOp::VariantIsArray)?,
-            Instr::VariantTypeName => self.consume_intrisnic(IntrinsicOp::VariantTypeName)?,
-            Instr::WeakRefToRef => self.consume_intrisnic(IntrinsicOp::WeakRefToRef)?,
-            Instr::RefToWeakRef => self.consume_intrisnic(IntrinsicOp::RefToWeakRef)?,
-            Instr::AsRef(_) => self.consume_intrisnic(IntrinsicOp::AsRef)?,
-            Instr::Deref(_) => self.consume_intrisnic(IntrinsicOp::Deref)?,
+            Instr::VariantIsRef => self.consume_intrisnic(Intrinsic::VariantIsRef)?,
+            Instr::VariantIsArray => self.consume_intrisnic(Intrinsic::VariantIsArray)?,
+            Instr::VariantTypeName => self.consume_intrisnic(Intrinsic::VariantTypeName)?,
+            Instr::WeakRefToRef => self.consume_intrisnic(Intrinsic::WeakRefToRef)?,
+            Instr::RefToWeakRef => self.consume_intrisnic(Intrinsic::RefToWeakRef)?,
+            Instr::AsRef(_) => self.consume_intrisnic(Intrinsic::AsRef)?,
+            Instr::Deref(_) => self.consume_intrisnic(Intrinsic::Deref)?,
             // jump to next instruction does nothing
             Instr::Jump(Offset { value: 3 }) | Instr::Nop | Instr::Breakpoint(_) | Instr::StartProfiling(_) => {
                 Expr::EMPTY
