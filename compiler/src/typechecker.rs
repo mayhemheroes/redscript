@@ -689,11 +689,11 @@ impl<'a> TypeChecker<'a> {
             .skip_while(|&&p| pool.parameter(p).is_ok_and(|p| p.flags.is_optional()))
             .count();
 
-        if arg_count < min_params || arg_count > fun.parameters.len() {
+        if arg_count < min_params || arg_count > params.len() {
             let err = FunctionMatchError::ArgumentCountMismatch {
                 given: arg_count,
                 min: min_params,
-                max: fun.parameters.len(),
+                max: params.len(),
             };
             return Err(err.into());
         }

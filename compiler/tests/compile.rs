@@ -345,3 +345,27 @@ fn fail_on_static_call_of_instance_method() {
         errs
     );
 }
+
+#[test]
+fn fail_with_extra_arg_on_static_receiver() {
+    let sources = r#"
+        struct Dummy {
+            static func Test(self: Dummy) {}
+        }
+
+        func Testing() {
+            let d = new Dummy();
+            d.Test(1);
+        }
+        "#;
+
+    let (_, errs) = compiled(vec![sources]).unwrap();
+    assert!(
+        matches!(
+            &errs[..],
+            &[Diagnostic::CompileError(Cause::NoMatchingOverload(_, _), _)]
+        ),
+        "{:?}",
+        errs
+    );
+}
