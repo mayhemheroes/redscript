@@ -436,7 +436,7 @@ impl<'a> TypeChecker<'a> {
                 checked_args.push(first_arg);
                 TypeId::Void
             }
-            (Intrinsic::ArraySize, TypeId::Array(_)) => {
+            (Intrinsic::ArraySize, TypeId::Array(_) | TypeId::StaticArray(_, _)) => {
                 checked_args.push(first_arg);
                 scope.resolve_type(&TypeName::INT32, self.pool).with_span(span)?
             }
@@ -446,25 +446,18 @@ impl<'a> TypeChecker<'a> {
                 checked_args.push(self.check_and_convert(&args[1], &size_type, scope)?);
                 TypeId::Void
             }
-            (Intrinsic::ArrayFindFirst, TypeId::Array(elem)) => {
+            (
+                Intrinsic::ArrayFindFirst | Intrinsic::ArrayFindLast | Intrinsic::ArrayCount,
+                TypeId::Array(elem) | TypeId::StaticArray(elem, _),
+            ) => {
                 checked_args.push(first_arg);
                 checked_args.push(self.check_and_convert(&args[1], &elem, scope)?);
                 scope.resolve_type(&TypeName::INT32, self.pool).with_span(span)?
             }
-            (Intrinsic::ArrayFindLast, TypeId::Array(elem)) => {
-                checked_args.push(first_arg);
-                checked_args.push(self.check_and_convert(&args[1], &elem, scope)?);
-                scope.resolve_type(&TypeName::INT32, self.pool).with_span(span)?
-            }
-            (Intrinsic::ArrayContains, TypeId::Array(elem)) => {
+            (Intrinsic::ArrayContains, TypeId::Array(elem) | TypeId::StaticArray(elem, _)) => {
                 checked_args.push(first_arg);
                 checked_args.push(self.check_and_convert(&args[1], &elem, scope)?);
                 scope.resolve_type(&TypeName::BOOL, self.pool).with_span(span)?
-            }
-            (Intrinsic::ArrayCount, TypeId::Array(elem)) => {
-                checked_args.push(first_arg);
-                checked_args.push(self.check_and_convert(&args[1], &elem, scope)?);
-                scope.resolve_type(&TypeName::INT32, self.pool).with_span(span)?
             }
             (Intrinsic::ArrayPush, TypeId::Array(elem)) => {
                 checked_args.push(first_arg);
@@ -499,7 +492,7 @@ impl<'a> TypeChecker<'a> {
                 checked_args.push(self.check_and_convert(&args[1], &idx_type, scope)?);
                 scope.resolve_type(&TypeName::BOOL, self.pool).with_span(span)?
             }
-            (Intrinsic::ArrayLast, TypeId::Array(elem)) => {
+            (Intrinsic::ArrayLast, TypeId::Array(elem) | TypeId::StaticArray(elem, _)) => {
                 checked_args.push(first_arg);
                 *elem
             }

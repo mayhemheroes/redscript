@@ -389,9 +389,10 @@ impl Target {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct TypeName {
-    name: Ident,
-    arguments: Option<Box<[TypeName]>>,
+pub enum TypeName {
+    Named { name: Ident, args: Option<Box<[Self]>> },
+    Array(Box<Self>),
+    StaticArray(Box<Self>, u32),
 }
 
 impl TypeName {
@@ -415,45 +416,53 @@ impl TypeName {
 
     #[inline]
     pub fn new(name: Ident, arguments: Vec<TypeName>) -> Self {
-        TypeName {
+        TypeName::Named {
             name,
-            arguments: arguments.is_empty().not().then(|| arguments.into_boxed_slice()),
+            args: arguments.is_empty().not().then(|| arguments.into()),
         }
     }
 
     #[inline]
     pub const fn basic(name: &'static str) -> Self {
-        TypeName {
+        TypeName::Named {
             name: Ident::from_static(name),
-            arguments: None,
+            args: None,
         }
     }
 
     #[inline]
     pub fn basic_owned(name: Ref<str>) -> Self {
-        TypeName {
+        TypeName::Named {
             name: Ident::from_heap(name),
-            arguments: None,
+            args: None,
         }
     }
 
-    #[inline]
     pub fn name(&self) -> Ident {
-        self.name.clone()
+        match self {
+            TypeName::Named { name, .. } => name.clone(),
+            TypeName::Array(_) | TypeName::StaticArray(_, _) => Ident::from_static("array"),
+        }
     }
 
-    #[inline]
     pub fn arguments(&self) -> &[TypeName] {
-        self.arguments.as_deref().unwrap_or_default()
+        match self {
+            TypeName::Named { args, .. } => args.as_deref().unwrap_or_default(),
+            TypeName::Array(arg) | TypeName::StaticArray(arg, _) => std::slice::from_ref(arg),
+        }
     }
 
     pub fn kind(&self) -> Kind {
-        match self.name.as_ref() {
-            "ref" => Kind::Ref,
-            "wref" => Kind::WRef,
-            "script_ref" => Kind::ScriptRef,
-            "array" => Kind::Array,
-            _ => Kind::Prim,
+        match self {
+            TypeName::Named { name, .. } => match name.as_ref() {
+                "ref" => Kind::Ref,
+                "wref" => Kind::WRef,
+                "script_ref" => Kind::ScriptRef,
+                "array" => Kind::Array,
+                _ => Kind::Prim,
+            },
+            TypeName::Array(_) => Kind::Array,
+            &TypeName::StaticArray(_, size) => Kind::StaticArray(size),
         }
     }
 
@@ -467,55 +476,61 @@ impl TypeName {
     // Used for identifying functions
     pub fn mangled(&self) -> Ident {
         let unwrapped = self.unwrapped();
-        match &unwrapped.arguments {
-            Some(arguments) => {
-                let args = arguments.iter().map(TypeName::mangled).format(",");
-                str_fmt!("{}<{args}>", unwrapped.name)
+        match unwrapped {
+            Self::StaticArray(arg, size) => str_fmt!("array<{};{}>", arg.mangled(), size),
+            other if other.arguments().is_empty() => unwrapped.name(),
+            _ => {
+                let args = unwrapped.arguments().iter().map(Self::mangled).format(",");
+                str_fmt!("{}<{}>", unwrapped.name(), args)
             }
-            None => unwrapped.name.clone(),
         }
     }
 
     pub fn pretty(&self) -> Ident {
-        match &self.arguments {
-            Some(arguments) => {
-                let args = arguments.iter().map(TypeName::pretty).format(", ");
-                str_fmt!("{}<{args}>", self.name)
-            }
-            None => self.name.clone(),
+        match self {
+            Self::Named { name, args } => match args {
+                Some(args) => {
+                    let args = args.iter().map(Self::pretty).format(",");
+                    str_fmt!("{}<{}>", name, args)
+                }
+                None => name.clone(),
+            },
+            Self::Array(arg) => str_fmt!("[{}]", arg.pretty()),
+            Self::StaticArray(arg, size) => str_fmt!("[{}; {}]", arg.pretty(), size),
         }
     }
 
     // Used for storing types in the constant pool
     pub fn repr(&self) -> Ident {
-        match &self.arguments {
-            Some(arguments) => {
-                let str = iter::once(self.name.clone())
-                    .chain(arguments.iter().map(TypeName::repr))
+        match self {
+            Self::StaticArray(arg, size) => {
+                let arg = arg.repr();
+                str_fmt!("{arg}[{size}]")
+            }
+            other if other.arguments().is_empty() => self.name(),
+            _ => {
+                let str = iter::once(self.name().clone())
+                    .chain(self.arguments().iter().map(TypeName::repr))
                     .join(":");
                 Ident::from_heap(str.into())
             }
-            None => self.name.clone(),
         }
     }
 
-    pub fn from_repr(str: &str) -> TypeName {
+    pub fn from_repr(str: &str) -> Self {
         let mut parts = str.split(':');
         Self::from_parts(parts.next().unwrap(), parts).unwrap()
     }
 
-    fn from_parts<'a>(name: &'a str, mut parts: impl Iterator<Item = &'a str>) -> Option<TypeName> {
+    fn from_parts<'a>(name: &'a str, mut parts: impl Iterator<Item = &'a str>) -> Option<Self> {
         let name = Ident::from_ref(name);
         match parts.next() {
             Some(tail) => {
                 let arg = Self::from_parts(tail, parts)?;
-                let type_ = TypeName {
-                    name,
-                    arguments: Some([arg].into()),
-                };
+                let type_ = Self::new(name, vec![arg]);
                 Some(type_)
             }
-            None => Some(TypeName { name, arguments: None }),
+            None => Some(Self::basic_owned(name.to_heap())),
         }
     }
 }
@@ -533,6 +548,7 @@ pub enum Kind {
     WRef,
     ScriptRef,
     Array,
+    StaticArray(u32),
 }
 
 #[derive(Debug, Clone, Copy, EnumString, Display, IntoStaticStr)]

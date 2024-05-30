@@ -217,8 +217,11 @@ peg::parser! {
         rule keyword(id: &'static str) -> () =
             ##parse_string_literal(id) !['0'..='9' | 'a'..='z' | 'A'..='Z' | '_']
 
+        rule number_str() -> &'input str
+            = str:$(['-']? ['0'..='9' | '.']+)
+
         rule number() -> Constant
-            = str:$(['-']? ['0'..='9' | '.']+) unsigned: $(['u'])? postfix:$(['l' | 'd'])?
+            = str:number_str() unsigned: $(['u'])? postfix:$(['l' | 'd'])?
             {? if postfix == Some("d") { str.parse::<f64>().or(Err("valid double")).map(Constant::F64) }
                else if str.contains('.') { str.parse::<f32>().or(Err("valid float")).map(Constant::F32) }
                else if postfix == Some("l") && unsigned.is_some() { str.parse::<u64>().or(Err("valid unsigned 64-bit int")).map(Constant::U64) }
@@ -265,6 +268,10 @@ peg::parser! {
 
         rule type_() -> TypeName
             = name:ident() args:type_args()? { TypeName::new(name, args.unwrap_or_default()) }
+            / "[" _ type_:type_() _ "]" { TypeName::Array(type_.into()) }
+            / "[" _ type_:type_() _ ";" _ size:number_str() "]" {?
+                Ok(TypeName::StaticArray(type_.into(), size.parse().or(Err("valid 32-bit integer"))?))
+            }
         rule type_args() -> Vec<TypeName> = "<" _ args:commasep(<type_()>) _ ">" { args }
 
         rule let_type() -> TypeName = ":" _ type_:type_() { type_ }
@@ -520,7 +527,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             format!("{:?}", module.entries),
-            r#"[Class(ClassSource { declaration: Declaration { annotations: [], qualifiers: Qualifiers([Public]), name: "A", span: Span { low: Pos(0), high: Pos(14) } }, base: Some("IScriptable"), members: [Field(FieldSource { declaration: Declaration { annotations: [], qualifiers: Qualifiers([Private, Const]), name: "m_field", span: Span { low: Pos(53), high: Pos(78) } }, type_: TypeName { name: "Int32", arguments: None }, default: None }), Function(FunctionSource { declaration: Declaration { annotations: [], qualifiers: Qualifiers([Public]), name: "GetField", span: Span { low: Pos(104), high: Pos(124) } }, type_: Some(TypeName { name: "Int32", arguments: None }), parameters: [], body: Some(Seq { exprs: [Return(Some(Member(This(Span { low: Pos(165), high: Pos(169) }), "m_field", Span { low: Pos(165), high: Pos(177) })), Span { low: Pos(158), high: Pos(178) })] }), span: Span { low: Pos(104), high: Pos(196) } })], span: Span { low: Pos(0), high: Pos(211) } })]"#
+            r#"[Class(ClassSource { declaration: Declaration { annotations: [], qualifiers: Qualifiers([Public]), name: "A", span: Span { low: Pos(0), high: Pos(14) } }, base: Some("IScriptable"), members: [Field(FieldSource { declaration: Declaration { annotations: [], qualifiers: Qualifiers([Private, Const]), name: "m_field", span: Span { low: Pos(53), high: Pos(78) } }, type_: Named { name: "Int32", args: None }, default: None }), Function(FunctionSource { declaration: Declaration { annotations: [], qualifiers: Qualifiers([Public]), name: "GetField", span: Span { low: Pos(104), high: Pos(124) } }, type_: Some(Named { name: "Int32", args: None }), parameters: [], body: Some(Seq { exprs: [Return(Some(Member(This(Span { low: Pos(165), high: Pos(169) }), "m_field", Span { low: Pos(165), high: Pos(177) })), Span { low: Pos(158), high: Pos(178) })] }), span: Span { low: Pos(104), high: Pos(196) } })], span: Span { low: Pos(0), high: Pos(211) } })]"#
         );
     }
 
@@ -535,7 +542,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             format!("{:?}", module.entries),
-            r#"[Function(FunctionSource { declaration: Declaration { annotations: [], qualifiers: Qualifiers([Public, Static]), name: "GetField", span: Span { low: Pos(0), high: Pos(27) } }, type_: Some(TypeName { name: "Uint64", arguments: None }), parameters: [ParameterSource { qualifiers: Qualifiers([]), name: "optimum", type_: TypeName { name: "Uint64", arguments: None } }], body: Some(Seq { exprs: [Return(Some(Conditional(BinOp(Member(This(Span { low: Pos(80), high: Pos(84) }), "m_field", Span { low: Pos(80), high: Pos(92) }), Ident("optimum", Span { low: Pos(95), high: Pos(102) }), Greater, Span { low: Pos(80), high: Pos(102) }), Member(This(Span { low: Pos(105), high: Pos(109) }), "m_field", Span { low: Pos(105), high: Pos(117) }), Ident("optimum", Span { low: Pos(120), high: Pos(127) }), Span { low: Pos(80), high: Pos(127) })), Span { low: Pos(73), high: Pos(128) })] }), span: Span { low: Pos(0), high: Pos(143) } })]"#
+            r#"[Function(FunctionSource { declaration: Declaration { annotations: [], qualifiers: Qualifiers([Public, Static]), name: "GetField", span: Span { low: Pos(0), high: Pos(27) } }, type_: Some(Named { name: "Uint64", args: None }), parameters: [ParameterSource { qualifiers: Qualifiers([]), name: "optimum", type_: Named { name: "Uint64", args: None } }], body: Some(Seq { exprs: [Return(Some(Conditional(BinOp(Member(This(Span { low: Pos(80), high: Pos(84) }), "m_field", Span { low: Pos(80), high: Pos(92) }), Ident("optimum", Span { low: Pos(95), high: Pos(102) }), Greater, Span { low: Pos(80), high: Pos(102) }), Member(This(Span { low: Pos(105), high: Pos(109) }), "m_field", Span { low: Pos(105), high: Pos(117) }), Ident("optimum", Span { low: Pos(120), high: Pos(127) }), Span { low: Pos(80), high: Pos(127) })), Span { low: Pos(73), high: Pos(128) })] }), span: Span { low: Pos(0), high: Pos(143) } })]"#
         );
     }
 
@@ -630,7 +637,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             format!("{:?}", module.entries),
-            r#"[Class(ClassSource { declaration: Declaration { annotations: [], qualifiers: Qualifiers([]), name: "Test", span: Span { low: Pos(101), high: Pos(111) } }, base: None, members: [Field(FieldSource { declaration: Declaration { annotations: [], qualifiers: Qualifiers([Private]), name: "m_field", span: Span { low: Pos(130), high: Pos(149) } }, type_: TypeName { name: "String", arguments: None }, default: None })], span: Span { low: Pos(101), high: Pos(189) } })]"#
+            r#"[Class(ClassSource { declaration: Declaration { annotations: [], qualifiers: Qualifiers([]), name: "Test", span: Span { low: Pos(101), high: Pos(111) } }, base: None, members: [Field(FieldSource { declaration: Declaration { annotations: [], qualifiers: Qualifiers([Private]), name: "m_field", span: Span { low: Pos(130), high: Pos(149) } }, type_: Named { name: "String", args: None }, default: None })], span: Span { low: Pos(101), high: Pos(189) } })]"#
         );
     }
 
@@ -648,7 +655,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             format!("{:?}", module.entries),
-            r#"[Class(ClassSource { declaration: Declaration { annotations: [], qualifiers: Qualifiers([]), name: "Test", span: Span { low: Pos(13), high: Pos(23) } }, base: None, members: [Field(FieldSource { declaration: Declaration { annotations: [], qualifiers: Qualifiers([Private]), name: "m_field", span: Span { low: Pos(114), high: Pos(133) } }, type_: TypeName { name: "String", arguments: None }, default: None })], span: Span { low: Pos(13), high: Pos(156) } })]"#
+            r#"[Class(ClassSource { declaration: Declaration { annotations: [], qualifiers: Qualifiers([]), name: "Test", span: Span { low: Pos(13), high: Pos(23) } }, base: None, members: [Field(FieldSource { declaration: Declaration { annotations: [], qualifiers: Qualifiers([Private]), name: "m_field", span: Span { low: Pos(114), high: Pos(133) } }, type_: Named { name: "String", args: None }, default: None })], span: Span { low: Pos(13), high: Pos(156) } })]"#
         );
     }
 

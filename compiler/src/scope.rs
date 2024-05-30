@@ -252,6 +252,9 @@ impl Scope {
                 (Kind::WRef, [nested]) => TypeId::WeakRef(Box::new(self.resolve_type(nested, pool)?)),
                 (Kind::ScriptRef, [nested]) => TypeId::ScriptRef(Box::new(self.resolve_type(nested, pool)?)),
                 (Kind::Array, [nested]) => TypeId::Array(Box::new(self.resolve_type(nested, pool)?)),
+                (Kind::StaticArray(size), [nested]) => {
+                    TypeId::StaticArray(Box::new(self.resolve_type(nested, pool)?), size)
+                }
                 _ => match self.symbols.find(&name.repr()) {
                     Some(Symbol::Class(idx, _)) => TypeId::Class(*idx),
                     Some(Symbol::Struct(idx, _)) => TypeId::Struct(*idx),
@@ -363,8 +366,8 @@ impl TypeId {
             Self::Enum(idx) => Ok(Ident::from_heap(pool.def_name(*idx)?)),
             Self::Ref(idx) => Ok(str_fmt!("ref<{}>", idx.pretty(pool)?)),
             Self::WeakRef(idx) => Ok(str_fmt!("wref<{}>", idx.pretty(pool)?)),
-            Self::Array(idx) => Ok(str_fmt!("array<{}>", idx.pretty(pool)?)),
-            Self::StaticArray(idx, size) => Ok(str_fmt!("array<{}, {}>", idx.pretty(pool)?, size)),
+            Self::Array(idx) => Ok(str_fmt!("[{}]", idx.pretty(pool)?)),
+            Self::StaticArray(idx, size) => Ok(str_fmt!("[{}; {}]", idx.pretty(pool)?, size)),
             Self::ScriptRef(idx) => Ok(str_fmt!("script_ref<{}>", idx.pretty(pool)?)),
             Self::Variant => Ok(Ident::from_static("Variant")),
             Self::Null => Ok(Ident::from_static("Null")),

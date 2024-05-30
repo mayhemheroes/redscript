@@ -950,3 +950,51 @@ fn compile_static_receivers() {
     ];
     TestContext::compiled(vec![sources]).unwrap().run("Testing", check);
 }
+
+#[test]
+fn compile_static_arrays() {
+    let sources = r#"
+        func Testing() {
+            let a: [String; 1];
+            let b: Int32 = ArrayFindFirst(a, "");
+            let c: Int32 = ArrayFindLast(a, "");
+            let d: Int32 = ArrayCount(a, "");
+            let e: Int32 = ArraySize(a);
+            let f: String = a[0];
+        }
+    "#;
+
+    let check = check_code![
+        pat!(Assign),
+        mem!(StaticArrayElement(typ)),
+        mem!(Local(a)),
+        pat!(U32Const(0)),
+        pat!(StringConst(_)),
+        pat!(Assign),
+        mem!(Local(b)),
+        mem!(StaticArrayFindFirst(typ)),
+        mem!(Local(a)),
+        pat!(StringConst(_)),
+        pat!(Assign),
+        mem!(Local(c)),
+        mem!(StaticArrayFindLast(typ)),
+        mem!(Local(a)),
+        pat!(StringConst(_)),
+        pat!(Assign),
+        mem!(Local(d)),
+        mem!(StaticArrayCount(typ)),
+        mem!(Local(a)),
+        pat!(StringConst(_)),
+        pat!(Assign),
+        mem!(Local(e)),
+        mem!(StaticArraySize(typ)),
+        mem!(Local(a)),
+        pat!(Assign),
+        mem!(Local(f)),
+        mem!(StaticArrayElement(typ)),
+        mem!(Local(a)),
+        pat!(I32Const(0)),
+        pat!(Nop)
+    ];
+    TestContext::compiled(vec![sources]).unwrap().run("Testing", check);
+}

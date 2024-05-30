@@ -477,9 +477,9 @@ fn format_type(def: &Definition, pool: &ConstantPool) -> Result<String, Error> {
         Type::Prim | Type::Class => pool.names.get(def.name)?.to_string(),
         Type::Ref(nested) => format!("ref<{}>", format_type(pool.definition(*nested)?, pool)?),
         Type::WeakRef(nested) => format!("wref<{}>", format_type(pool.definition(*nested)?, pool)?),
-        Type::Array(nested) => format!("array<{}>", format_type(pool.definition(*nested)?, pool)?),
+        Type::Array(nested) => format!("[{}]", format_type(pool.definition(*nested)?, pool)?),
         Type::StaticArray(nested, size) => {
-            format!("array<{}; {size}>", format_type(pool.definition(*nested)?, pool)?)
+            format!("[{}; {size}]", format_type(pool.definition(*nested)?, pool)?)
         }
         Type::ScriptRef(nested) => format!("script_ref<{}>", format_type(pool.definition(*nested)?, pool)?),
     };

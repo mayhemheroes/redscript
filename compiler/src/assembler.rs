@@ -2,7 +2,7 @@ use itertools::Itertools;
 use redscript::ast::{Constant, Expr, Ident, Intrinsic, Literal, Seq, Span, TypeName};
 use redscript::bundle::{ConstantPool, PoolIndex};
 use redscript::bytecode::{Code, Instr, Label, Location, Offset};
-use redscript::definition::{Definition, Function, Local};
+use redscript::definition::{Definition, Function, Local, Type};
 
 use crate::error::{Cause, Error, ResultSpan};
 use crate::scope::{Reference, Scope, TypeId, Value};
@@ -308,55 +308,72 @@ impl<'a> Assembler<'a> {
         scope: &mut Scope,
         pool: &mut ConstantPool,
     ) -> Result<(), Cause> {
-        let mut emit_assignment = |instr: Instr<Label>| {
-            self.emit(Instr::Assign);
-            self.emit(Instr::Local(local));
-            self.emit(instr);
-        };
+        fn get_initializer(typ: &TypeId, pool: &mut ConstantPool) -> Result<Option<Instr<Label>>, Cause> {
+            let res = match typ {
+                &TypeId::Prim(typ_idx) => match Ident::from_heap(pool.def_name(typ_idx)?) {
+                    tp if tp == TypeName::BOOL.name() => Some(Instr::FalseConst),
+                    tp if tp == TypeName::INT8.name() => Some(Instr::I8Const(0)),
+                    tp if tp == TypeName::INT16.name() => Some(Instr::I16Const(0)),
+                    tp if tp == TypeName::INT32.name() => Some(Instr::I32Zero),
+                    tp if tp == TypeName::INT64.name() => Some(Instr::I64Const(0)),
+                    tp if tp == TypeName::UINT8.name() => Some(Instr::U8Const(0)),
+                    tp if tp == TypeName::UINT16.name() => Some(Instr::U16Const(0)),
+                    tp if tp == TypeName::UINT32.name() => Some(Instr::U32Const(0)),
+                    tp if tp == TypeName::UINT64.name() => Some(Instr::U64Const(0)),
+                    tp if tp == TypeName::FLOAT.name() => Some(Instr::F32Const(0.0)),
+                    tp if tp == TypeName::DOUBLE.name() => Some(Instr::F64Const(0.0)),
+                    tp if tp == TypeName::STRING.name() => {
+                        let empty = pool.strings.add("".into());
+                        Some(Instr::StringConst(empty))
+                    }
+                    tp if tp == TypeName::CNAME.name() => Some(Instr::NameConst(PoolIndex::UNDEFINED)),
+                    tp if tp == TypeName::TWEAKDB_ID.name() => Some(Instr::TweakDbIdConst(PoolIndex::UNDEFINED)),
+                    tp if tp == TypeName::RESOURCE.name() => Some(Instr::ResourceConst(PoolIndex::UNDEFINED)),
+                    _ => None,
+                },
+                &TypeId::Struct(struct_) => Some(Instr::Construct(0, struct_)),
+                &TypeId::Enum(enum_idx) => {
+                    let enum_ = pool.enum_(enum_idx)?;
+                    enum_.members.first().map(|member| Instr::EnumConst(enum_idx, *member))
+                }
+                TypeId::Ref(_) => Some(Instr::Null),
+                TypeId::WeakRef(_) => Some(Instr::WeakRefNull),
+                TypeId::Array(_) | TypeId::StaticArray(_, _) => {
+                    return Err(Cause::UnsupportedFeature(
+                        "initializing a static array with another array",
+                    ));
+                }
+                _ => None,
+            };
+            Ok(res)
+        }
 
-        match typ {
-            TypeId::Prim(typ_idx) => match Ident::from_heap(pool.def_name(typ_idx)?) {
-                tp if tp == TypeName::BOOL.name() => emit_assignment(Instr::FalseConst),
-                tp if tp == TypeName::INT8.name() => emit_assignment(Instr::I8Const(0)),
-                tp if tp == TypeName::INT16.name() => emit_assignment(Instr::I16Const(0)),
-                tp if tp == TypeName::INT32.name() => emit_assignment(Instr::I32Zero),
-                tp if tp == TypeName::INT64.name() => emit_assignment(Instr::I64Const(0)),
-                tp if tp == TypeName::UINT8.name() => emit_assignment(Instr::U8Const(0)),
-                tp if tp == TypeName::UINT16.name() => emit_assignment(Instr::U16Const(0)),
-                tp if tp == TypeName::UINT32.name() => emit_assignment(Instr::U32Const(0)),
-                tp if tp == TypeName::UINT64.name() => emit_assignment(Instr::U64Const(0)),
-                tp if tp == TypeName::FLOAT.name() => emit_assignment(Instr::F32Const(0.0)),
-                tp if tp == TypeName::DOUBLE.name() => emit_assignment(Instr::F64Const(0.0)),
-                tp if tp == TypeName::STRING.name() => {
-                    let empty = pool.strings.add("".into());
-                    emit_assignment(Instr::StringConst(empty));
-                }
-                tp if tp == TypeName::CNAME.name() => emit_assignment(Instr::NameConst(PoolIndex::UNDEFINED)),
-                tp if tp == TypeName::TWEAKDB_ID.name() => emit_assignment(Instr::TweakDbIdConst(PoolIndex::UNDEFINED)),
-                tp if tp == TypeName::RESOURCE.name() => emit_assignment(Instr::ResourceConst(PoolIndex::UNDEFINED)),
-                _ => {}
-            },
-            TypeId::Struct(struct_) => {
-                emit_assignment(Instr::Construct(0, struct_));
-            }
-            TypeId::Enum(enum_idx) => {
-                let enum_ = pool.enum_(enum_idx)?;
-                if let Some(member) = enum_.members.first() {
-                    emit_assignment(Instr::EnumConst(enum_idx, *member));
-                }
-            }
-            TypeId::Ref(_) => {
-                emit_assignment(Instr::Null);
-            }
-            TypeId::WeakRef(_) => {
-                emit_assignment(Instr::WeakRefNull);
-            }
+        match &typ {
             TypeId::Array(_) => {
                 self.emit(Instr::ArrayClear(scope.get_type_index(&typ, pool)?));
                 self.emit(Instr::Local(local));
             }
-            _ => {}
+            TypeId::StaticArray(elem, size) => {
+                if let Some(instr) = get_initializer(elem, pool)? {
+                    let type_idx = scope.get_type_index(&typ, pool)?;
+                    for i in 0..*size {
+                        self.emit(Instr::Assign);
+                        self.emit(Instr::StaticArrayElement(type_idx));
+                        self.emit(Instr::Local(local));
+                        self.emit(Instr::U32Const(i));
+                        self.emit(instr.clone());
+                    }
+                }
+            }
+            _ => {
+                if let Some(instr) = get_initializer(&typ, pool)? {
+                    self.emit(Instr::Assign);
+                    self.emit(Instr::Local(local));
+                    self.emit(instr);
+                }
+            }
         }
+
         Ok(())
     }
 
@@ -460,22 +477,47 @@ impl<'a> Assembler<'a> {
                 self.emit(Instr::ArrayClear(get_arg_type(0)?));
             }
             Intrinsic::ArraySize => {
-                self.emit(Instr::ArraySize(get_arg_type(0)?));
+                let idx = get_arg_type(0)?;
+                if matches!(pool.type_(idx)?, Type::StaticArray(_, _)) {
+                    self.emit(Instr::StaticArraySize(idx));
+                } else {
+                    self.emit(Instr::ArraySize(idx));
+                }
             }
             Intrinsic::ArrayResize => {
                 self.emit(Instr::ArrayResize(get_arg_type(0)?));
             }
             Intrinsic::ArrayFindFirst => {
-                self.emit(Instr::ArrayFindFirst(get_arg_type(0)?));
+                let idx = get_arg_type(0)?;
+                if matches!(pool.type_(idx)?, Type::StaticArray(_, _)) {
+                    self.emit(Instr::StaticArrayFindFirst(idx));
+                } else {
+                    self.emit(Instr::ArrayFindFirst(idx));
+                }
             }
             Intrinsic::ArrayFindLast => {
-                self.emit(Instr::ArrayFindLast(get_arg_type(0)?));
+                let idx = get_arg_type(0)?;
+                if matches!(pool.type_(idx)?, Type::StaticArray(_, _)) {
+                    self.emit(Instr::StaticArrayFindLast(idx));
+                } else {
+                    self.emit(Instr::ArrayFindLast(idx));
+                }
             }
             Intrinsic::ArrayContains => {
-                self.emit(Instr::ArrayContains(get_arg_type(0)?));
+                let idx = get_arg_type(0)?;
+                if matches!(pool.type_(idx)?, Type::StaticArray(_, _)) {
+                    self.emit(Instr::StaticArrayContains(idx));
+                } else {
+                    self.emit(Instr::ArrayContains(idx));
+                }
             }
             Intrinsic::ArrayCount => {
-                self.emit(Instr::ArrayCount(get_arg_type(0)?));
+                let idx = get_arg_type(0)?;
+                if matches!(pool.type_(idx)?, Type::StaticArray(_, _)) {
+                    self.emit(Instr::StaticArrayCount(idx));
+                } else {
+                    self.emit(Instr::ArrayCount(idx));
+                }
             }
             Intrinsic::ArrayPush => {
                 self.emit(Instr::ArrayPush(get_arg_type(0)?));
