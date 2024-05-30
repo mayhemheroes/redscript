@@ -523,6 +523,10 @@ impl TypeName {
     }
 
     fn from_parts<'a>(name: &'a str, mut parts: impl Iterator<Item = &'a str>) -> Option<Self> {
+        if let Some((ty, rem)) = name.split_once('[') {
+            let size = rem.strip_suffix(']')?.parse().ok()?;
+            return Some(Self::StaticArray(Self::basic_owned(ty.into()).into(), size));
+        }
         let name = Ident::from_ref(name);
         match parts.next() {
             Some(tail) => {
@@ -530,7 +534,7 @@ impl TypeName {
                 let type_ = Self::new(name, vec![arg]);
                 Some(type_)
             }
-            None => Some(Self::basic_owned(name.to_heap())),
+            None => Some(Self::new(name, vec![])),
         }
     }
 }
