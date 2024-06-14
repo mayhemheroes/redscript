@@ -50,6 +50,7 @@ pub fn fix_args(args: Vec<String>) -> Vec<String> {
 }
 
 #[derive(Clone, Debug)]
+#[allow(unused)]
 pub struct Opts {
     pub scripts_dir: PathBuf,
     pub cache_dir: Option<PathBuf>,

@@ -1,4 +1,4 @@
-use std::{fmt, io, usize};
+use std::{fmt, io};
 
 use itertools::Itertools;
 use peg::error::ExpectedSet;

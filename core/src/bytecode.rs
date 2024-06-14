@@ -1,5 +1,5 @@
 use std::fmt::{self, Debug};
-use std::{io, usize};
+use std::io;
 
 use thiserror::Error;
 
