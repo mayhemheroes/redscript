@@ -12,8 +12,8 @@ minidl = "0.1"
 
 [dev-dependencies]
 winsplit = "0.1"
-rstest = "0.19"
-rstest_reuse = "0.6"
+rstest = "0.21"
+rstest_reuse = "0.7"
 pretty_assertions = "1"
 
 [lints]
