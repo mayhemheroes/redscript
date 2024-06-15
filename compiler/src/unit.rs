@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::hash::{BuildHasher, RandomState};
 use std::path::PathBuf;
 
 use hashbrown::{HashMap, HashSet};
@@ -796,9 +797,16 @@ impl<'a> CompilationUnit<'a> {
     fn define_source_ref(&mut self, loc: SourceLoc<'_>) -> SourceReference {
         let count = self.file_map.len();
         let file = self.file_map.entry_ref(loc.file.path()).or_insert_with(|| {
+            let path_hash = RandomState::new().hash_one(loc.file.path());
+            let lower_hash = (path_hash & 0xFFFF_FFFF) as u32;
+            let upper_hash = ((path_hash >> 32) & 0xFFFF_FFFF) as u32;
+
             let file = SourceFile {
-                id: count as u32,
-                path_hash: 0, // TODO: consider hashing the path
+                // add an offset to avoid clashes
+                index: 0xCAFE_BABE + count as u32,
+                path_hash: lower_hash,
+                // we do not provide an actual crc, but it doesn't matter
+                file_crc: upper_hash,
                 path: loc.file.path().to_owned(),
             };
             self.pool.add_definition(Definition::source_file(file))

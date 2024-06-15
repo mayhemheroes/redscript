@@ -569,26 +569,34 @@ impl Encode for Parameter {
 
 #[derive(Debug, Clone)]
 pub struct SourceFile {
-    pub id: u32,
-    pub path_hash: u64,
+    pub index: u32,
+    pub path_hash: u32,
+    pub file_crc: u32,
     pub path: PathBuf,
 }
 
 impl Decode for SourceFile {
     fn decode<I: io::Read>(input: &mut I) -> io::Result<Self> {
-        let id = input.decode()?;
+        let index = input.decode()?;
         let path_hash = input.decode()?;
+        let file_crc = input.decode()?;
         let raw_path = input.decode_str_prefixed::<u16>()?;
         let path = PathBuf::from(raw_path.replace('\\', "/"));
-        let result = SourceFile { id, path_hash, path };
+        let result = SourceFile {
+            index,
+            path_hash,
+            file_crc,
+            path,
+        };
         Ok(result)
     }
 }
 
 impl Encode for SourceFile {
     fn encode<O: io::Write>(&self, output: &mut O) -> io::Result<()> {
-        output.encode(&self.id)?;
+        output.encode(&self.index)?;
         output.encode(&self.path_hash)?;
+        output.encode(&self.file_crc)?;
         output.encode_str_prefixed::<u16>(&self.path.to_str().unwrap().replace('/', "\\"))
     }
 }
