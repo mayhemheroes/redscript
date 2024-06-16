@@ -403,11 +403,14 @@ impl<'a> Assembler<'a> {
             }
         }
 
-        let line = self
+        let line: u16 = self
             .files
             .lookup(span)
             .and_then(|loc| loc.start.line.try_into().ok())
             .unwrap_or_default();
+        // game uses 1-based line numbers
+        let line = line + 1;
+
         if !force_static && !fun_flags.is_final() && !fun_flags.is_static() && !fun_flags.is_native() {
             let name_idx = pool.definition(function_idx)?.name;
             self.emit(Instr::InvokeVirtual(exit_label, line, name_idx, invoke_flags));

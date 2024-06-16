@@ -7,6 +7,7 @@ use anyhow::Context;
 use bpaf::ParseFailure;
 use opts::{fix_args, Opts};
 #[cfg(test)]
+#[allow(unused)]
 use rstest_reuse;
 use scc_lib::api::{SccOutput, SccResult, SccSettings};
 

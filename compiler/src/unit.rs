@@ -813,7 +813,7 @@ impl<'a> CompilationUnit<'a> {
         });
         SourceReference {
             file: *file,
-            line: loc.start.line as u32,
+            line: loc.start.line as u32 + 1, // game uses 1-based line numbers
         }
     }
 
