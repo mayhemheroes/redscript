@@ -169,7 +169,7 @@ impl Cause {
         DisplayFn::new(move |f: &mut fmt::Formatter<'_>| match self {
             &Cause::SymbolRedefinition(Some(pos)) => {
                 let loc = files.lookup(Span::new(pos, pos)).expect("Unknown file");
-                write!(f, "the name of this type conflicts with a type defined at {loc}",)
+                write!(f, "the name of this type conflicts with a type defined at '{loc}'",)
             }
             &Cause::SymbolRedefinition(None) => {
                 write!(
