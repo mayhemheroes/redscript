@@ -496,7 +496,11 @@ impl<'a> TypeChecker<'a> {
                 checked_args.push(first_arg);
                 *elem
             }
-            (Intrinsic::ToString, _) => {
+            (Intrinsic::ToString, first_arg_type) => {
+                if first_arg_type == TypeId::Variant && first_arg.is_prvalue() {
+                    self.diagnostics
+                        .push(Diagnostic::InvalidUseOfTemporary(first_arg.span()));
+                }
                 checked_args.push(first_arg);
                 scope.resolve_type(&TypeName::STRING, self.pool).with_span(span)?
             }
@@ -522,14 +526,26 @@ impl<'a> TypeChecker<'a> {
                 expected.unwrap().clone()
             }
             (Intrinsic::VariantTypeName, TypeId::Variant) => {
+                if first_arg.is_prvalue() {
+                    self.diagnostics
+                        .push(Diagnostic::InvalidUseOfTemporary(first_arg.span()));
+                }
                 checked_args.push(first_arg);
                 scope.resolve_type(&TypeName::CNAME, self.pool).with_span(span)?
             }
             (Intrinsic::VariantIsRef, TypeId::Variant) => {
+                if first_arg.is_prvalue() {
+                    self.diagnostics
+                        .push(Diagnostic::InvalidUseOfTemporary(first_arg.span()));
+                }
                 checked_args.push(first_arg);
                 scope.resolve_type(&TypeName::BOOL, self.pool).with_span(span)?
             }
             (Intrinsic::VariantIsArray, TypeId::Variant) => {
+                if first_arg.is_prvalue() {
+                    self.diagnostics
+                        .push(Diagnostic::InvalidUseOfTemporary(first_arg.span()));
+                }
                 checked_args.push(first_arg);
                 scope.resolve_type(&TypeName::BOOL, self.pool).with_span(span)?
             }

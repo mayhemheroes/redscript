@@ -369,3 +369,32 @@ fn fail_with_extra_arg_on_static_receiver() {
         errs
     );
 }
+
+#[test]
+fn fail_on_bad_variant_ops() {
+    let sources = r#"
+        class Class {}
+
+        func Testing() {
+            ToString(ToVariant("test"));
+            VariantTypeName(ToVariant(123));
+            VariantIsRef(ToVariant(new Class()));
+            VariantIsArray(ToVariant([1, 2, 3]));
+        }
+    "#;
+
+    let (_, errs) = compiled(vec![sources]).unwrap();
+    assert!(
+        matches!(
+            &errs[..],
+            &[
+                Diagnostic::InvalidUseOfTemporary(_),
+                Diagnostic::InvalidUseOfTemporary(_),
+                Diagnostic::InvalidUseOfTemporary(_),
+                Diagnostic::InvalidUseOfTemporary(_)
+            ]
+        ),
+        "{:?}",
+        errs
+    );
+}
