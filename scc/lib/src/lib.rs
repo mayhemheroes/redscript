@@ -13,6 +13,7 @@ use flexi_logger::{Age, Cleanup, Criterion, Duplicate, FileSpec, LogSpecBuilder,
 use hashbrown::{HashMap, HashSet};
 use hints::UserHints;
 use log::LevelFilter;
+#[cfg(windows)]
 use normpath::PathExt;
 use redscript::ast::Span;
 use redscript::bundle::{ConstantPool, ScriptBundle};

@@ -1,11 +1,14 @@
-use std::fs;
-use std::fs::{File, OpenOptions};
+#[cfg(windows)]
+use std::fs::{self, File, OpenOptions};
+#[cfg(windows)]
 use std::path::Path;
 use std::process::Command;
 
 use assert_cmd::prelude::*;
+#[cfg(windows)]
 use assert_fs::prelude::*;
 use predicates::prelude::*;
+#[cfg(windows)]
 use scc_lib::timestamp::*;
 
 #[test]
@@ -25,6 +28,7 @@ fn help() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(windows)]
 #[test]
 fn bundle_result() -> Result<(), Box<dyn std::error::Error>> {
     let temp = assert_fs::TempDir::new()?;
@@ -50,6 +54,7 @@ fn bundle_result() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(windows)]
 #[test]
 fn timestamp_migration() -> Result<(), Box<dyn std::error::Error>> {
     let temp = assert_fs::TempDir::new()?;
@@ -85,6 +90,7 @@ fn timestamp_migration() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(windows)]
 #[test]
 fn custom_output_clean() -> Result<(), Box<dyn std::error::Error>> {
     let temp = assert_fs::TempDir::new()?;
@@ -114,6 +120,7 @@ fn custom_output_clean() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+#[cfg(windows)]
 #[test]
 fn custom_output_with_restore() -> Result<(), Box<dyn std::error::Error>> {
     let temp = assert_fs::TempDir::new()?;

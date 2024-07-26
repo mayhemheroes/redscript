@@ -1,6 +1,7 @@
 #ifndef SCC_H
 #define SCC_H
 
+#include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
 

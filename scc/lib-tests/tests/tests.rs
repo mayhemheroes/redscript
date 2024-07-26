@@ -1,10 +1,16 @@
+#[cfg(windows)]
 use std::ffi::CString;
-use std::{fs, mem};
+#[cfg(windows)]
+use std::fs;
+use std::mem;
 
+#[cfg(windows)]
 use assert_fs::prelude::*;
+#[cfg(windows)]
 use minidl::*;
 use scc_lib_tests::*;
 
+#[cfg(windows)]
 #[test]
 fn api_functions_are_stable() {
     // this test just ensures that the API types haven't changed
@@ -68,6 +74,7 @@ fn api_types_are_stable() {
     assert_eq!(SccSourceRefType_SCC_SOURCE_REF_TYPE_ENUM, 4);
 }
 
+#[cfg(windows)]
 #[test]
 fn compiles_successfully() {
     let temp = assert_fs::TempDir::new().unwrap();
@@ -152,6 +159,7 @@ fn compiles_successfully() {
     temp.close().unwrap();
 }
 
+#[cfg(windows)]
 #[test]
 fn receives_an_error() {
     let temp = assert_fs::TempDir::new().unwrap();
@@ -196,6 +204,7 @@ fn receives_an_error() {
     temp.close().unwrap();
 }
 
+#[cfg(windows)]
 fn load_api() -> SccApi {
     let lib = Library::load("scc_lib.dll").unwrap();
     unsafe {

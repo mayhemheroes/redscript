@@ -75,7 +75,7 @@ impl<'a> TypeChecker<'a> {
                     }
                 } else {
                     let mut checked = Vec::with_capacity(exprs.len());
-                    for expr in exprs.iter() {
+                    for expr in exprs {
                         let val = match expected {
                             Some(TypeId::Array(elem)) => self.check_and_convert(expr, elem, scope)?,
                             _ => self.check(expr, None, scope)?,
