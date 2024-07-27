@@ -191,13 +191,13 @@ impl Cause {
 
 #[derive(Debug, Error)]
 pub enum FunctionMatchError {
-    #[error("{} argument: expected {expected}, given {given}", NthArg(*index))]
+    #[error("{} argument: expected '{expected}', given '{given}'", NthArg(*index))]
     ParameterMismatch {
         given: Ident,
         expected: Ident,
         index: usize,
     },
-    #[error("return type {expected} does not match {given}")]
+    #[error("return type '{expected}' does not match '{given}'")]
     ReturnMismatch { given: Ident, expected: Ident },
     #[error("expected {min}-{max} arguments, given {given}")]
     ArgumentCountMismatch { given: usize, min: usize, max: usize },
