@@ -31,45 +31,45 @@ pub enum Error {
 pub enum Cause {
     #[error("pool error: {0}")]
     PoolError(#[from] PoolError),
-    #[error("can't coerce {0} into {1}")]
+    #[error("can't coerce '{0}' into '{1}'")]
     TypeError(Ident, Ident),
-    #[error("function {0} not found")]
+    #[error("function '{0}' not found")]
     FunctionNotFound(Ident),
-    #[error("member {0} not found on {1}")]
+    #[error("member '{0}' not found on '{1}'")]
     MemberNotFound(Ident, Ident),
-    #[error("method {0} not found on {1}")]
+    #[error("method '{0}' not found on '{1}'")]
     MethodNotFound(Ident, Ident),
-    #[error("class {0} not found")]
+    #[error("class '{0}' not found")]
     ClassNotFound(Ident),
-    #[error("cannot instantiate {0} because it's abstract")]
+    #[error("cannot instantiate '{0}' because it's abstract")]
     InstantiatingAbstract(Ident),
-    #[error("unresolved reference {0}")]
+    #[error("unresolved reference '{0}'")]
     UnresolvedReference(Ident),
-    #[error("unresolved type {0}")]
+    #[error("unresolved type '{0}'")]
     UnresolvedType(Ident),
-    #[error("unresolved import {0}")]
+    #[error("unresolved import '{0}'")]
     UnresolvedImport(Ident),
-    #[error("module {0} has no members or does not exist")]
+    #[error("module '{0}' has no members or does not exist")]
     UnresolvedModule(Ident),
     #[error("invalid arguments for annotation")]
     InvalidAnnotationArgs,
     #[error("type cannot be inferred here, try annotating the variable")]
     TypeAnnotationRequired,
-    #[error("{0} has no members")]
+    #[error("'{0}' has no members")]
     InvalidMemberAccess(Ident),
-    #[error("{0} is not supported on {1}")]
+    #[error("{0} is not supported on '{1}'")]
     UnsupportedOperation(&'static str, Ident),
-    #[error("expected {1} arguments for {0}")]
+    #[error("expected {1} arguments for '{0}'")]
     InvalidArgCount(Ident, usize),
     #[error("void cannot be used as a value")]
     VoidCannotBeUsed,
     #[error("expected a value, found a {0}")]
     UnexpectedToken(&'static str),
-    #[error("function should return {0}")]
+    #[error("function should return '{0}'")]
     UnexpectedVoidReturn(Ident),
     #[error("function cannot return a value")]
     UnexpectedValueReturn,
-    #[error("invalid use of {0}, unexpected {1}")]
+    #[error("invalid use of '{0}', unexpected '{1}'")]
     InvalidIntrinsicUse(Intrinsic, Ident),
     #[error("this method is static, it cannot be used on an instance of an object")]
     InvalidStaticMethodCall,
@@ -89,14 +89,14 @@ pub enum Cause {
     UnexpectedBody,
     #[error("native member is not allowed in a non-native context")]
     UnexpectedNative,
-    #[error("cannot unify {0} and {1}")]
+    #[error("cannot unify '{0}' and '{1}'")]
     UnificationFailed(Ident, Ident),
-    #[error("{0} cannot be made persistent")]
+    #[error("'{0}' cannot be made persistent")]
     UnsupportedPersistent(Ident),
     #[error(r#"this value must be a constant (e.g. 1, "string")"#)]
     InvalidConstant,
     #[error(
-        "arguments passed to {0} do not match any of the overloads:\n{}{}",
+        "arguments passed to '{0}' do not match any of the overloads:\n{}{}",
         .1.iter().take(MAX_RESOLUTION_ERRORS).format("\n"),
         if .1.len() > MAX_RESOLUTION_ERRORS {"\n...and more"} else {""}
     )]
@@ -109,17 +109,19 @@ pub enum Cause {
     #[error("no method with this name exists on the target type")]
     NoMethodWithMatchingName,
     #[error(
-        "the type here contains a reference to a non-class type, refs and wrefs must always point \
-         to a class"
+        "a ref/wref type here contains a non-class type '{0}', refs/wrefs must always point to a \
+         class"
     )]
-    NonClassRef,
+    NonClassRef(Ident),
     #[error(
-        "the type here contains a class with no indirection, class types must be used through ref \
-         or wref"
+        "a type here refers to class '{0}' without indirection, class types must be used through \
+         ref or wref"
     )]
-    ClassWithNoIndirection,
+    ClassWithNoIndirection(Ident),
     #[error("annotations on native functions are not allowed")]
     AnnotationOnNative,
+    #[error("invalid signature used here")]
+    InvalidSignature,
 }
 
 impl Cause {
@@ -161,7 +163,7 @@ impl Cause {
             Self::UnexpectedNative => "UNEXPECTED_NATIVE",
             Self::UnsupportedPersistent(_) => "INVALID_PERSISTENT",
             Self::InvalidConstant => "INVALID_CONSTANT",
-            Self::NonClassRef | Self::ClassWithNoIndirection => "INVALID_TYPE",
+            Self::NonClassRef(_) | Self::ClassWithNoIndirection(_) | Self::InvalidSignature => "INVALID_TYPE",
             Self::AnnotationOnNative
             | Self::UnsupportedFeature(_)
             | Self::UnsupportedOperation(_, _)

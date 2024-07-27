@@ -428,10 +428,7 @@ impl<'a> Assembler<'a> {
             }
         }
         if param_flags.len() < args_len {
-            return Err(Error::CompileError(
-                Cause::UnsupportedFeature("cannot emit function call (probably invalid signature)"),
-                Span::ZERO,
-            ));
+            return Err(Error::CompileError(Cause::InvalidSignature, span));
         }
         for _ in 0..param_flags.len() - args_len {
             self.emit(Instr::Nop);

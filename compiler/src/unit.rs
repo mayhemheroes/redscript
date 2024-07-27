@@ -81,7 +81,7 @@ impl<'a> CompilationUnit<'a> {
     }
 
     pub fn compile(mut self, modules: Vec<SourceModule>, files: &Files) -> Result<CompilationOutput, Error> {
-        let funcs = self.compile_modules(modules, files, true, false)?;
+        let funcs = self.check_modules(modules, files, true, false)?;
         self.finish(funcs, files)
     }
 
@@ -96,7 +96,7 @@ impl<'a> CompilationUnit<'a> {
         desugar: bool,
         permissive: bool,
     ) -> Result<TypecheckOutput, Error> {
-        let functions = self.compile_modules(modules, files, desugar, permissive)?;
+        let functions = self.check_modules(modules, files, desugar, permissive)?;
         Ok(TypecheckOutput {
             functions,
             diagnostics: self.diagnostics,
@@ -156,7 +156,7 @@ impl<'a> CompilationUnit<'a> {
         Ok(modules)
     }
 
-    fn compile_modules(
+    fn check_modules(
         &mut self,
         modules: Vec<SourceModule>,
         files: &Files,
@@ -275,8 +275,12 @@ impl<'a> CompilationUnit<'a> {
 
         // create function proxies
         for (wrapped, wrapper) in self.wrappers.drain() {
+            let pos = self.source_refs.get(&wrapper.cast()).copied().unwrap_or_default();
+            let span = Span::new(pos, pos);
             let proxy = self.proxies.get(&wrapped).unwrap();
-            Self::construct_proxy(*proxy, wrapped, wrapper, files, &mut self.scope, self.pool)?;
+            if let Err(err) = Self::construct_proxy(*proxy, wrapped, wrapper, files, &mut self.scope, self.pool, span) {
+                self.diagnostics.push(Diagnostic::from_error(err)?);
+            }
         }
 
         // compile function bodies
@@ -688,13 +692,14 @@ impl<'a> CompilationUnit<'a> {
         let type_idx = match scope.get_type_index(&type_, self.pool) {
             Ok(idx) => idx,
             // permit invalid types here until the next release to avoid breaking existing code
-            Err(Cause::NonClassRef) => {
-                self.diagnostics.push(Diagnostic::NonClassRefDeprecation(decl.span));
+            Err(Cause::NonClassRef(name)) => {
+                self.diagnostics
+                    .push(Diagnostic::NonClassRefDeprecation(name, decl.span));
                 scope.get_type_index_unchecked(&type_, self.pool).with_span(decl.span)?
             }
-            Err(Cause::ClassWithNoIndirection) => {
+            Err(Cause::ClassWithNoIndirection(name)) => {
                 self.diagnostics
-                    .push(Diagnostic::ClassWithNoIndirectionDeprecation(decl.span));
+                    .push(Diagnostic::ClassWithNoIndirectionDeprecation(name, decl.span));
                 scope.get_type_index_unchecked(&type_, self.pool).with_span(decl.span)?
             }
             Err(err) => return Err(err.with_span(decl.span)),
@@ -1111,6 +1116,7 @@ impl<'a> CompilationUnit<'a> {
         files: &Files,
         scope: &mut Scope,
         pool: &mut ConstantPool,
+        span: Span,
     ) -> Result<(), Error> {
         let def = pool.definition(wrapped)?.clone();
         let fun = def.value.into_function().expect("Invalid proxy");
@@ -1121,21 +1127,19 @@ impl<'a> CompilationUnit<'a> {
             let param = pool.definition(*param_idx)?.clone();
             let proxy_idx = pool.add_definition(param);
             parameters.push(proxy_idx);
-            args.push(Expr::Ident(Reference::Value(Value::Parameter(proxy_idx)), Span::ZERO));
+            args.push(Expr::Ident(Reference::Value(Value::Parameter(proxy_idx)), span));
         }
 
-        let call = Expr::Call(
-            Callable::Function(wrapper),
-            [].into(),
-            args.into_boxed_slice(),
-            Span::ZERO,
-        );
+        let call = Expr::Call(Callable::Function(wrapper), [].into(), args.into_boxed_slice(), span);
         let expr = if fun.return_type.is_some() {
-            Expr::Return(Some(Box::new(call)), Span::ZERO)
+            Expr::Return(Some(Box::new(call)), span)
         } else {
             call
         };
-        let code = Assembler::from_body(Seq::new(vec![expr]), files, scope, pool)?;
+        let (code, result) = match Assembler::from_body(Seq::new(vec![expr]), files, scope, pool) {
+            Ok(code) => (code, Ok(())),
+            Err(err) => (Code::EMPTY, Err(err)),
+        };
 
         let compiled = Function {
             code,
@@ -1148,7 +1152,7 @@ impl<'a> CompilationUnit<'a> {
         if !def.parent.is_undefined() {
             pool.class_mut(def.parent.cast())?.functions.push(slot);
         }
-        Ok(())
+        result
     }
 
     fn remap_locals(

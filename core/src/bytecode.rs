@@ -1022,7 +1022,7 @@ pub struct Label {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Code<Loc>(Vec<Instr<Loc>>);
 
-impl<Loc: Clone> Code<Loc> {
+impl<Loc> Code<Loc> {
     pub const EMPTY: Self = Code(vec![]);
 
     #[inline]
@@ -1041,13 +1041,22 @@ impl<Loc: Clone> Code<Loc> {
     }
 
     #[inline]
-    pub fn cursor(&self) -> CodeCursor<'_, Loc> {
+    pub fn cursor(&self) -> CodeCursor<'_, Loc>
+    where
+        Loc: Clone,
+    {
         CodeCursor::new(&self.0)
     }
 
     #[inline]
     pub fn iter(&self) -> CodeIter<'_, Loc> {
         CodeIter::new(&self.0)
+    }
+}
+
+impl<Loc> Default for Code<Loc> {
+    fn default() -> Self {
+        Self::EMPTY
     }
 }
 
