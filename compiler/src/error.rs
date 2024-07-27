@@ -118,6 +118,8 @@ pub enum Cause {
          or wref"
     )]
     ClassWithNoIndirection,
+    #[error("annotations on native functions are not allowed")]
+    AnnotationOnNative,
 }
 
 impl Cause {
@@ -160,7 +162,10 @@ impl Cause {
             Self::UnsupportedPersistent(_) => "INVALID_PERSISTENT",
             Self::InvalidConstant => "INVALID_CONSTANT",
             Self::NonClassRef | Self::ClassWithNoIndirection => "INVALID_TYPE",
-            Self::UnsupportedFeature(_) | Self::UnsupportedOperation(_, _) | Self::UnexpectedToken(_) => "UNSUPPORTED",
+            Self::AnnotationOnNative
+            | Self::UnsupportedFeature(_)
+            | Self::UnsupportedOperation(_, _)
+            | Self::UnexpectedToken(_) => "UNSUPPORTED",
         }
     }
 

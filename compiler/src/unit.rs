@@ -854,6 +854,10 @@ impl<'a> CompilationUnit<'a> {
                             }
                         })?;
 
+                    if self.pool.function(fun_idx).is_ok_and(|fun| fun.flags.is_native()) {
+                        self.report(Cause::AnnotationOnNative.with_span(ann.span))?;
+                    }
+
                     let wrapped_idx = if let Some(wrapped) = self.wrappers.get(&fun_idx) {
                         *wrapped
                     } else {
@@ -902,6 +906,10 @@ impl<'a> CompilationUnit<'a> {
                             }
                         })?;
 
+                    if self.pool.function(fun_idx).is_ok_and(|fun| fun.flags.is_native()) {
+                        self.report(Cause::AnnotationOnNative.with_span(ann.span))?;
+                    }
+
                     let base = self.pool.function(fun_idx).ok().and_then(|fun| fun.base_method);
                     let slot = Slot::Function {
                         index: fun_idx,
@@ -921,6 +929,10 @@ impl<'a> CompilationUnit<'a> {
                         .with_span(ann.span)?
                         .by_id(&sig, self.pool)
                         .ok_or_else(|| Cause::FunctionNotFound(name).with_span(ann.span))?;
+
+                    if self.pool.function(fun_idx).is_ok_and(|fun| fun.flags.is_native()) {
+                        self.report(Cause::AnnotationOnNative.with_span(ann.span))?;
+                    }
 
                     let slot = Slot::Function {
                         index: fun_idx,
