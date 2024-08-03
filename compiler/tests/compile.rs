@@ -398,3 +398,18 @@ fn fail_on_bad_variant_ops() {
         errs
     );
 }
+
+#[test]
+fn fail_on_nonprim_sort() {
+    let sources = r#"
+        struct Dummy {}
+
+        func Testing() {
+            let arr: [Dummy];
+            ArraySort(arr);
+        }
+    "#;
+
+    let (_, errs) = compiled(vec![sources]).unwrap();
+    assert!(matches!(&errs[..], &[Diagnostic::InvalidSortType(_),]), "{:?}", errs);
+}

@@ -496,6 +496,13 @@ impl<'a> TypeChecker<'a> {
                 checked_args.push(first_arg);
                 *elem
             }
+            (Intrinsic::ArraySort, TypeId::Array(inner)) => {
+                if !matches!(*inner, TypeId::Prim(_)) {
+                    self.diagnostics.push(Diagnostic::InvalidSortType(span));
+                }
+                checked_args.push(first_arg);
+                TypeId::Void
+            }
             (Intrinsic::ToString, first_arg_type) => {
                 if first_arg_type == TypeId::Variant && first_arg.is_prvalue() {
                     self.diagnostics

@@ -998,3 +998,22 @@ fn compile_static_arrays() {
     ];
     TestContext::compiled(vec![sources]).unwrap().run("Testing", check);
 }
+
+#[test]
+fn compile_array_sort() {
+    let sources = r#"
+        func Testing() {
+            let a: [String];
+            ArraySort(a);
+        }
+    "#;
+
+    let check = check_code![
+        pat!(ArrayClear(_)),
+        mem!(Local(a)),
+        pat!(ArraySort(_)),
+        mem!(Local(a)),
+        pat!(Nop)
+    ];
+    TestContext::compiled(vec![sources]).unwrap().run("Testing", check);
+}

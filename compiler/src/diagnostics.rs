@@ -55,6 +55,8 @@ pub enum Diagnostic {
          ref or wref, future versions of the compiler will reject this code"
     )]
     ClassWithNoIndirectionDeprecation(Ident, Span),
+    #[error("cannot sort this type of array, only arrays of primitives can be sorted")]
+    InvalidSortType(Span),
     #[error("syntax error, expected {0}")]
     SyntaxError(ExpectedSet, Span),
     #[error("{0}")]
@@ -135,6 +137,7 @@ impl Diagnostic {
             | Self::AddMethodConflict(span)
             | Self::NonClassRefDeprecation(_, span)
             | Self::ClassWithNoIndirectionDeprecation(_, span)
+            | Self::InvalidSortType(span)
             | Self::CompileError(_, span)
             | Self::SyntaxError(_, span)
             | Self::CteError(_, span) => *span,
@@ -144,6 +147,7 @@ impl Diagnostic {
     pub fn code(&self) -> &'static str {
         match self {
             Self::CompileError(cause, _) => cause.code(),
+            Self::InvalidUseOfTemporary(_) => "UNSUPPORTED",
             _ => "OTHER",
         }
     }
