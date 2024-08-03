@@ -147,7 +147,9 @@ impl Diagnostic {
     pub fn code(&self) -> &'static str {
         match self {
             Self::CompileError(cause, _) => cause.code(),
-            Self::InvalidUseOfTemporary(_) => "UNSUPPORTED",
+            Self::StatementFallthrough(_) => "STMT_FALLTHROUGH",
+            Self::InvalidUseOfTemporary(_) => "INVALID_TEMP_USE",
+            Self::InvalidSortType(_) => "UNSUPPORTED",
             _ => "OTHER",
         }
     }
