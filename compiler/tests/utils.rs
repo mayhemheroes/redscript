@@ -19,6 +19,7 @@ pub struct TestContext {
 }
 
 impl TestContext {
+    #[track_caller]
     pub fn compiled(sources: Vec<&str>) -> Result<Self, Error> {
         let (pool, diagnostics) = compiled(sources)?;
         assert!(

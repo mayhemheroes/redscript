@@ -1,6 +1,7 @@
 use redscript::ast::{Expr, Intrinsic};
 
 use super::{Diagnostic, ExprDiagnosticPass, FunctionMetadata};
+use crate::scope::TypeId;
 use crate::typechecker::{Callable, Member, TypedExpr, TypedExprExt};
 use crate::visit_expr;
 
@@ -23,7 +24,7 @@ impl InvalidUseOfTemporaryVisitor<'_> {
             Expr::Member(inner, Member::StructField(_), _) | Expr::ArrayElem(inner, _, _) if inner.is_prvalue() => {
                 self.results.push(Diagnostic::InvalidUseOfTemporary(inner.span()));
             }
-            Expr::Call(Callable::Intrinsic(op, _), _, args, _) => match (op, &args[..]) {
+            Expr::Call(Callable::Intrinsic(op, typ), _, args, _) => match (op, &args[..]) {
                 (
                     Intrinsic::ArrayContains
                     | Intrinsic::ArrayCount
@@ -31,9 +32,18 @@ impl InvalidUseOfTemporaryVisitor<'_> {
                     | Intrinsic::ArrayFindLast
                     | Intrinsic::ArrayLast
                     | Intrinsic::ArrayPop
-                    | Intrinsic::ArraySize,
+                    | Intrinsic::ArraySize
+                    | Intrinsic::VariantTypeName
+                    | Intrinsic::VariantIsRef
+                    | Intrinsic::VariantIsArray,
                     [inner, ..],
                 ) if inner.is_prvalue() => self.results.push(Diagnostic::InvalidUseOfTemporary(inner.span())),
+                (Intrinsic::AsRef, [inner]) if inner.is_prvalue() => match typ {
+                    TypeId::ScriptRef(pointee) if !matches!(**pointee, TypeId::Prim(_)) => {
+                        self.results.push(Diagnostic::InvalidUseOfTemporary(inner.span()));
+                    }
+                    _ => {}
+                },
                 _ => {}
             },
             _ => {}
