@@ -5,6 +5,7 @@ pub mod error;
 #[allow(clippy::redundant_closure_call)]
 pub mod parser;
 pub mod scope;
+mod sealed_structs;
 pub mod source_map;
 pub mod sugar;
 pub mod symbol;

@@ -61,6 +61,14 @@ pub enum Diagnostic {
     PointlessDynCast(Ident, Ident, Span),
     #[error("this cast is redundant, '{0}' is already a '{1}'")]
     RedundantDynCast(Ident, Ident, Span),
+    #[error(
+        "'{0}' is a native struct with an incomplete script definition, passing arguments to its \
+         constructor might result in undefined behavior, it can however still be safely \
+         constructed without arguments: 'new {0}()'"
+    )]
+    NonSealedStructConstruction(Ident, Span),
+    #[error("adding fields to this struct is not permitted")]
+    AddingFieldToSealedStruct(Span),
     #[error("syntax error, expected {0}")]
     SyntaxError(ExpectedSet, Span),
     #[error("{0}")]
@@ -125,6 +133,7 @@ impl Diagnostic {
                 | Self::AddMethodConflict(_)
                 | Self::NonClassRefDeprecation(_, _)
                 | Self::ClassWithNoIndirectionDeprecation(_, _)
+                | Self::NonSealedStructConstruction(_, _)
         )
     }
 
@@ -144,6 +153,8 @@ impl Diagnostic {
             | Self::InvalidSortType(span)
             | Self::PointlessDynCast(_, _, span)
             | Self::RedundantDynCast(_, _, span)
+            | Self::NonSealedStructConstruction(_, span)
+            | Self::AddingFieldToSealedStruct(span)
             | Self::CompileError(_, span)
             | Self::SyntaxError(_, span)
             | Self::CteError(_, span) => *span,

@@ -21,6 +21,7 @@ use crate::diagnostics::{Diagnostic, DiagnosticPass, FunctionMetadata};
 use crate::error::{Cause, Error, ResultSpan};
 use crate::parser::*;
 use crate::scope::{Reference, Scope, TypeId, Value};
+use crate::sealed_structs::SEALED_STRUCTS;
 use crate::source_map::{Files, SourceLoc};
 use crate::sugar::Desugar;
 use crate::symbol::{FunctionSignature, Import, ModulePath, Symbol, SymbolMap};
@@ -781,19 +782,29 @@ impl<'a> CompilationUnit<'a> {
                     .first()
                     .and_then(Expr::as_ident)
                     .ok_or_else(|| Cause::InvalidAnnotationArgs.with_span(ann.span))?;
-                if let Symbol::Class(target_class, _) = scope.resolve_symbol(ident.clone()).with_span(ann.span)? {
-                    if Scope::resolve_field(decl.name.clone(), target_class, self.pool).is_ok() {
-                        self.diagnostics
-                            .push(Diagnostic::FieldConflict(source.declaration.span));
-                        // we avoid redefining the field because it'd crash the game
-                        return Ok(());
-                    }
-                    let flags = self.pool.class(target_class)?.flags;
-                    self.define_field(index, target_class, flags, visibility, source, scope)?;
-                    self.pool.class_mut(target_class)?.fields.push(index);
-                    return Ok(());
+                let symbol = scope.resolve_symbol(ident.clone());
+
+                let (Symbol::Class(target_type, _) | Symbol::Struct(target_type, _)) = symbol.with_span(ann.span)?
+                else {
+                    return Err(Cause::ClassNotFound(ident.clone()).with_span(ann.span));
                 };
-                return Err(Cause::ClassNotFound(ident.clone()).with_span(ann.span));
+
+                if Scope::resolve_field(decl.name.clone(), target_type, self.pool).is_ok() {
+                    self.diagnostics.push(Diagnostic::FieldConflict(decl.span));
+                    // we avoid redefining the field because it'd crash the game
+                    return Ok(());
+                }
+                let class = self.pool.class(target_type)?;
+                if class.flags.is_struct()
+                    && class.flags.is_native()
+                    && SEALED_STRUCTS.contains(&*self.pool.def_name(target_type)?)
+                {
+                    self.diagnostics.push(Diagnostic::AddingFieldToSealedStruct(decl.span));
+                }
+
+                self.define_field(index, target_type, class.flags, visibility, source, scope)?;
+                self.pool.class_mut(target_type)?.fields.push(index);
+                return Ok(());
             }
         }
         Err(Cause::UnsupportedFeature("global let binding").with_span(decl.span))

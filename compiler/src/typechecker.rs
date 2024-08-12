@@ -12,6 +12,7 @@ use thiserror::Error;
 use crate::diagnostics::{Deprecation, Diagnostic};
 use crate::error::{Cause, Error, FunctionMatchError, ResultSpan};
 use crate::scope::{FunctionCandidates, Reference, Scope, TypeId, Value};
+use crate::sealed_structs::SEALED_STRUCTS;
 use crate::symbol::Symbol;
 
 pub struct TypeChecker<'a> {
@@ -277,7 +278,18 @@ impl<'a> TypeChecker<'a> {
                         Expr::New(type_, [].into(), *span)
                     }
                     TypeId::Struct(class_idx) => {
-                        let fields = self.pool.class(class_idx)?.fields.clone();
+                        let class = self.pool.class(class_idx)?;
+                        let name = self.pool.def_name(class_idx)?;
+
+                        if class.flags.is_native() && !SEALED_STRUCTS.contains(&*name) {
+                            if args.is_empty() {
+                                return Ok(Expr::New(type_, [].into(), *span));
+                            }
+                            self.diagnostics
+                                .push(Diagnostic::NonSealedStructConstruction(Ident::from_heap(name), *span));
+                        }
+
+                        let fields = class.fields.clone();
                         if fields.len() != args.len() {
                             return Err(Cause::InvalidArgCount(type_name.pretty(), fields.len()).with_span(*span));
                         }
