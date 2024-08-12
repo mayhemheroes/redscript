@@ -800,6 +800,9 @@ impl<'a> CompilationUnit<'a> {
                     && SEALED_STRUCTS.contains(&*self.pool.def_name(target_type)?)
                 {
                     self.diagnostics.push(Diagnostic::AddingFieldToSealedStruct(decl.span));
+                } else if class.flags.is_struct() && !class.flags.is_native() {
+                    self.diagnostics
+                        .push(Diagnostic::AddingFieldToScriptedStruct(decl.span));
                 }
 
                 self.define_field(index, target_type, class.flags, visibility, source, scope)?;

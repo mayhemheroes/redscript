@@ -62,13 +62,15 @@ pub enum Diagnostic {
     #[error("this cast is redundant, '{0}' is already a '{1}'")]
     RedundantDynCast(Ident, Ident, Span),
     #[error(
-        "'{0}' is a native struct which is not known to have a valid and complete script \
+        "'{0}' is a native struct which is not known to have a complete and valid script \
          definition, passing arguments to its constructor might result in undefined behavior, \
          it should be preferred to construct such types without arguments: 'new {0}()'"
     )]
     NonSealedStructConstruction(Ident, Span),
-    #[error("adding fields to this struct is not permitted")]
+    #[error("adding fields to sealed native structs is not permitted")]
     AddingFieldToSealedStruct(Span),
+    #[error("adding fields to scripted structs is not permitted")]
+    AddingFieldToScriptedStruct(Span),
     #[error("syntax error, expected {0}")]
     SyntaxError(ExpectedSet, Span),
     #[error("{0}")]
@@ -157,6 +159,7 @@ impl Diagnostic {
             | Self::RedundantDynCast(_, _, span)
             | Self::NonSealedStructConstruction(_, span)
             | Self::AddingFieldToSealedStruct(span)
+            | Self::AddingFieldToScriptedStruct(span)
             | Self::CompileError(_, span)
             | Self::SyntaxError(_, span)
             | Self::CteError(_, span) => *span,
