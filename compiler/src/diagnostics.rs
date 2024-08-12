@@ -64,7 +64,7 @@ pub enum Diagnostic {
     #[error(
         "'{0}' is a native struct which is not known to have a valid and complete script \
          definition, passing arguments to its constructor might result in undefined behavior, \
-         it might be preferable to construct it without arguments: 'new {0}()'"
+         it should be preferred to construct such types without arguments: 'new {0}()'"
     )]
     NonSealedStructConstruction(Ident, Span),
     #[error("adding fields to this struct is not permitted")]
