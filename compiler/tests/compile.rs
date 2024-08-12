@@ -418,3 +418,65 @@ fn fail_on_nonprim_sort() {
     let (_, errs) = compiled(vec![sources]).unwrap();
     assert!(matches!(&errs[..], &[Diagnostic::InvalidSortType(_),]), "{:?}", errs);
 }
+
+#[test]
+fn fail_invalid_dyn_cast() {
+    let sources = "
+        func Testing() {
+            let a = new A();
+            let b = a as B;
+        }
+
+        class A {}
+        struct B {}
+
+    ";
+
+    let (_, errs) = compiled(vec![sources]).unwrap();
+    let errs = errs.into_iter().filter(Diagnostic::is_fatal).collect_vec();
+    assert!(
+        matches!(&errs[..], &[Diagnostic::CompileError(Cause::NonClassRef(_), _)]),
+        "{:?}",
+        errs
+    );
+}
+
+#[test]
+fn warn_pointless_dyn_cast() {
+    let sources = "
+        func Testing() {
+            new A() as B;
+        }
+
+        class A {}
+        class B {}
+
+    ";
+
+    let (_, errs) = compiled(vec![sources]).unwrap();
+    assert!(
+        matches!(&errs[..], &[Diagnostic::PointlessDynCast(_, _, _)]),
+        "{:?}",
+        errs
+    );
+}
+
+#[test]
+fn warn_redundant_dyn_cast() {
+    let sources = "
+        func Testing() {
+            new B() as A;
+        }
+
+        class A {}
+        class B extends A {}
+
+    ";
+
+    let (_, errs) = compiled(vec![sources]).unwrap();
+    assert!(
+        matches!(&errs[..], &[Diagnostic::RedundantDynCast(_, _, _)]),
+        "{:?}",
+        errs
+    );
+}

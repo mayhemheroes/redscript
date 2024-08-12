@@ -101,7 +101,8 @@ impl<'a> Assembler<'a> {
             },
             Expr::Cast(type_, expr, span) => {
                 if let TypeId::Class(class) = type_ {
-                    self.emit(Instr::DynamicCast(class, 0));
+                    let is_weak = matches!(type_of(&expr, scope, pool)?, TypeId::WeakRef(_));
+                    self.emit(Instr::DynamicCast(class, is_weak as u8));
                     self.assemble(*expr, scope, pool, None)?;
                 } else {
                     return Err(Cause::UnsupportedOperation("casting", type_.pretty(pool)?).with_span(span));

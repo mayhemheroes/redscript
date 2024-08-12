@@ -119,14 +119,24 @@ impl<'a> TypeChecker<'a> {
                 Expr::Declare(local, Some(type_.into()), initializer.map(Box::new), *span)
             }
             Expr::Cast(type_name, expr, span) => {
-                let type_ = scope.resolve_type(type_name, self.pool).with_span(*span)?;
+                let to = scope.resolve_type(type_name, self.pool).with_span(*span)?;
                 let checked = self.check(expr, None, scope)?;
-                if let TypeId::WeakRef(inner) = type_of(&checked, scope, self.pool)? {
-                    let converted = insert_conversion(checked, &TypeId::Ref(inner), Conversion::WeakRefToRef);
-                    Expr::Cast(type_, Box::new(converted), *span)
-                } else {
-                    Expr::Cast(type_, Box::new(checked), *span)
+                if matches!(to, TypeId::Class(_)) {
+                    let from = type_of(&checked, scope, self.pool)?;
+                    let from_class = from.unwrapped();
+                    if find_conversion(&to, from_class, self.pool)?.is_none() {
+                        let from_name = from_class.pretty(self.pool)?;
+                        let to_name = to.pretty(self.pool)?;
+                        if find_conversion(from_class, &to, self.pool)?.is_none() {
+                            self.diagnostics
+                                .push(Diagnostic::PointlessDynCast(from_name, to_name, *span));
+                        } else {
+                            self.diagnostics
+                                .push(Diagnostic::RedundantDynCast(from_name, to_name, *span));
+                        }
+                    }
                 }
+                Expr::Cast(to, Box::new(checked), *span)
             }
             Expr::Assign(lhs, rhs, span) => {
                 let lhs_typed = self.check(lhs, None, scope)?;
@@ -809,8 +819,8 @@ pub fn type_of(expr: &TypedExpr, scope: &Scope, pool: &ConstantPool) -> Result<T
         Expr::ArrayLit(_, type_, _) => TypeId::Array(type_.clone().unwrap()),
         Expr::InterpolatedString(_, _, span) => scope.resolve_type(&TypeName::STRING, pool).with_span(*span)?,
         Expr::Cast(type_, expr, _) => match type_of(expr, scope, pool)? {
-            TypeId::WeakRef(_) | TypeId::Ref(_) => TypeId::Ref(Box::new(type_.clone())),
-            TypeId::ScriptRef(_) => TypeId::ScriptRef(Box::new(type_.clone())),
+            TypeId::Ref(_) => TypeId::Ref(Box::new(type_.clone())),
+            TypeId::WeakRef(_) => TypeId::WeakRef(Box::new(type_.clone())),
             _ => type_.clone(),
         },
         Expr::Call(Callable::Function(index), _, _, span) => match pool.function(*index)?.return_type {

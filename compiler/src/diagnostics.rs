@@ -57,6 +57,10 @@ pub enum Diagnostic {
     ClassWithNoIndirectionDeprecation(Ident, Span),
     #[error("cannot sort this type of array, only arrays of primitives can be sorted")]
     InvalidSortType(Span),
+    #[error("this cast cannot succeed, because '{0}' is not related to '{1}'")]
+    PointlessDynCast(Ident, Ident, Span),
+    #[error("this cast is redundant, '{0}' is already a '{1}'")]
+    RedundantDynCast(Ident, Ident, Span),
     #[error("syntax error, expected {0}")]
     SyntaxError(ExpectedSet, Span),
     #[error("{0}")]
@@ -138,6 +142,8 @@ impl Diagnostic {
             | Self::NonClassRefDeprecation(_, span)
             | Self::ClassWithNoIndirectionDeprecation(_, span)
             | Self::InvalidSortType(span)
+            | Self::PointlessDynCast(_, _, span)
+            | Self::RedundantDynCast(_, _, span)
             | Self::CompileError(_, span)
             | Self::SyntaxError(_, span)
             | Self::CteError(_, span) => *span,

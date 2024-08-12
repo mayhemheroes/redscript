@@ -10,8 +10,10 @@ use utils::TestContext;
 fn compile_dynamic_casts() {
     let sources = "
         func Testing() {
-            let b: wref<B> = new B();
-            let a: wref<A> = b as A;
+            let a: wref<A> = new B();
+            let b: wref<B> = a as B;
+            let c: ref<A> = new B();
+            let d = c as A;
         }
 
         class A {}
@@ -25,10 +27,15 @@ fn compile_dynamic_casts() {
         mem!(New(class_b)),
         pat!(Assign),
         mem!(Local(a)),
-        pat!(RefToWeakRef),
-        mem!(DynamicCast(class_a, __)),
-        pat!(WeakRefToRef),
+        pat!(DynamicCast(_, 1)),
         mem!(Local(b)),
+        pat!(Assign),
+        mem!(Local(c)),
+        mem!(New(class_b)),
+        pat!(Assign),
+        mem!(Local(d)),
+        pat!(DynamicCast(_, 0)),
+        mem!(Local(c)),
         pat!(Nop)
     ];
     TestContext::compiled(vec![sources]).unwrap().run("Testing", check);
