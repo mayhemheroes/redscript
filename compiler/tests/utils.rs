@@ -34,6 +34,7 @@ impl TestContext {
         Ok(res)
     }
 
+    #[track_caller]
     pub fn match_index(&mut self, idx: PoolIndex<Definition>, name: &str) {
         match self.indexes.get(name) {
             Some(val) if *val == idx => (),

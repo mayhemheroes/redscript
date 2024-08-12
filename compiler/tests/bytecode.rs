@@ -146,33 +146,93 @@ fn compile_for_loop() {
 
     let check = check_code![
         mem!(ArrayResize(int_array_type)),
-        mem!(Local(tmp_array)),
+        mem!(Local(array)),
         pat!(U64Const(2)),
         pat!(Assign),
         mem!(ArrayElement(int_array_type)),
-        mem!(Local(tmp_array)),
+        mem!(Local(array)),
         pat!(U64Const(0)),
         pat!(I32Const(0)),
         pat!(Assign),
         mem!(ArrayElement(int_array_type)),
-        mem!(Local(tmp_array)),
+        mem!(Local(array)),
         pat!(U64Const(1)),
         pat!(I32Const(1)),
         pat!(Assign),
+        mem!(Local(array_ref)),
+        mem!(AsRef(int_array_type)),
         mem!(Local(array)),
+        pat!(Assign),
+        mem!(Local(counter)),
+        pat!(I32Const(0)),
+        pat!(JumpIfFalse(Offset { value: 168 })),
+        pat!(InvokeStatic(Offset { value: 52 }, 1, _, 0)),
+        mem!(Local(counter)),
+        mem!(ArraySize(int_type)),
+        mem!(Deref(int_array_type)),
+        mem!(Local(array_ref)),
+        pat!(ParamEnd),
+        pat!(Assign),
+        mem!(Local(i)),
+        mem!(ArrayElement(int_type)),
+        mem!(Deref(int_array_type)),
+        mem!(Local(array_ref)),
+        mem!(Local(counter)),
+        pat!(InvokeStatic(Offset { value: 34 }, 1, _, 0)),
+        pat!(ToString(_)),
+        mem!(Local(i)),
+        pat!(ParamEnd),
+        pat!(InvokeStatic(Offset { value: 30 }, 1, _, 0)),
+        mem!(Local(counter)),
+        pat!(I32Const(1)),
+        pat!(ParamEnd),
+        pat!(Jump(Offset { value: -165 })),
+        pat!(Nop)
+    ];
+    TestContext::compiled(vec![sources]).unwrap().run("Testing", check);
+}
+
+#[test]
+fn compile_for_loop_with_tmp_array() {
+    let sources = "
+        func Testing() {
+            for i in GetArray() {
+                Log(ToString(i));
+            }
+        }
+
+        func GetArray() -> array<Int32> {
+            return [0, 1];
+        }
+
+        native func Log(str: String)
+        native func OperatorAssignAdd(out l: Int32, r: Int32) -> Int32
+        native func OperatorLess(l: Int32, r: Int32) -> Bool
+        ";
+
+    let check = check_code![
+        pat!(Assign),
+        mem!(Local(tmp_array)),
+        pat!(InvokeStatic(Offset { value: 16 }, 1, _, 0)),
+        pat!(ParamEnd),
+        pat!(Assign),
+        mem!(Local(array_ref)),
+        mem!(AsRef(int_array_type)),
         mem!(Local(tmp_array)),
         pat!(Assign),
         mem!(Local(counter)),
         pat!(I32Const(0)),
-        pat!(JumpIfFalse(Offset { value: 150 })),
-        pat!(InvokeStatic(Offset { value: 43 }, 1, _, 0)),
+        pat!(JumpIfFalse(Offset { value: 168 })),
+        pat!(InvokeStatic(Offset { value: 52 }, 1, _, 0)),
         mem!(Local(counter)),
-        mem!(ArraySize(elem_type)),
-        mem!(Local(array)),
+        mem!(ArraySize(int_type)),
+        mem!(Deref(int_array_type)),
+        mem!(Local(array_ref)),
         pat!(ParamEnd),
         pat!(Assign),
         mem!(Local(i)),
-        mem!(ArrayElement(elem_type)),
+        mem!(ArrayElement(int_type)),
+        mem!(Deref(int_array_type)),
         mem!(Local(array)),
         mem!(Local(counter)),
         pat!(InvokeStatic(Offset { value: 34 }, 1, _, 0)),
@@ -183,7 +243,7 @@ fn compile_for_loop() {
         mem!(Local(counter)),
         pat!(I32Const(1)),
         pat!(ParamEnd),
-        pat!(Jump(Offset { value: -147 })),
+        pat!(Jump(Offset { value: -165 })),
         pat!(Nop)
     ];
     TestContext::compiled(vec![sources]).unwrap().run("Testing", check);
