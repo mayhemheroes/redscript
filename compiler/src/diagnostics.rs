@@ -57,14 +57,14 @@ pub enum Diagnostic {
     ClassWithNoIndirectionDeprecation(Ident, Span),
     #[error("cannot sort this type of array, only arrays of primitives can be sorted")]
     InvalidSortType(Span),
-    #[error("this cast cannot succeed, because '{0}' is not related to '{1}'")]
+    #[error("this cast cannot succeed, because '{1}' is not related to '{0}'")]
     PointlessDynCast(Ident, Ident, Span),
     #[error("this cast is redundant, '{0}' is already a '{1}'")]
     RedundantDynCast(Ident, Ident, Span),
     #[error(
-        "'{0}' is a native struct with an incomplete script definition, passing arguments to its \
-         constructor might result in undefined behavior, it can however still be safely \
-         constructed without arguments: 'new {0}()'"
+        "'{0}' is a native struct which is not known to have a valid and complete script \
+         definition, passing arguments to its constructor might result in undefined behavior, \
+         it might be preferable to construct it without arguments: 'new {0}()'"
     )]
     NonSealedStructConstruction(Ident, Span),
     #[error("adding fields to this struct is not permitted")]
@@ -132,6 +132,8 @@ impl Diagnostic {
                 | Self::MissingReturn(_)
                 | Self::AddMethodConflict(_)
                 | Self::NonClassRefDeprecation(_, _)
+                | Self::PointlessDynCast(_, _, _)
+                | Self::RedundantDynCast(_, _, _)
                 | Self::ClassWithNoIndirectionDeprecation(_, _)
                 | Self::NonSealedStructConstruction(_, _)
         )
