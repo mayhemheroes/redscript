@@ -61,10 +61,10 @@ fn compile_base_class_overload() {
         pat!(Assign),
         mem!(Local(b)),
         mem!(New(class)),
-        pat!(Context(Offset { value: 38 })),
+        pat!(Context(Offset { value: 34 })),
         mem!(Local(b)),
-        pat!(InvokeStatic(Offset { value: 26 }, 1, _, 0)),
-        pat!(I32Const(1)),
+        pat!(InvokeStatic(Offset { value: 22 }, 1, _, 0)),
+        pat!(I32One),
         pat!(I32Const(2)),
         pat!(ParamEnd),
         pat!(Nop)
@@ -87,8 +87,8 @@ fn compile_basic_casts() {
     let check = check_code![
         pat!(Assign),
         mem!(Local(a)),
-        pat!(InvokeStatic(Offset { value: 21 }, 1, _, 0)),
-        pat!(I32Const(1)),
+        pat!(InvokeStatic(Offset { value: 17 }, 1, _, 0)),
+        pat!(I32One),
         pat!(ParamEnd),
         pat!(Assign),
         mem!(Local(b)),
@@ -152,20 +152,20 @@ fn compile_for_loop() {
         mem!(ArrayElement(int_array_type)),
         mem!(Local(array)),
         pat!(U64Const(0)),
-        pat!(I32Const(0)),
+        pat!(I32Zero),
         pat!(Assign),
         mem!(ArrayElement(int_array_type)),
         mem!(Local(array)),
         pat!(U64Const(1)),
-        pat!(I32Const(1)),
+        pat!(I32One),
         pat!(Assign),
         mem!(Local(array_ref)),
         mem!(AsRef(int_array_type)),
         mem!(Local(array)),
         pat!(Assign),
         mem!(Local(counter)),
-        pat!(I32Const(0)),
-        pat!(JumpIfFalse(Offset { value: 168 })),
+        pat!(I32Zero),
+        pat!(JumpIfFalse(Offset { value: 164 })),
         pat!(InvokeStatic(Offset { value: 52 }, 1, _, 0)),
         mem!(Local(counter)),
         mem!(ArraySize(int_type)),
@@ -182,11 +182,11 @@ fn compile_for_loop() {
         pat!(ToString(_)),
         mem!(Local(i)),
         pat!(ParamEnd),
-        pat!(InvokeStatic(Offset { value: 30 }, 1, _, 0)),
+        pat!(InvokeStatic(Offset { value: 26 }, 1, _, 0)),
         mem!(Local(counter)),
-        pat!(I32Const(1)),
+        pat!(I32One),
         pat!(ParamEnd),
-        pat!(Jump(Offset { value: -165 })),
+        pat!(Jump(Offset { value: -161 })),
         pat!(Nop)
     ];
     TestContext::compiled(vec![sources]).unwrap().run("Testing", check);
@@ -221,8 +221,8 @@ fn compile_for_loop_with_tmp_array() {
         mem!(Local(tmp_array)),
         pat!(Assign),
         mem!(Local(counter)),
-        pat!(I32Const(0)),
-        pat!(JumpIfFalse(Offset { value: 168 })),
+        pat!(I32Zero),
+        pat!(JumpIfFalse(Offset { value: 164 })),
         pat!(InvokeStatic(Offset { value: 52 }, 1, _, 0)),
         mem!(Local(counter)),
         mem!(ArraySize(int_type)),
@@ -239,11 +239,11 @@ fn compile_for_loop_with_tmp_array() {
         pat!(ToString(_)),
         mem!(Local(i)),
         pat!(ParamEnd),
-        pat!(InvokeStatic(Offset { value: 30 }, 1, _, 0)),
+        pat!(InvokeStatic(Offset { value: 26 }, 1, _, 0)),
         mem!(Local(counter)),
-        pat!(I32Const(1)),
+        pat!(I32One),
         pat!(ParamEnd),
-        pat!(Jump(Offset { value: -165 })),
+        pat!(Jump(Offset { value: -161 })),
         pat!(Nop)
     ];
     TestContext::compiled(vec![sources]).unwrap().run("Testing", check);
@@ -268,7 +268,7 @@ fn compile_nested_array_literals() {
         mem!(ArrayElement(int_array_type)),
         mem!(Local(array1)),
         pat!(U64Const(0)),
-        pat!(I32Const(1)),
+        pat!(I32One),
         pat!(Assign),
         mem!(ArrayElement(int_array_type)),
         mem!(Local(array1)),
@@ -449,8 +449,8 @@ fn compile_switch_case() {
         mem!(Param(val)),
         pat!(I32Const(4)),
         pat!(ParamEnd),
-        pat!(SwitchLabel(Offset { value: 10 }, Offset { value: 30 })),
-        pat!(I32Const(1)),
+        pat!(SwitchLabel(Offset { value: 6 }, Offset { value: 26 })),
+        pat!(I32One),
         pat!(SwitchLabel(Offset { value: 10 }, Offset { value: 20 })),
         pat!(I32Const(2)),
         pat!(SwitchLabel(Offset { value: 13 }, Offset { value: 10 })),
@@ -477,13 +477,13 @@ fn compile_ternary_op() {
 
     let check = check_code![
         pat!(Return),
-        pat!(Conditional(Offset { value: 57 }, Offset { value: 58 })),
-        pat!(InvokeStatic(Offset { value: 51 }, 1, _, 0)),
+        pat!(Conditional(Offset { value: 53 }, Offset { value: 54 })),
+        pat!(InvokeStatic(Offset { value: 47 }, 1, _, 0)),
         pat!(InvokeStatic(Offset { value: 30 }, 1, _, 0)),
         mem!(Param(val)),
         pat!(I32Const(2)),
         pat!(ParamEnd),
-        pat!(I32Const(0)),
+        pat!(I32Zero),
         pat!(ParamEnd),
         pat!(TrueConst),
         pat!(FalseConst),
@@ -505,13 +505,13 @@ fn compile_if_else() {
         ";
 
     let check = check_code![
-        pat!(JumpIfFalse(Offset { value: 21 })),
+        pat!(JumpIfFalse(Offset { value: 17 })),
         mem!(Param(bool)),
         pat!(Return),
-        pat!(I32Const(1)),
-        pat!(Jump(Offset { value: 9 })),
+        pat!(I32One),
+        pat!(Jump(Offset { value: 5 })),
         pat!(Return),
-        pat!(I32Const(0)),
+        pat!(I32Zero),
         pat!(Nop)
     ];
     TestContext::compiled(vec![sources]).unwrap().run("Testing", check);
@@ -858,7 +858,7 @@ fn compile_conditional_functions() {
         public func Exported() {}
         "#;
 
-    let check = check_code![pat!(Return), pat!(I32Const(1)), pat!(Nop)];
+    let check = check_code![pat!(Return), pat!(I32One), pat!(Nop)];
     TestContext::compiled(vec![sources1, sources2])
         .unwrap()
         .run("My.Mod.Testing", check);
@@ -886,7 +886,7 @@ fn compile_struct_constructor() {
         pat!(Assign),
         mem!(Local(a)),
         pat!(Construct(2, _)),
-        pat!(I32Const(1)),
+        pat!(I32One),
         pat!(I32Const(2)),
         pat!(Nop)
     ];
@@ -1060,7 +1060,7 @@ fn compile_static_arrays() {
         mem!(Local(f)),
         mem!(StaticArrayElement(typ)),
         mem!(Local(a)),
-        pat!(I32Const(0)),
+        pat!(I32Zero),
         pat!(Nop)
     ];
     TestContext::compiled(vec![sources]).unwrap().run("Testing", check);
