@@ -80,6 +80,12 @@ impl<'a> Assembler<'a> {
                 Constant::F64(val) => {
                     self.emit(Instr::F64Const(val));
                 }
+                Constant::I32(0) => {
+                    self.emit(Instr::I32Zero);
+                }
+                Constant::I32(1) => {
+                    self.emit(Instr::I32One);
+                }
                 Constant::I32(val) => {
                     self.emit(Instr::I32Const(val));
                 }
