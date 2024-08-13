@@ -130,16 +130,21 @@ impl<'a> Assembler<'a> {
                 self.assemble(*rhs, scope, pool, None)?;
             }
             Expr::ArrayElem(expr, idx, span) => {
-                match type_of(&expr, scope, pool)? {
+                let typ = type_of(&expr, scope, pool)?;
+                match typ.unwrapped() {
                     type_ @ TypeId::Array(_) => {
-                        let type_idx = scope.get_type_index(&type_, pool).with_span(span)?;
+                        let type_idx = scope.get_type_index(type_, pool).with_span(span)?;
                         self.emit(Instr::ArrayElement(type_idx));
                     }
                     type_ @ TypeId::StaticArray(_, _) => {
-                        let type_idx = scope.get_type_index(&type_, pool).with_span(span)?;
+                        let type_idx = scope.get_type_index(type_, pool).with_span(span)?;
                         self.emit(Instr::StaticArrayElement(type_idx));
                     }
                     other => return Err(Cause::UnsupportedOperation("indexing", other.pretty(pool)?).with_span(span)),
+                }
+                if let TypeId::ScriptRef(inner) = type_of(&expr, scope, pool)? {
+                    let idx = scope.get_type_index(&inner, pool).with_span(expr.span())?;
+                    self.emit(Instr::Deref(idx));
                 }
                 self.assemble(*expr, scope, pool, None)?;
                 self.assemble(*idx, scope, pool, None)?;
@@ -239,12 +244,20 @@ impl<'a> Assembler<'a> {
                 Member::ClassField(field) => {
                     let exit_label = self.new_label();
                     self.emit(Instr::Context(exit_label));
+                    if let TypeId::ScriptRef(inner) = type_of(&expr, scope, pool)? {
+                        let idx = scope.get_type_index(&inner, pool).with_span(expr.span())?;
+                        self.emit(Instr::Deref(idx));
+                    }
                     self.assemble(*expr, scope, pool, None)?;
                     self.emit(Instr::ObjectField(field));
                     self.emit_label(exit_label);
                 }
                 Member::StructField(field) => {
                     self.emit(Instr::StructField(field));
+                    if let TypeId::ScriptRef(inner) = type_of(&expr, scope, pool)? {
+                        let idx = scope.get_type_index(&inner, pool).with_span(expr.span())?;
+                        self.emit(Instr::Deref(idx));
+                    }
                     self.assemble(*expr, scope, pool, None)?;
                 }
                 Member::EnumMember(enum_, member) => {

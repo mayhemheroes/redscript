@@ -260,8 +260,12 @@ impl<'a> TypeChecker<'a> {
                 Expr::Member(Box::new(converted_context), member, *span)
             }
             Expr::ArrayElem(expr, idx, span) => {
-                let idx_type = scope.resolve_type(&TypeName::INT32, self.pool).with_span(*span)?;
                 let checked_expr = self.check(expr, None, scope)?;
+                let typ = type_of(&checked_expr, scope, self.pool)?;
+                if !matches!(typ.unwrapped(), TypeId::Array(_) | TypeId::StaticArray(_, _)) {
+                    return Err(Cause::InvalidArrayAccess(typ.pretty(self.pool)?).with_span(*span));
+                }
+                let idx_type = scope.resolve_type(&TypeName::INT32, self.pool).with_span(*span)?;
                 let checked_idx = self.check_and_convert(idx, &idx_type, scope)?;
                 Expr::ArrayElem(Box::new(checked_expr), Box::new(checked_idx), *span)
             }
@@ -850,8 +854,8 @@ pub fn type_of(expr: &TypedExpr, scope: &Scope, pool: &ConstantPool) -> Result<T
                 .with_span(*span)?,
             Member::EnumMember(enum_, _) => TypeId::Enum(*enum_),
         },
-        Expr::ArrayElem(expr, _, span) => match type_of(expr, scope, pool)? {
-            TypeId::StaticArray(inner, _) | TypeId::Array(inner) => *inner,
+        Expr::ArrayElem(expr, _, span) => match type_of(expr, scope, pool)?.unwrapped() {
+            TypeId::StaticArray(inner, _) | TypeId::Array(inner) => (**inner).clone(),
             type_ => return Err(Cause::UnsupportedOperation("indexing", type_.pretty(pool)?).with_span(*span)),
         },
         Expr::New(type_, _, span) => match type_ {

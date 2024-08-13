@@ -57,6 +57,8 @@ pub enum Cause {
     TypeAnnotationRequired,
     #[error("'{0}' has no members")]
     InvalidMemberAccess(Ident),
+    #[error("{0} cannot be accessed as an array")]
+    InvalidArrayAccess(Ident),
     #[error("{0} is not supported on '{1}'")]
     UnsupportedOperation(&'static str, Ident),
     #[error("expected {1} arguments for '{0}'")]
@@ -152,6 +154,7 @@ impl Cause {
             Self::TypeAnnotationRequired => "TYPE_ANN_REQUIRED",
             Self::InvalidAnnotationArgs => "INVALID_ANN_USE",
             Self::InvalidMemberAccess(_) => "INVALID_MEMBER_ACCESS",
+            Self::InvalidArrayAccess(_) => "INVALID_ARRAY_ACCESS",
             Self::VoidCannotBeUsed => "INVALID_VOID_USE",
             Self::InvalidStaticMethodCall => "INVALID_STATIC_USE",
             Self::InvalidNonStaticMethodCall => "INVALID_NONSTATIC_USE",

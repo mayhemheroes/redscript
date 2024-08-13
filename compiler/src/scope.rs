@@ -338,7 +338,7 @@ pub enum TypeId {
 impl TypeId {
     pub fn unwrapped(&self) -> &Self {
         match self {
-            Self::Ref(inner) | Self::WeakRef(inner) | Self::ScriptRef(inner) => inner.unwrapped(),
+            Self::Ref(inner) | Self::WeakRef(inner) | Self::ScriptRef(inner) => inner,
             other => other,
         }
     }

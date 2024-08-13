@@ -1084,3 +1084,53 @@ fn compile_array_sort() {
     ];
     TestContext::compiled(vec![sources]).unwrap().run("Testing", check);
 }
+
+#[test]
+fn compile_script_ref_access() {
+    let sources = r#"
+        func Testing(a: script_ref<Struct>, b: script_ref<[Int32]>) {
+            a.x = a.y;
+            a.y = 0;
+
+            b[0] = b[1];
+            b[1] = 0;
+        }
+
+        struct Struct {
+            let x: Int32;
+            let y: Int32;
+        }
+    "#;
+
+    let check = check_code![
+        pat!(Assign),
+        mem!(StructField(x)),
+        mem!(Deref(struct_type)),
+        mem!(Param(a)),
+        mem!(StructField(y)),
+        mem!(Deref(struct_type)),
+        mem!(Param(a)),
+        pat!(Assign),
+        mem!(StructField(y)),
+        mem!(Deref(struct_type)),
+        mem!(Param(a)),
+        pat!(I32Zero),
+        pat!(Assign),
+        mem!(ArrayElement(int_type)),
+        mem!(Deref(int_array_type)),
+        mem!(Param(b)),
+        pat!(I32Zero),
+        mem!(ArrayElement(int_type)),
+        mem!(Deref(int_array_type)),
+        mem!(Param(b)),
+        pat!(I32One),
+        pat!(Assign),
+        mem!(ArrayElement(int_type)),
+        mem!(Deref(int_array_type)),
+        mem!(Param(b)),
+        pat!(I32One),
+        pat!(I32Zero),
+        pat!(Nop)
+    ];
+    TestContext::compiled(vec![sources]).unwrap().run("Testing", check);
+}
