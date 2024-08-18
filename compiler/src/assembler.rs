@@ -142,7 +142,7 @@ impl<'a> Assembler<'a> {
                     }
                     other => return Err(Cause::UnsupportedOperation("indexing", other.pretty(pool)?).with_span(span)),
                 }
-                if let TypeId::ScriptRef(inner) = type_of(&expr, scope, pool)? {
+                if let TypeId::ScriptRef(inner) = typ {
                     let idx = scope.get_type_index(&inner, pool).with_span(expr.span())?;
                     self.emit(Instr::Deref(idx));
                 }
@@ -244,10 +244,6 @@ impl<'a> Assembler<'a> {
                 Member::ClassField(field) => {
                     let exit_label = self.new_label();
                     self.emit(Instr::Context(exit_label));
-                    if let TypeId::ScriptRef(inner) = type_of(&expr, scope, pool)? {
-                        let idx = scope.get_type_index(&inner, pool).with_span(expr.span())?;
-                        self.emit(Instr::Deref(idx));
-                    }
                     self.assemble(*expr, scope, pool, None)?;
                     self.emit(Instr::ObjectField(field));
                     self.emit_label(exit_label);
