@@ -9,7 +9,7 @@ use crate::error::{Cause, Error, ResultSpan};
 use crate::scope::{Reference, Scope, TypeId, Value};
 use crate::symbol::{FunctionSignature, FunctionSignatureBuilder};
 use crate::transform::ExprTransformer;
-use crate::typechecker::{type_of, Callable, TypedAst, TypedExpr, TypedExprExt};
+use crate::typechecker::{type_of, Callable, TypedAst, TypedExpr};
 
 pub struct Desugar<'a> {
     pool: &'a mut ConstantPool,
@@ -146,44 +146,17 @@ impl<'a> ExprTransformer<TypedAst> for Desugar<'a> {
         let mut seq = self.on_seq(seq)?;
 
         let array = self.on_expr(array)?;
-        let array_type = type_of(&array, self.scope, self.pool)?;
-        let array_ref_type = TypeId::ScriptRef(array_type.clone().into());
-        let array_local = self.fresh_local(&array_ref_type).with_span(span)?;
-        let array_deref = || {
-            Expr::Call(
-                Callable::Intrinsic(Intrinsic::Deref, array_type.clone()),
-                [].into(),
-                [Expr::Ident(array_local.clone(), span)].into(),
-                span,
-            )
-        };
+        let arr_type = type_of(&array, self.scope, self.pool)?;
+        let arr_local = self.fresh_local(&arr_type).with_span(span)?;
 
         let counter_type = self.scope.resolve_type(&TypeName::INT32, self.pool).with_span(span)?;
         let counter_local = self.fresh_local(&counter_type).with_span(span)?;
 
-        let array_lvalue = if array.is_prvalue() {
-            let tmp_local = self.fresh_local(&array_type).with_span(span)?;
-            self.add_prefix(Expr::Assign(
-                Box::new(Expr::Ident(tmp_local.clone(), span)),
-                Box::new(array),
-                span,
-            ));
-            Expr::Ident(tmp_local, span)
-        } else {
-            array
-        };
-
         self.add_prefix(Expr::Assign(
-            Box::new(Expr::Ident(array_local.clone(), span)),
-            Box::new(Expr::Call(
-                Callable::Intrinsic(Intrinsic::AsRef, array_ref_type),
-                [].into(),
-                [array_lvalue].into(),
-                span,
-            )),
+            Box::new(Expr::Ident(arr_local.clone(), span)),
+            Box::new(array),
             span,
         ));
-
         self.add_prefix(Expr::Assign(
             Box::new(Expr::Ident(counter_local.clone(), span)),
             Box::new(Expr::Constant(Constant::I32(0), span)),
@@ -208,7 +181,12 @@ impl<'a> ExprTransformer<TypedAst> for Desugar<'a> {
             [].into(),
             [
                 Expr::Ident(counter_local.clone(), span),
-                Expr::Call(array_size, [].into(), [array_deref()].into(), span),
+                Expr::Call(
+                    array_size,
+                    [].into(),
+                    [Expr::Ident(arr_local.clone(), span)].into(),
+                    span,
+                ),
             ]
             .into(),
             span,
@@ -216,7 +194,7 @@ impl<'a> ExprTransformer<TypedAst> for Desugar<'a> {
         let assign_iter_value = Expr::Assign(
             Box::new(Expr::Ident(Reference::Value(Value::Local(name)), span)),
             Box::new(Expr::ArrayElem(
-                Box::new(array_deref()),
+                Box::new(Expr::Ident(arr_local, span)),
                 Box::new(Expr::Ident(counter_local.clone(), span)),
                 span,
             )),
