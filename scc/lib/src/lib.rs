@@ -84,7 +84,7 @@ fn try_compile(settings: &SccSettings) -> anyhow::Result<SccResult> {
         }
         Err(err) => {
             #[cfg(feature = "popup")]
-            {
+            if settings.show_error_popup {
                 let content = format!(
                     "{err}\n\
                     The game will start but no scripts will take effect.\n\

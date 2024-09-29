@@ -41,6 +41,8 @@ typedef void scc_settings_add_script_path(
     SccSettings* settings,
     const char* path);
 
+typedef void scc_settings_disable_error_popup(SccSettings* settings);
+
 typedef SccResult* scc_compile(SccSettings* settings);
 
 typedef void scc_free_result(SccResult* result);
@@ -87,6 +89,13 @@ typedef struct SccApi {
      * Adds a path to be searched for scripts during compilation.
      */
     scc_settings_add_script_path* settings_add_script_path;
+    /**
+     * Disables the error popup that is shown when the compiler encounters errors.
+     *
+     * Added in redscript 0.5.28. It will be null if the loaded library version is older.
+     * The caller should do a null check if they want to maintain backward compatibility.
+     */
+    scc_settings_disable_error_popup* settings_disable_error_popup;
     /**
      * Runs the compiler with the given settings.
      */
@@ -147,6 +156,7 @@ inline SccApi scc_load_api(HMODULE module)
         (scc_settings_set_custom_cache_file*)GetProcAddress(module, "scc_settings_set_custom_cache_file"),
         (scc_settings_set_output_cache_file*)GetProcAddress(module, "scc_settings_set_output_cache_file"),
         (scc_settings_add_script_path*)GetProcAddress(module, "scc_settings_add_script_path"),
+        (scc_settings_disable_error_popup*)GetProcAddress(module, "scc_settings_disable_error_popup"),
         (scc_compile*)GetProcAddress(module, "scc_compile"),
         (scc_free_result*)GetProcAddress(module, "scc_free_result"),
         (scc_get_success*)GetProcAddress(module, "scc_get_success"),

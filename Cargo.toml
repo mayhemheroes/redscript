@@ -23,9 +23,9 @@ hashbrown = "0.14"
 itertools = "0.13"
 strum = { version = "0.26", features = ["derive"] }
 enum-as-inner = "0.6"
-byteorder = "1.4"
+byteorder = "1"
 flexstr = "0.9"
-flexi_logger = { version = "0.28", default-features = false }
+flexi_logger = { version = "0.29", default-features = false }
 
 [workspace.lints.rust]
 warnings = "deny"

@@ -19,6 +19,7 @@ pub unsafe extern "C" fn scc_settings_new(r6_dir: *const i8) -> Box<SccSettings>
         custom_cache_file: None,
         output_cache_file: None,
         additional_script_paths: vec![],
+        show_error_popup: true,
     })
 }
 
@@ -46,6 +47,11 @@ pub unsafe extern "C" fn scc_settings_add_script_path(settings: &mut SccSettings
     settings
         .additional_script_paths
         .push(PathBuf::from(CStr::from_ptr(path).to_string_lossy().as_ref()).into_boxed_path());
+}
+
+#[no_mangle]
+pub extern "C" fn scc_settings_disable_error_popup(settings: &mut SccSettings) {
+    settings.show_error_popup = false;
 }
 
 #[no_mangle]
@@ -169,6 +175,7 @@ pub struct SccSettings {
     pub custom_cache_file: Option<Box<Path>>,
     pub output_cache_file: Option<Box<Path>>,
     pub additional_script_paths: Vec<Box<Path>>,
+    pub show_error_popup: bool,
 }
 
 #[derive(Debug)]

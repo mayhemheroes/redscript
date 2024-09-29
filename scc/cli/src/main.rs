@@ -75,6 +75,7 @@ fn run(opts: Opts, r6_dir: &Path) -> anyhow::Result<bool> {
         custom_cache_file: Some(custom_cache_file.into()),
         output_cache_file: opts.output_cache_file.map(PathBuf::into_boxed_path),
         additional_script_paths,
+        show_error_popup: true,
     };
 
     let is_success = SccApi::load()?.compile(settings.into());

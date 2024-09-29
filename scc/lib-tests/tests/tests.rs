@@ -21,6 +21,7 @@ fn api_functions_are_stable() {
         settings_set_custom_cache_file,
         settings_set_output_cache_file,
         settings_add_script_path,
+        settings_disable_error_popup,
         compile,
         free_result,
         get_success,
@@ -42,6 +43,7 @@ fn api_functions_are_stable() {
         settings_set_output_cache_file.unwrap();
     let _settings_add_script_path: unsafe extern "C" fn(*mut SccSettings, *const i8) =
         settings_add_script_path.unwrap();
+    let _settings_disable_error_popup: unsafe extern "C" fn(*mut SccSettings) = settings_disable_error_popup.unwrap();
     let _compile: unsafe extern "C" fn(*mut SccSettings) -> *mut SccResult = compile.unwrap();
     let _free_result: unsafe extern "C" fn(*mut SccResult) = free_result.unwrap();
     let _get_success: unsafe extern "C" fn(*mut SccResult) -> *mut SccOutput = get_success.unwrap();
@@ -205,6 +207,52 @@ fn receives_an_error() {
 }
 
 #[cfg(windows)]
+#[test]
+fn receives_an_error_with_popup_disabled() {
+    let temp = assert_fs::TempDir::new().unwrap();
+    let bundle_path = temp.child("final.redscripts");
+    let script_path = temp.child("test.reds");
+
+    fs::copy("../../resources/predef.redscripts", &bundle_path)
+        .expect("Could not copy predef.redscripts to bundle path");
+
+    script_path.write_str("func Dummy()").unwrap();
+
+    let api = load_api();
+    unsafe {
+        let r6_dir_cstr = CString::new(temp.path().to_string_lossy().as_bytes()).unwrap();
+        let script_path_cstr = CString::new(script_path.path().to_string_lossy().as_bytes()).unwrap();
+        let bundle_path_cstr = CString::new(bundle_path.path().to_string_lossy().as_bytes()).unwrap();
+
+        let settings = (api.settings_new.unwrap())(r6_dir_cstr.as_ptr() as _);
+        (api.settings_add_script_path.unwrap())(settings, script_path_cstr.as_ptr() as _);
+        (api.settings_set_custom_cache_file.unwrap())(settings, bundle_path_cstr.as_ptr() as _);
+        (api.settings_disable_error_popup.unwrap())(settings);
+
+        let result = (api.compile.unwrap())(settings);
+        let output = (api.get_success.unwrap())(result);
+        assert!(output.is_null());
+
+        let mut error = [0u8; 1024];
+        let error_len = (api.copy_error.unwrap())(result, error.as_mut_ptr() as _, error.len());
+        let error = std::str::from_utf8(&error[..error_len]).unwrap();
+        assert_eq!(
+            error,
+            "REDScript compilation has failed.\n\
+            This error has been caused by mods listed below:\n\
+            - test.reds\n\
+            \n\
+            You should check if these mods are outdated and update them if possible. \
+            They may also be incompatible with the current version of the game, in which case you \
+            should remove them and try again.\n"
+        );
+
+        api.free_result.unwrap()(result);
+    }
+    temp.close().unwrap();
+}
+
+#[cfg(windows)]
 fn load_api() -> SccApi {
     let lib = Library::load("scc_lib.dll").unwrap();
     unsafe {
@@ -213,6 +261,7 @@ fn load_api() -> SccApi {
             settings_set_custom_cache_file: lib.sym("scc_settings_set_custom_cache_file\0").unwrap(),
             settings_add_script_path: lib.sym("scc_settings_add_script_path\0").unwrap(),
             settings_set_output_cache_file: lib.sym("scc_settings_set_output_cache_file\0").unwrap(),
+            settings_disable_error_popup: lib.sym("scc_settings_disable_error_popup\0").unwrap(),
             compile: lib.sym("scc_compile\0").unwrap(),
             free_result: lib.sym("scc_free_result\0").unwrap(),
             get_success: lib.sym("scc_get_success\0").unwrap(),
