@@ -252,7 +252,7 @@ impl<'a> FunctionSignature<'a> {
     }
 }
 
-impl<'a> AsRef<str> for FunctionSignature<'a> {
+impl AsRef<str> for FunctionSignature<'_> {
     #[inline]
     fn as_ref(&self) -> &str {
         self.0.as_ref()

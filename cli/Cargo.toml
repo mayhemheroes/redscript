@@ -11,8 +11,8 @@ redscript-compiler = { path = "../compiler" }
 log.workspace = true
 anyhow.workspace = true
 flexi_logger = { workspace = true, features = ["colors"] }
-vmap = { version = "0.6", default-features = false }
-argh = "0.1"
+vmap.workspace = true
+argh.workspace = true
 
 [lints]
 workspace = true

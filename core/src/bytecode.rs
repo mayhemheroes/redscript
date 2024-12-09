@@ -1189,7 +1189,7 @@ impl<'a, Loc> CodeIter<'a, Loc> {
     }
 }
 
-impl<'a, Loc: Clone> Iterator for CodeIter<'a, Loc> {
+impl<Loc: Clone> Iterator for CodeIter<'_, Loc> {
     type Item = (Location, Instr<Loc>);
 
     fn next(&mut self) -> Option<Self::Item> {

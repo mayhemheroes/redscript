@@ -61,7 +61,7 @@ impl<'a> Desugar<'a> {
     }
 }
 
-impl<'a> ExprTransformer<TypedAst> for Desugar<'a> {
+impl ExprTransformer<TypedAst> for Desugar<'_> {
     fn on_array_lit(
         &mut self,
         exprs: Box<[TypedExpr]>,

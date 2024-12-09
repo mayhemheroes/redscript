@@ -213,7 +213,7 @@ impl<'a> SourceLoc<'a> {
     }
 }
 
-impl<'a> fmt::Display for SourceLoc<'a> {
+impl fmt::Display for SourceLoc<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}", self.file.path.display(), self.start)
     }

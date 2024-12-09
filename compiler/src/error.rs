@@ -98,9 +98,9 @@ pub enum Cause {
     #[error(r#"this value must be a constant (e.g. 1, "string")"#)]
     InvalidConstant,
     #[error(
-        "arguments passed to '{0}' do not match any of the overloads:\n{}{}",
-        .1.iter().take(MAX_RESOLUTION_ERRORS).format("\n"),
-        if .1.len() > MAX_RESOLUTION_ERRORS {"\n...and more"} else {""}
+        "arguments passed to '{0}' do not match any of the overloads:\n{overloads}{suffix}",
+        overloads=.1.iter().take(MAX_RESOLUTION_ERRORS).format("\n"),
+        suffix=if .1.len() > MAX_RESOLUTION_ERRORS {"\n...and more"} else {""}
     )]
     NoMatchingOverload(Ident, Box<[FunctionMatchError]>),
     #[error(
