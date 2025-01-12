@@ -1,0 +1,22 @@
+[package]
+name = "redscript-compiler-backend"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+redscript-io = { workspace = true, features = ["identity-hash"] }
+redscript-compiler-frontend.workspace = true
+
+thiserror.workspace = true
+identity-hash.workspace = true
+slab.workspace = true
+smallvec.workspace = true
+hashbrown.workspace = true
+indexmap.workspace = true
+
+[dev-dependencies]
+similar-asserts.workspace = true
+
+[lints]
+workspace = true

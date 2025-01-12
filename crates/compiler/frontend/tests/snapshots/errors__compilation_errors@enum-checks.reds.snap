@@ -1,0 +1,15 @@
+---
+source: crates/compiler/frontend/tests/errors.rs
+expression: "DisplayDiagnostics(diagnostics, &sources)"
+input_file: crates/compiler/frontend/tests/data/enum-checks.reds
+snapshot_kind: text
+---
+At tests\data\enum-checks.reds:6:3
+  DuplicateOne = 1,
+  ^^^^^^^^^^^^^^^^
+duplicate variant value
+
+At tests\data\enum-checks.reds:9:3
+  DuplicatedName = 4,
+  ^^^^^^^^^^^^^^^^^^
+duplicate variant name

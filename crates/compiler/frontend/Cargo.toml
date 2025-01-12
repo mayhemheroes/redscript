@@ -1,0 +1,29 @@
+[package]
+name = "redscript-compiler-frontend"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+redscript-ast.workspace = true
+redscript-parser.workspace = true
+
+thiserror.workspace = true
+derive-where.workspace = true
+bitfield-struct.workspace = true
+identity-hash.workspace = true
+slab.workspace = true
+smallvec.workspace = true
+hashbrown.workspace = true
+indexmap.workspace = true
+elsa.workspace = true
+sequence_trie.workspace = true
+
+[dev-dependencies]
+redscript-compiler-api.workspace = true
+
+anyhow.workspace = true
+insta.workspace = true
+
+[lints]
+workspace = true

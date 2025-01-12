@@ -1,0 +1,1216 @@
+use std::borrow::{Borrow, Cow};
+use std::hash::Hash;
+use std::ops::Not;
+use std::rc::Rc;
+use std::{fmt, ops};
+
+use bitfield_struct::bitfield;
+use derive_where::derive_where;
+use hashbrown::{HashMap, HashSet};
+use identity_hash::BuildIdentityHasher;
+use redscript_ast::Span;
+use slab::Slab;
+use smallvec::SmallVec;
+
+use crate::types::{CtxVar, Type, TypeApp, TypeId};
+use crate::utils::fmt::sep_by;
+use crate::{ir, predef, Immutable, IndexMap, TypeKind, Variance};
+
+#[derive(Debug)]
+pub struct Symbols<'ctx> {
+    types: HashMap<TypeId<'ctx>, TypeDef<'ctx>, BuildIdentityHasher<usize>>,
+    free_funcs: FreeFunctionMap<'ctx>,
+}
+
+impl<'ctx> Symbols<'ctx> {
+    pub fn with_default_types() -> Self {
+        fn one_param_primitive<'a>(v: Variance) -> TypeDef<'a> {
+            TypeDef::new(
+                [CtxVar::new("T", v, None, None).into()],
+                TypeSchema::Primitive,
+                [],
+            )
+        }
+
+        let mut types = HashMap::default();
+
+        types.insert(predef::STRING, TypeDef::new_primitive());
+        types.insert(predef::CNAME, TypeDef::new_primitive());
+        types.insert(predef::RESOURCE, TypeDef::new_primitive());
+        types.insert(predef::TWEAK_DB_ID, TypeDef::new_primitive());
+        types.insert(predef::FLOAT, TypeDef::new_primitive());
+        types.insert(predef::DOUBLE, TypeDef::new_primitive());
+        types.insert(predef::INT8, TypeDef::new_primitive());
+        types.insert(predef::INT16, TypeDef::new_primitive());
+        types.insert(predef::INT32, TypeDef::new_primitive());
+        types.insert(predef::INT64, TypeDef::new_primitive());
+        types.insert(predef::UINT8, TypeDef::new_primitive());
+        types.insert(predef::UINT16, TypeDef::new_primitive());
+        types.insert(predef::UINT32, TypeDef::new_primitive());
+        types.insert(predef::UINT64, TypeDef::new_primitive());
+        types.insert(predef::BOOL, TypeDef::new_primitive());
+        types.insert(predef::VARIANT, TypeDef::new_primitive());
+
+        types.insert(predef::REF, one_param_primitive(Variance::Covariant));
+        types.insert(predef::WREF, one_param_primitive(Variance::Covariant));
+        types.insert(predef::SCRIPT_REF, one_param_primitive(Variance::Invariant));
+        types.insert(predef::ARRAY, one_param_primitive(Variance::Invariant));
+        for ty in predef::STATIC_ARRAY_TYPES {
+            types.insert(*ty, one_param_primitive(Variance::Invariant));
+        }
+
+        types.insert(predef::VOID, TypeDef::new_primitive());
+        types.insert(predef::NOTHING, TypeDef::new_primitive());
+
+        types.insert(
+            predef::ISCRIPTABLE,
+            TypeDef::new([], TypeSchema::Aggregate(Aggregate::default().into()), []),
+        );
+
+        Self {
+            types,
+            free_funcs: FreeFunctionMap::default(),
+        }
+    }
+
+    #[inline]
+    pub fn get_type(&self, id: TypeId<'ctx>) -> Option<&TypeDef<'ctx>> {
+        self.types.get(&id)
+    }
+
+    #[inline]
+    pub fn add_type(&mut self, id: TypeId<'ctx>, def: TypeDef<'ctx>) {
+        self.types.insert(id, def);
+    }
+
+    #[inline]
+    pub fn get_free_function(
+        &self,
+        index: FreeFunctionIndex,
+    ) -> Option<(&QualifiedName<'ctx>, &FreeFunction<'ctx>)> {
+        self.free_funcs.by_index(index.0)
+    }
+
+    pub fn add_free_function(
+        &mut self,
+        name: impl Into<QualifiedName<'ctx>>,
+        func: FreeFunction<'ctx>,
+    ) -> FreeFunctionIndex {
+        let idx = self.free_funcs.add(name.into(), func);
+        FreeFunctionIndex(idx)
+    }
+
+    pub fn set_free_function(&mut self, index: FreeFunctionIndex, func: FreeFunction<'ctx>) {
+        self.free_funcs.map[index.0.item_index][index.0.overload_index] = func;
+    }
+
+    pub fn free_functions(
+        &self,
+    ) -> impl Iterator<Item = FunctionEntry<FreeFunctionIndex, &QualifiedName<'ctx>, &FreeFunction<'ctx>>>
+    {
+        self.free_funcs
+            .iter()
+            .map(|entry| entry.map_key(FreeFunctionIndex))
+    }
+
+    pub fn types(&self) -> impl Iterator<Item = (TypeId<'ctx>, &TypeDef<'ctx>)> {
+        self.types.iter().map(|(id, def)| (*id, def))
+    }
+
+    pub fn get_field(&self, id: FieldId<'ctx>) -> Option<(&'ctx str, &Field<'ctx>)> {
+        let def = self.get_type(id.parent)?;
+        let agg = def.schema.as_aggregate()?;
+        agg.fields.by_index(id.index)
+    }
+
+    pub fn get_method(&self, id: MethodId<'ctx>) -> Option<(&'ctx str, &Method<'ctx>)> {
+        let def = self.get_type(id.parent)?;
+        let agg = def.schema.as_aggregate()?;
+        let (name, val) = agg.methods.by_index(id.index)?;
+        Some((name, val))
+    }
+
+    pub fn get_method_mut(&mut self, id: MethodId<'ctx>) -> Option<(&'ctx str, &mut Method<'ctx>)> {
+        let def = self.types.get_mut(&id.parent)?;
+        let agg = def.schema.as_aggregate_mut()?;
+        let (name, val) = agg.methods.by_index_mut(id.index)?;
+        Some((name, val))
+    }
+
+    pub(super) fn lub(&self, lhs: TypeId<'ctx>, rhs: TypeId<'ctx>) -> Option<TypeId<'ctx>> {
+        if lhs == rhs {
+            Some(lhs)
+        } else {
+            let count_left = self.base_iter(lhs).count();
+            let count_right = self.base_iter(rhs).count();
+
+            self.base_iter(lhs)
+                .skip(count_left.saturating_sub(count_right))
+                .zip(
+                    self.base_iter(rhs)
+                        .skip(count_right.saturating_sub(count_left)),
+                )
+                .find(|((l, _), (r, _))| l == r)
+                .map(|((l, _), _)| l)
+        }
+    }
+
+    pub(super) fn glb(&self, lhs: TypeId<'ctx>, rhs: TypeId<'ctx>) -> Option<TypeId<'ctx>> {
+        if lhs == rhs || self.is_subtype(lhs, rhs) {
+            Some(lhs)
+        } else if self.is_subtype(rhs, lhs) {
+            Some(rhs)
+        } else {
+            None
+        }
+    }
+
+    pub(super) fn is_subtype(&self, lhs: TypeId<'ctx>, rhs: TypeId<'ctx>) -> bool {
+        self.base_iter(lhs).any(|(t, _)| t == rhs)
+    }
+
+    #[inline]
+    pub fn base_iter(&self, ty: TypeId<'ctx>) -> BaseIter<'_, 'ctx> {
+        BaseIter {
+            symbols: self,
+            current: Some(ty),
+        }
+    }
+
+    pub fn query_methods<'a>(
+        &'a self,
+        ty: TypeId<'ctx>,
+        name: &'a str,
+    ) -> impl Iterator<Item = MethodEntry<'a, 'ctx>> + use<'a, 'ctx> {
+        self.base_iter(ty)
+            .filter_map(|(id, ty)| Some((id, ty.schema().as_aggregate()?)))
+            .flat_map(|(id, agg)| {
+                agg.methods().by_name(name).map(move |entry| {
+                    MethodEntry::new(MethodId::new(id, *entry.key()), entry.name(), entry.func())
+                })
+            })
+            .filter_map({
+                let mut dedup = HashSet::new();
+                move |entry| {
+                    if let Some(overloaded) = entry.func().overloaded {
+                        dedup.insert(overloaded);
+                    }
+                    dedup.remove(entry.key()).not().then_some(entry)
+                }
+            })
+    }
+}
+
+impl<'ctx> ops::Index<TypeId<'ctx>> for Symbols<'ctx> {
+    type Output = TypeDef<'ctx>;
+
+    #[inline]
+    fn index(&self, index: TypeId<'ctx>) -> &Self::Output {
+        self.types.get(&index).expect("type id not found")
+    }
+}
+
+impl<'ctx> ops::IndexMut<TypeId<'ctx>> for Symbols<'ctx> {
+    #[inline]
+    fn index_mut(&mut self, index: TypeId<'ctx>) -> &mut Self::Output {
+        self.types.get_mut(&index).expect("type id not found")
+    }
+}
+
+impl<'ctx> ops::Index<FreeFunctionIndex> for Symbols<'ctx> {
+    type Output = FreeFunction<'ctx>;
+
+    #[inline]
+    fn index(&self, index: FreeFunctionIndex) -> &Self::Output {
+        self.free_funcs
+            .by_index(index.0)
+            .expect("free function index not found")
+            .1
+    }
+}
+
+impl<'ctx> ops::Index<MethodId<'ctx>> for Symbols<'ctx> {
+    type Output = Method<'ctx>;
+
+    #[inline]
+    fn index(&self, index: MethodId<'ctx>) -> &Self::Output {
+        self.get_method(index).expect("method id not found").1
+    }
+}
+
+impl<'ctx> ops::Index<FieldId<'ctx>> for Symbols<'ctx> {
+    type Output = Field<'ctx>;
+
+    #[inline]
+    fn index(&self, index: FieldId<'ctx>) -> &Self::Output {
+        self.get_field(index).expect("field id not found").1
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct BaseIter<'sym, 'ctx> {
+    symbols: &'sym Symbols<'ctx>,
+    current: Option<TypeId<'ctx>>,
+}
+
+impl<'sym, 'ctx> Iterator for BaseIter<'sym, 'ctx> {
+    type Item = (TypeId<'ctx>, &'sym TypeDef<'ctx>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let current = self.current.take()?;
+        let def = self.symbols.types.get(&current)?;
+        self.current = def.schema.base_type().map(TypeApp::id);
+        Some((current, def))
+    }
+}
+
+#[derive(Debug)]
+pub struct TypeDef<'ctx> {
+    params: Box<[Rc<CtxVar<'ctx>>]>,
+    schema: TypeSchema<'ctx>,
+    doc: Box<[&'ctx str]>,
+}
+
+impl<'ctx> TypeDef<'ctx> {
+    #[inline]
+    pub fn new_primitive() -> Self {
+        Self {
+            params: Box::default(),
+            schema: TypeSchema::Primitive,
+            doc: Box::default(),
+        }
+    }
+
+    #[inline]
+    pub fn new(
+        params: impl Into<Box<[Rc<CtxVar<'ctx>>]>>,
+        schema: TypeSchema<'ctx>,
+        doc: impl Into<Box<[&'ctx str]>>,
+    ) -> Self {
+        Self {
+            params: params.into(),
+            schema,
+            doc: doc.into(),
+        }
+    }
+
+    #[inline]
+    pub fn params(&self) -> &[Rc<CtxVar<'ctx>>] {
+        &self.params
+    }
+
+    #[inline]
+    pub fn schema(&self) -> &TypeSchema<'ctx> {
+        &self.schema
+    }
+
+    #[inline]
+    pub fn schema_mut(&mut self) -> &mut TypeSchema<'ctx> {
+        &mut self.schema
+    }
+
+    #[inline]
+    pub fn vars(&self) -> impl ExactSizeIterator<Item = &'ctx str> + use<'_, 'ctx> {
+        self.params.iter().map(|v| v.name())
+    }
+
+    #[inline]
+    pub fn doc(&self) -> &[&'ctx str] {
+        &self.doc
+    }
+}
+
+#[derive(Debug)]
+pub enum TypeSchema<'ctx> {
+    Aggregate(Box<Aggregate<'ctx>>),
+    Enum(Box<Enum<'ctx>>),
+    Primitive,
+}
+
+impl<'ctx> TypeSchema<'ctx> {
+    pub fn base_type(&self) -> Option<&TypeApp<'ctx>> {
+        match self {
+            Self::Aggregate(agg) => agg.base.as_ref(),
+            _ => None,
+        }
+    }
+
+    pub fn as_aggregate(&self) -> Option<&Aggregate<'ctx>> {
+        match self {
+            Self::Aggregate(agg) => Some(agg),
+            _ => None,
+        }
+    }
+
+    pub fn as_aggregate_mut(&mut self) -> Option<&mut Aggregate<'ctx>> {
+        match self {
+            Self::Aggregate(agg) => Some(agg),
+            _ => None,
+        }
+    }
+
+    pub fn as_enum(&self) -> Option<&Enum<'ctx>> {
+        match self {
+            Self::Enum(enm) => Some(enm),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct Enum<'ctx> {
+    variants: IndexMap<&'ctx str, i64>,
+}
+
+impl<'ctx> Enum<'ctx> {
+    #[inline]
+    pub fn new(variants: impl Into<IndexMap<&'ctx str, i64>>) -> Self {
+        Self {
+            variants: variants.into(),
+        }
+    }
+
+    #[inline]
+    pub fn variant_by_name(&self, name: &str) -> Option<(FieldIndex, i64)> {
+        let (index, _, value) = self.variants.get_full(name)?;
+        Some((FieldIndex(index), *value))
+    }
+
+    #[inline]
+    pub fn add_variant(&mut self, name: &'ctx str, value: i64) -> FieldIndex {
+        FieldIndex(self.variants.insert_full(name, value).0)
+    }
+
+    #[inline]
+    pub fn variants(&self) -> impl ExactSizeIterator<Item = (&'ctx str, i64)> + use<'_, 'ctx> {
+        self.variants.iter().map(|(&name, &value)| (name, value))
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct Aggregate<'ctx> {
+    flags: AggregateFlags,
+    base: Option<TypeApp<'ctx>>,
+    fields: FieldMap<'ctx>,
+    methods: MethodMap<'ctx>,
+    span: Option<Span>,
+}
+
+impl<'ctx> Aggregate<'ctx> {
+    #[inline]
+    pub fn new(
+        flags: AggregateFlags,
+        base: Option<TypeApp<'ctx>>,
+        fields: FieldMap<'ctx>,
+        methods: MethodMap<'ctx>,
+        span: Option<Span>,
+    ) -> Self {
+        Self {
+            flags,
+            fields,
+            methods,
+            base,
+            span,
+        }
+    }
+
+    #[inline]
+    pub fn flags(&self) -> AggregateFlags {
+        self.flags
+    }
+
+    #[inline]
+    pub fn base(&self) -> Option<&TypeApp<'ctx>> {
+        self.base.as_ref()
+    }
+
+    #[inline]
+    pub fn set_base(&mut self, base: Option<TypeApp<'ctx>>) {
+        self.base = base;
+    }
+
+    #[inline]
+    pub fn fields(&self) -> &FieldMap<'ctx> {
+        &self.fields
+    }
+
+    #[inline]
+    pub fn fields_mut(&mut self) -> &mut FieldMap<'ctx> {
+        &mut self.fields
+    }
+
+    #[inline]
+    pub fn methods(&self) -> &MethodMap<'ctx> {
+        &self.methods
+    }
+
+    #[inline]
+    pub fn methods_mut(&mut self) -> &mut MethodMap<'ctx> {
+        &mut self.methods
+    }
+
+    #[inline]
+    pub fn span(&self) -> Option<Span> {
+        self.span
+    }
+
+    #[inline]
+    pub fn is_user_defined(&self) -> bool {
+        self.span().is_some()
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct FieldMap<'ctx> {
+    map: IndexMap<&'ctx str, Field<'ctx>>,
+}
+
+impl<'ctx> FieldMap<'ctx> {
+    #[inline]
+    pub fn by_name(&self, name: &str) -> Option<(FieldIndex, &Field<'ctx>)> {
+        let (index, _, field) = self.map.get_full(name)?;
+        Some((FieldIndex(index), field))
+    }
+
+    #[inline]
+    pub fn by_index(&self, index: FieldIndex) -> Option<(&'ctx str, &Field<'ctx>)> {
+        let (name, field) = self.map.get_index(index.0)?;
+        Some((name, field))
+    }
+
+    #[inline]
+    pub fn add(
+        &mut self,
+        name: &'ctx str,
+        field: Field<'ctx>,
+    ) -> Result<FieldIndex, FieldRedefinition> {
+        let (idx, prev) = self.map.insert_full(name, field);
+        if prev.is_some() {
+            Err(FieldRedefinition)
+        } else {
+            Ok(FieldIndex(idx))
+        }
+    }
+
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = FieldEntry<'_, 'ctx>> {
+        self.map
+            .iter()
+            .enumerate()
+            .map(|(i, (name, field))| FieldEntry {
+                index: FieldIndex(i),
+                name,
+                field,
+            })
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.map.len()
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+}
+
+pub type MethodMap<'ctx> = FunctionMap<&'ctx str, Method<'ctx>>;
+pub type FreeFunctionMap<'ctx> = FunctionMap<QualifiedName<'ctx>, FreeFunction<'ctx>>;
+
+#[derive(Debug)]
+pub struct FunctionMap<N, V> {
+    map: IndexMap<N, Slab<V>>,
+}
+
+impl<N, V> FunctionMap<N, V>
+where
+    N: Eq + Hash,
+{
+    pub fn by_name<Q>(&self, name: &Q) -> impl Iterator<Item = FunctionEntry<FunctionIndex, &N, &V>>
+    where
+        N: Borrow<Q>,
+        Q: ?Sized + Hash + Eq,
+    {
+        self.map
+            .get_full(name)
+            .into_iter()
+            .flat_map(|(item_index, name, slab)| {
+                slab.iter().map(move |(overload_index, func)| {
+                    FunctionEntry::new(FunctionIndex::new(item_index, overload_index), name, func)
+                })
+            })
+    }
+
+    #[inline]
+    pub fn by_index(&self, index: FunctionIndex) -> Option<(&N, &V)> {
+        let (name, slab) = self.map.get_index(index.item_index)?;
+        Some((name, slab.get(index.overload_index)?))
+    }
+
+    #[inline]
+    pub fn by_index_mut(&mut self, index: FunctionIndex) -> Option<(&N, &mut V)> {
+        let (name, slab) = self.map.get_index_mut(index.item_index)?;
+        Some((name, slab.get_mut(index.overload_index)?))
+    }
+
+    #[inline]
+    pub fn add(&mut self, name: N, func: V) -> FunctionIndex {
+        let entry = self.map.entry(name);
+        let item_index = entry.index();
+        let overload_index = entry.or_default().insert(func);
+        FunctionIndex {
+            item_index,
+            overload_index,
+        }
+    }
+
+    pub fn iter(
+        &self,
+    ) -> impl Iterator<Item = FunctionEntry<FunctionIndex, &N, &V>> + use<'_, N, V> {
+        self.map
+            .iter()
+            .enumerate()
+            .flat_map(|(item_index, (name, slab))| {
+                slab.iter().map(move |(overload_index, func)| {
+                    FunctionEntry::new(FunctionIndex::new(item_index, overload_index), name, func)
+                })
+            })
+    }
+}
+
+impl<N, V> Default for FunctionMap<N, V> {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            map: IndexMap::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct MethodId<'id> {
+    parent: TypeId<'id>,
+    index: FunctionIndex,
+}
+
+impl<'id> MethodId<'id> {
+    #[inline]
+    pub fn new(parent: TypeId<'id>, index: FunctionIndex) -> Self {
+        Self { parent, index }
+    }
+
+    #[inline]
+    pub fn parent(&self) -> TypeId<'id> {
+        self.parent
+    }
+
+    #[inline]
+    pub fn index(&self) -> FunctionIndex {
+        self.index
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FieldId<'id> {
+    parent: TypeId<'id>,
+    index: FieldIndex,
+}
+
+impl<'id> FieldId<'id> {
+    #[inline]
+    pub fn new(parent: TypeId<'id>, index: FieldIndex) -> Self {
+        Self { parent, index }
+    }
+
+    #[inline]
+    pub fn parent(&self) -> TypeId<'id> {
+        self.parent
+    }
+
+    #[inline]
+    pub fn index(&self) -> FieldIndex {
+        self.index
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FunctionIndex {
+    item_index: usize,
+    overload_index: usize,
+}
+
+impl FunctionIndex {
+    #[inline]
+    fn new(item_index: usize, overload_index: usize) -> Self {
+        Self {
+            item_index,
+            overload_index,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FieldIndex(usize);
+
+impl From<FieldIndex> for usize {
+    #[inline]
+    fn from(index: FieldIndex) -> Self {
+        index.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FreeFunctionIndex(FunctionIndex);
+
+#[derive(Debug, Clone)]
+pub struct FunctionType<'ctx> {
+    type_params: Box<[Rc<CtxVar<'ctx>>]>,
+    params: Box<[Param<'ctx>]>,
+    return_type: Type<'ctx>,
+}
+
+impl<'ctx> FunctionType<'ctx> {
+    #[inline]
+    pub fn new(
+        type_params: impl Into<Box<[Rc<CtxVar<'ctx>>]>>,
+        params: impl Into<Box<[Param<'ctx>]>>,
+        ret_t: Type<'ctx>,
+    ) -> Self {
+        Self {
+            type_params: type_params.into(),
+            params: params.into(),
+            return_type: ret_t,
+        }
+    }
+
+    #[inline]
+    pub fn type_params(&self) -> &[Rc<CtxVar<'ctx>>] {
+        &self.type_params
+    }
+
+    #[inline]
+    pub fn type_vars(&self) -> impl ExactSizeIterator<Item = &'ctx str> + use<'_, 'ctx> {
+        self.type_params.iter().map(|v| v.name())
+    }
+
+    #[inline]
+    pub fn params(&self) -> &[Param<'ctx>] {
+        &self.params
+    }
+
+    #[inline]
+    pub fn param_types(&self) -> impl ExactSizeIterator<Item = &Type<'ctx>> + use<'_, 'ctx> {
+        self.params.iter().map(Param::type_)
+    }
+
+    #[inline]
+    pub fn unwrapped_param_types(
+        &self,
+    ) -> impl ExactSizeIterator<Item = &Type<'ctx>> + use<'_, 'ctx> {
+        self.param_types().map(Type::unwrap_ref_or_self)
+    }
+
+    #[inline]
+    pub fn return_type(&self) -> &Type<'ctx> {
+        &self.return_type
+    }
+
+    pub fn min_args(&self) -> usize {
+        self.params
+            .iter()
+            .rev()
+            .skip_while(|p| p.flags.is_optional())
+            .count()
+    }
+
+    #[inline]
+    pub fn max_args(&self) -> usize {
+        self.params.len()
+    }
+}
+
+impl Default for FunctionType<'_> {
+    fn default() -> Self {
+        Self {
+            type_params: Box::default(),
+            params: Box::default(),
+            return_type: Type::nullary(predef::VOID),
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct FreeFunction<'ctx> {
+    flags: FreeFunctionFlags,
+    type_: FunctionType<'ctx>,
+    intrinsic: Option<ir::Intrinsic>,
+    method_alias: Option<MethodId<'ctx>>,
+    doc: Box<[&'ctx str]>,
+    span: Option<Span>,
+}
+
+impl<'ctx> FreeFunction<'ctx> {
+    #[inline]
+    pub fn new(
+        flags: FreeFunctionFlags,
+        type_: FunctionType<'ctx>,
+        doc: impl Into<Box<[&'ctx str]>>,
+        span: Option<Span>,
+    ) -> Self {
+        Self {
+            flags,
+            type_,
+            doc: doc.into(),
+            span,
+            ..Default::default()
+        }
+    }
+
+    #[inline]
+    pub fn new_intrinsic(
+        type_: FunctionType<'ctx>,
+        intrinsic: ir::Intrinsic,
+        doc: impl Into<Box<[&'ctx str]>>,
+        span: Option<Span>,
+    ) -> Self {
+        Self {
+            type_,
+            intrinsic: Some(intrinsic),
+            doc: doc.into(),
+            span,
+            ..Default::default()
+        }
+    }
+
+    #[inline]
+    pub fn new_alias(type_: FunctionType<'ctx>, alias: MethodId<'ctx>, span: Option<Span>) -> Self {
+        Self {
+            type_,
+            span,
+            method_alias: Some(alias),
+            ..Default::default()
+        }
+    }
+
+    #[inline]
+    pub fn flags(&self) -> &FreeFunctionFlags {
+        &self.flags
+    }
+
+    #[inline]
+    pub fn type_(&self) -> &FunctionType<'ctx> {
+        &self.type_
+    }
+
+    #[inline]
+    pub fn intrinsic(&self) -> Option<ir::Intrinsic> {
+        self.intrinsic
+    }
+
+    #[inline]
+    pub fn method_alias(&self) -> Option<MethodId<'ctx>> {
+        self.method_alias
+    }
+
+    #[inline]
+    pub fn doc(&self) -> &[&'ctx str] {
+        &self.doc
+    }
+
+    #[inline]
+    pub fn span(&self) -> Option<Span> {
+        self.span
+    }
+}
+
+#[derive(Debug)]
+pub struct Method<'ctx> {
+    flags: MethodFlags,
+    typ: FunctionType<'ctx>,
+    overloaded: Option<MethodId<'ctx>>,
+    doc: Box<[&'ctx str]>,
+    span: Option<Span>,
+}
+
+impl<'ctx> Method<'ctx> {
+    #[inline]
+    pub fn new(
+        flags: MethodFlags,
+        typ: FunctionType<'ctx>,
+        overloaded: Option<MethodId<'ctx>>,
+        doc: impl Into<Box<[&'ctx str]>>,
+        span: Option<Span>,
+    ) -> Self {
+        Self {
+            flags,
+            typ,
+            overloaded,
+            doc: doc.into(),
+            span,
+        }
+    }
+
+    #[inline]
+    pub fn flags(&self) -> &MethodFlags {
+        &self.flags
+    }
+
+    #[inline]
+    pub fn type_(&self) -> &FunctionType<'ctx> {
+        &self.typ
+    }
+
+    #[inline]
+    pub fn overloaded(&self) -> Option<MethodId<'ctx>> {
+        self.overloaded
+    }
+
+    #[inline]
+    pub fn set_overloaded(&mut self, overloaded: MethodId<'ctx>) {
+        self.overloaded = Some(overloaded);
+    }
+
+    #[inline]
+    pub fn doc(&self) -> &[&'ctx str] {
+        &self.doc
+    }
+
+    #[inline]
+    pub fn span(&self) -> Option<Span> {
+        self.span
+    }
+
+    #[inline]
+    pub fn is_user_defined(&self) -> bool {
+        self.span().is_some()
+    }
+}
+
+pub trait FunctionKind<'ctx> {
+    fn type_(&self) -> &FunctionType<'ctx>;
+}
+
+impl<'ctx> FunctionKind<'ctx> for FreeFunction<'ctx> {
+    #[inline]
+    fn type_(&self) -> &FunctionType<'ctx> {
+        &self.type_
+    }
+}
+
+impl<'ctx> FunctionKind<'ctx> for Method<'ctx> {
+    #[inline]
+    fn type_(&self) -> &FunctionType<'ctx> {
+        &self.typ
+    }
+}
+
+impl<'ctx, A: FunctionKind<'ctx>> FunctionKind<'ctx> for &A {
+    #[inline]
+    fn type_(&self) -> &FunctionType<'ctx> {
+        (*self).type_()
+    }
+}
+
+pub trait FunctionKey<'ctx> {
+    fn parent(&self) -> Option<TypeId<'ctx>>;
+}
+
+impl<'ctx> FunctionKey<'ctx> for MethodId<'ctx> {
+    #[inline]
+    fn parent(&self) -> Option<TypeId<'ctx>> {
+        Some(self.parent)
+    }
+}
+
+impl<'ctx> FunctionKey<'ctx> for FreeFunctionIndex {
+    #[inline]
+    fn parent(&self) -> Option<TypeId<'ctx>> {
+        None
+    }
+}
+
+pub type MethodEntry<'sym, 'ctx> = FunctionEntry<MethodId<'ctx>, &'ctx str, &'sym Method<'ctx>>;
+
+#[derive(Debug, Clone)]
+pub struct FunctionEntry<K, N, V> {
+    key: K,
+    name: N,
+    value: V,
+}
+
+impl<K, N, V> FunctionEntry<K, N, V> {
+    #[inline]
+    pub fn new(key: K, name: N, value: V) -> Self {
+        Self { key, name, value }
+    }
+
+    #[inline]
+    pub fn key(&self) -> &K {
+        &self.key
+    }
+
+    #[inline]
+    pub fn name(&self) -> &N {
+        &self.name
+    }
+
+    #[inline]
+    pub fn func(&self) -> &V {
+        &self.value
+    }
+
+    #[inline]
+    pub fn map_key<K2>(self, f: impl FnOnce(K) -> K2) -> FunctionEntry<K2, N, V> {
+        FunctionEntry {
+            key: f(self.key),
+            name: self.name,
+            value: self.value,
+        }
+    }
+}
+
+#[derive_where(Debug, Clone)]
+pub struct Param<'ctx, K: TypeKind = Immutable> {
+    name: &'ctx str,
+    flags: ParamFlags,
+    typ: K::Type<'ctx>,
+    span: Option<Span>,
+}
+
+impl<'ctx, K: TypeKind> Param<'ctx, K> {
+    #[inline]
+    pub fn new(name: &'ctx str, flags: ParamFlags, typ: K::Type<'ctx>, span: Option<Span>) -> Self {
+        Self {
+            name,
+            flags,
+            typ,
+            span,
+        }
+    }
+
+    #[inline]
+    pub fn name(&self) -> &'ctx str {
+        self.name
+    }
+
+    #[inline]
+    pub fn flags(&self) -> &ParamFlags {
+        &self.flags
+    }
+
+    #[inline]
+    pub fn type_(&self) -> &K::Type<'ctx> {
+        &self.typ
+    }
+
+    #[inline]
+    pub fn span(&self) -> Option<Span> {
+        self.span
+    }
+}
+
+impl<K: TypeKind> fmt::Display for Param<'_, K> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.flags.is_optional() {
+            write!(f, "opt ")?;
+        }
+        if self.flags.is_const() {
+            write!(f, "const ")?;
+        }
+        if self.flags.is_out() {
+            write!(f, "out ")?;
+        }
+        write!(f, "{}: {}", self.name, self.typ)
+    }
+}
+
+#[derive(Debug)]
+pub struct Field<'ctx> {
+    flags: FieldFlags,
+    typ: Type<'ctx>,
+    span: Option<Span>,
+    doc: Box<[&'ctx str]>,
+}
+
+impl<'ctx> Field<'ctx> {
+    #[inline]
+    pub fn new(
+        flags: FieldFlags,
+        typ: Type<'ctx>,
+        doc: impl Into<Box<[&'ctx str]>>,
+        span: Option<Span>,
+    ) -> Self {
+        Self {
+            flags,
+            typ,
+            doc: doc.into(),
+            span,
+        }
+    }
+
+    #[inline]
+    pub fn flags(&self) -> &FieldFlags {
+        &self.flags
+    }
+
+    #[inline]
+    pub fn type_(&self) -> &Type<'ctx> {
+        &self.typ
+    }
+
+    #[inline]
+    pub fn doc(&self) -> &[&'ctx str] {
+        &self.doc
+    }
+
+    #[inline]
+    pub fn span(&self) -> Option<Span> {
+        self.span
+    }
+}
+
+#[derive(Debug)]
+pub struct FieldEntry<'sym, 'ctx> {
+    index: FieldIndex,
+    name: &'ctx str,
+    field: &'sym Field<'ctx>,
+}
+
+impl<'ctx> FieldEntry<'_, 'ctx> {
+    #[inline]
+    pub fn index(&self) -> FieldIndex {
+        self.index
+    }
+
+    #[inline]
+    pub fn name(&self) -> &'ctx str {
+        self.name
+    }
+
+    #[inline]
+    pub fn field(&self) -> &Field<'ctx> {
+        self.field
+    }
+}
+
+#[bitfield(u8)]
+pub struct AggregateFlags {
+    pub is_native: bool,
+    pub is_abstract: bool,
+    pub is_final: bool,
+    pub is_import_only: bool,
+    pub is_struct: bool,
+    pub is_never_ref: bool,
+    #[bits(2)]
+    __: u8,
+}
+
+#[bitfield(u8)]
+pub struct FreeFunctionFlags {
+    pub is_exec: bool,
+    pub is_native: bool,
+    #[bits(6)]
+    __: u8,
+}
+
+#[bitfield(u8)]
+pub struct MethodFlags {
+    pub is_static: bool,
+    pub is_final: bool,
+    pub is_native: bool,
+    pub is_callback: bool,
+    pub is_unimplemented: bool,
+    #[bits(3)]
+    __: u8,
+}
+
+#[bitfield(u8)]
+pub struct ParamFlags {
+    pub is_optional: bool,
+    pub is_out: bool,
+    pub is_const: bool,
+    #[bits(5)]
+    __: u8,
+}
+
+#[bitfield(u8)]
+pub struct FieldFlags {
+    pub is_native: bool,
+    pub is_editable: bool,
+    pub is_inline: bool,
+    pub is_const: bool,
+    pub is_persistent: bool,
+    #[bits(3)]
+    __: u8,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct QualifiedName<'ctx>(SmallVec<[&'ctx str; 1]>);
+
+impl<'ctx> QualifiedName<'ctx> {
+    pub fn from_base_and_name<I>(base: &I, name: &'ctx str) -> Self
+    where
+        I: ?Sized,
+        for<'i> &'i I: IntoIterator<Item = &'i &'ctx str>,
+    {
+        base.into_iter()
+            .copied()
+            .chain([name])
+            .collect::<QualifiedName<'ctx>>()
+    }
+
+    pub fn as_single_component(&self) -> Option<&'ctx str> {
+        match &self.0[..] {
+            [name] => Some(name),
+            _ => None,
+        }
+    }
+}
+
+impl<'ctx> From<&'ctx str> for QualifiedName<'ctx> {
+    #[inline]
+    fn from(value: &'ctx str) -> Self {
+        QualifiedName(SmallVec::from_slice(&[value]))
+    }
+}
+
+impl<'ctx> From<&QualifiedName<'ctx>> for Cow<'ctx, str> {
+    fn from(value: &QualifiedName<'ctx>) -> Self {
+        value
+            .as_single_component()
+            .map_or_else(|| value.to_string().into(), Cow::Borrowed)
+    }
+}
+
+impl<'ctx> AsRef<[&'ctx str]> for QualifiedName<'ctx> {
+    #[inline]
+    fn as_ref(&self) -> &[&'ctx str] {
+        &self.0
+    }
+}
+
+impl<'a, 'ctx> IntoIterator for &'a QualifiedName<'ctx> {
+    type IntoIter = std::iter::Copied<std::slice::Iter<'a, &'ctx str>>;
+    type Item = &'ctx str;
+
+    #[inline]
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter().copied()
+    }
+}
+
+impl<'ctx> FromIterator<&'ctx str> for QualifiedName<'ctx> {
+    #[inline]
+    fn from_iter<T: IntoIterator<Item = &'ctx str>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}
+
+impl fmt::Display for QualifiedName<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", sep_by(&self.0, "."))
+    }
+}
+
+#[derive(Debug)]
+pub struct FieldRedefinition;

@@ -1,0 +1,117 @@
+---
+source: crates/compiler/frontend/tests/errors.rs
+expression: "DisplayDiagnostics(diagnostics, &sources)"
+input_file: crates/compiler/frontend/tests/data/class-checks.reds
+snapshot_kind: text
+---
+At tests\data\class-checks.reds:23:7
+class ClassDefinedTwice {}
+      ^^^^^^^^^^^^^^^^^^
+this name is already defined in the scope
+
+At tests\data\class-checks.reds:19:1
+@badAnnotation()
+^^^
+'badAnnotation' is not a valid annotation in this context
+
+At tests\data\class-checks.reds:49:14
+  native let field: Int32;
+             ^^^^^
+scripted types are not allowed to have native members
+
+At tests\data\class-checks.reds:51:15
+  native func NativeMethod()
+              ^^^^^^^^^^^^
+scripted types are not allowed to have native members
+
+At tests\data\class-checks.reds:55:18
+  persistent let string: String;
+                 ^^^^^^
+only Strings, Variants and Resources can be persisted
+
+At tests\data\class-checks.reds:56:18
+  persistent let variant: Variant;
+                 ^^^^^^^
+only Strings, Variants and Resources can be persisted
+
+At tests\data\class-checks.reds:57:18
+  persistent let res: ResRef;
+                 ^^^
+only Strings, Variants and Resources can be persisted
+
+At tests\data\class-checks.reds:65:8
+  func MethodA(a: A)
+       ^^^^^^^
+this function must have a body
+
+At tests\data\class-checks.reds:66:8
+  func MethodB() -> B
+       ^^^^^^^
+this function must have a body
+
+At tests\data\class-checks.reds:45:8
+  func Method() {}
+       ^^^^^^
+struct methods must be static
+
+At tests\data\class-checks.reds:4:7
+class ClassExtendingStruct extends Struct {}
+      ^^^^^^^^^^^^^^^^^^^^^
+this type cannot inherit from a struct
+
+At tests\data\class-checks.reds:17:7
+class ClassExtendingPrimitive extends Int32 {}
+      ^^^^^^^^^^^^^^^^^^^^^^^^
+this type cannot inherit from a primitive
+
+At tests\data\class-checks.reds:35:7
+class ClassWithInvalidTypeArgCounts extends AbstractClass<Int32, Int32> {
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+type AbstractClass expects 1 type arguments
+
+At tests\data\class-checks.reds:36:7
+  let field: AbstractClass;
+      ^^^^^
+type AbstractClass expects 1 type arguments
+
+At tests\data\class-checks.reds:38:15
+  func Method(a: AbstractClass) -> AbstractClass<String, String> {}
+              ^^^^^^^^^^^^^^^^
+type AbstractClass expects 1 type arguments
+
+At tests\data\class-checks.reds:41:7
+class CircularClassA extends CircularClassB {}
+      ^^^^^^^^^^^^^^^
+this class circularly extends itself
+
+At tests\data\class-checks.reds:65:16
+  func MethodA(a: A)
+               ^^^^
+the type 'A' appears in contravariant position, which is incompatible with its declaration
+
+At tests\data\class-checks.reds:66:8
+  func MethodB() -> B
+       ^^^^^^^
+the type 'B' appears in covariant position, which is incompatible with its declaration
+
+At tests\data\class-checks.reds:25:7
+class ClassWithDuplicateMethod {
+      ^^^^^^^^^^^^^^^^^^^^^^^^^
+this class contains a duplicated implementation of the 'Method' method
+
+At tests\data\class-checks.reds:11:7
+class IncompleteClass extends AbstractClass<Int32> {}
+      ^^^^^^^^^^^^^^^^
+this class is missing some required method implementation(s):
+  func UnimplementedMethod(a: Int32) {}
+
+At tests\data\class-checks.reds:35:7
+class ClassWithInvalidTypeArgCounts extends AbstractClass<Int32, Int32> {
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+this class is missing some required method implementation(s):
+  func UnimplementedMethod(a: Int32) {}
+
+At tests\data\class-checks.reds:30:7
+class ClassOverridingFinalMethod extends AbstractClass<Int32> {
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+this class overrides a final method 'FinalMethod'

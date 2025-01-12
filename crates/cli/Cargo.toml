@@ -1,0 +1,18 @@
+[package]
+name = "redscript-cli"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+redscript-compiler-api = { workspace = true, features = ["walkdir"] }
+
+log.workspace = true
+anyhow.workspace = true
+fern = { workspace = true, features = ["colored"] }
+vmap.workspace = true
+argh.workspace = true
+mimalloc.workspace = true
+
+[lints]
+workspace = true

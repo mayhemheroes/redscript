@@ -1,0 +1,18 @@
+[package]
+name = "redscript-parser"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+redscript-ast = { workspace = true, features = ["chumsky"] }
+
+chumsky.workspace = true
+
+[dev-dependencies]
+redscript-ast = { workspace = true, features = ["testing"] }
+
+similar-asserts.workspace = true
+
+[lints]
+workspace = true

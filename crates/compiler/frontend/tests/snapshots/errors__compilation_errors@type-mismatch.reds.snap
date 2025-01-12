@@ -1,0 +1,55 @@
+---
+source: crates/compiler/frontend/tests/errors.rs
+expression: "DisplayDiagnostics(diagnostics, &sources)"
+input_file: crates/compiler/frontend/tests/data/type-mismatch.reds
+snapshot_kind: text
+---
+At tests\data\type-mismatch.reds:11:18
+  let _: Int32 = "";
+                 ^^
+type mismatch: found String when expected Int32
+
+At tests\data\type-mismatch.reds:12:18
+  let _: CName = "";
+                 ^^
+expected a CName here, you should prefix your literal with 'n', e.g. n"lorem ipsum"
+
+At tests\data\type-mismatch.reds:12:18
+  let _: CName = "";
+                 ^^
+type mismatch: found String when expected CName
+
+At tests\data\type-mismatch.reds:13:22
+  let _: TweakDBID = "";
+                     ^^
+expected a TweakDBID here, you should prefix your literal with 't', e.g. t"lorem ipsum"
+
+At tests\data\type-mismatch.reds:13:22
+  let _: TweakDBID = "";
+                     ^^
+type mismatch: found String when expected TweakDBID
+
+At tests\data\type-mismatch.reds:14:19
+  let _: ResRef = "";
+                  ^^
+expected a ResRef here, you should prefix your literal with 'r', e.g. r"lorem ipsum"
+
+At tests\data\type-mismatch.reds:14:19
+  let _: ResRef = "";
+                  ^^
+type mismatch: found String when expected ResRef
+
+At tests\data\type-mismatch.reds:16:16
+  let _: Pet = new Animal();
+               ^^^^^^^^^^^^
+type mismatch: found Animal when expected Pet
+
+At tests\data\type-mismatch.reds:21:22
+  let c: List<Pet> = new List<Animal>();
+                     ^^^^^^^^^^^^^^^^^^
+type mismatch: found Animal when expected Pet
+
+At tests\data\type-mismatch.reds:25:30
+  let _: Predicate<Animal> = new Predicate<Pet>();
+                             ^^^^^^^^^^^^^^^^^^^^
+type mismatch: found Animal when expected Pet

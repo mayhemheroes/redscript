@@ -1,0 +1,29 @@
+[package]
+name = "redscript-io"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+bitfield-struct.workspace = true
+identity-hash = { workspace = true, optional = true }
+foldhash.workspace = true
+indexmap.workspace = true
+byte.workspace = true
+crc32fast.workspace = true
+vmap = { workspace = true, optional = true }
+
+[dev-dependencies]
+vmap.workspace = true
+argh.workspace = true
+
+[[example]]
+name = "cli"
+required-features = ["mmap"]
+
+[features]
+mmap = ["dep:vmap"]
+identity-hash = ["dep:identity-hash"]
+
+[lints]
+workspace = true
