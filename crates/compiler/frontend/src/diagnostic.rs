@@ -72,7 +72,7 @@ pub enum Diagnostic<'ctx> {
     NonStaticStructMethod(Span),
     #[error("scripted types are not allowed to have native members")]
     NativeMemberOfScriptedType(Span),
-    #[error("only Strings, Variants and Resources can be persisted")]
+    #[error("Strings, Variants and Resources cannot be persisted")]
     InvalidPersistentField(Span),
     #[error("fields cannot be added to structs")]
     StructFieldAddition(Span),

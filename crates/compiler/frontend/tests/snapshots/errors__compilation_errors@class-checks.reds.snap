@@ -27,17 +27,17 @@ scripted types are not allowed to have native members
 At tests\data\class-checks.reds:55:18
   persistent let string: String;
                  ^^^^^^
-only Strings, Variants and Resources can be persisted
+Strings, Variants and Resources cannot be persisted
 
 At tests\data\class-checks.reds:56:18
   persistent let variant: Variant;
                  ^^^^^^^
-only Strings, Variants and Resources can be persisted
+Strings, Variants and Resources cannot be persisted
 
 At tests\data\class-checks.reds:57:18
   persistent let res: ResRef;
                  ^^^
-only Strings, Variants and Resources can be persisted
+Strings, Variants and Resources cannot be persisted
 
 At tests\data\class-checks.reds:65:8
   func MethodA(a: A)
