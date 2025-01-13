@@ -1831,7 +1831,7 @@ impl fmt::Display for PolyType<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Mono(typ) => typ.fmt(f),
-            Self::Var(_) => write!(f, "α"),
+            Self::Var(_) => write!(f, "_"),
         }
     }
 }
