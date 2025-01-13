@@ -11,10 +11,10 @@ use crate::lexer::Token;
 use crate::parser_input;
 
 pub fn expr_with_span_rec<'tok, 'src: 'tok>(
-    expr: impl Parse<'tok, 'src, (SourceExpr<'src>, Span)>,
-    block: impl Parse<'tok, 'src, SourceBlock<'src>>,
+    expr: impl Parse<'tok, 'src, (SourceExpr<'src>, Span)> + 'tok,
+    block: impl Parse<'tok, 'src, SourceBlock<'src>> + 'tok,
 ) -> impl Parse<'tok, 'src, (SourceExpr<'src>, Span)> {
-    expr_with_span_internal(expr, block)
+    expr_with_span_impl(expr, block)
         // handle trailing period explicitly because it's a common error
         .then(just(Token::Period).or_not())
         .validate(|(exp, period), ctx, errs| {
@@ -25,9 +25,9 @@ pub fn expr_with_span_rec<'tok, 'src: 'tok>(
         })
 }
 
-fn expr_with_span_internal<'tok, 'src: 'tok>(
-    expr: impl Parse<'tok, 'src, (SourceExpr<'src>, Span)>,
-    block: impl Parse<'tok, 'src, SourceBlock<'src>>,
+fn expr_with_span_impl<'tok, 'src: 'tok>(
+    expr: impl Parse<'tok, 'src, (SourceExpr<'src>, Span)> + 'tok,
+    block: impl Parse<'tok, 'src, SourceBlock<'src>> + 'tok,
 ) -> impl Parse<'tok, 'src, (SourceExpr<'src>, Span)> {
     let value = select! {
         Token::Null => Expr::Null,
@@ -89,7 +89,8 @@ fn expr_with_span_internal<'tok, 'src: 'tok>(
         .repeated()
         .collect::<Vec<_>>()
         .nested_in(select_ref! { Token::InterpStr(tok) = ex => parser_input(tok, *ex.ctx()) })
-        .map(|parts| Expr::InterpolatedString(parts.into()));
+        .map(|parts| Expr::InterpolatedString(parts.into()))
+        .erase();
 
     let ident = ident();
     let typ = type_with_span();
@@ -113,7 +114,8 @@ fn expr_with_span_internal<'tok, 'src: 'tok>(
         .map(|(typ, args)| Expr::New {
             typ: typ.into(),
             args: args.into(),
-        });
+        })
+        .erase();
 
     let array = expr
         .clone()
@@ -121,7 +123,8 @@ fn expr_with_span_internal<'tok, 'src: 'tok>(
         .allow_trailing()
         .collect::<Vec<_>>()
         .delimited_by(just(Token::LBracket), just(Token::RBracket))
-        .map(|els| Expr::ArrayLit(els.into()));
+        .map(|els| Expr::ArrayLit(els.into()))
+        .erase();
 
     let lambda = ident
         .clone()
@@ -141,7 +144,8 @@ fn expr_with_span_internal<'tok, 'src: 'tok>(
         .map(|(params, body)| Expr::Lambda {
             params: params.into(),
             body,
-        });
+        })
+        .erase();
 
     let parens = expr
         .clone()
@@ -165,7 +169,8 @@ fn expr_with_span_internal<'tok, 'src: 'tok>(
             (Token::LBrace, Token::RBrace),
         ],
         |span| (Expr::Error, span),
-    )));
+    )))
+    .erase();
 
     let member_access = just(Token::Period)
         .ignore_then(extended_ident())
@@ -203,7 +208,8 @@ fn expr_with_span_internal<'tok, 'src: 'tok>(
                 (Token::LBrace, Token::RBrace),
             ],
             |span| (Expr::Error, span),
-        )));
+        )))
+        .erase();
 
     let unops = unop.repeated().foldr_with(member, |op, expr, e| {
         let expr = Box::new(expr);
@@ -222,7 +228,8 @@ fn expr_with_span_internal<'tok, 'src: 'tok>(
     let binops = as_
         .clone()
         .then(binop.then(as_).repeated().collect::<Vec<_>>())
-        .map(|(lhs, ops)| climb_prec(lhs, &mut ops.into_iter().peekable(), 0));
+        .map(|(lhs, ops)| climb_prec(lhs, &mut ops.into_iter().peekable(), 0))
+        .erase();
 
     let ternary = binops
         .then(
@@ -254,7 +261,7 @@ fn expr_with_span_internal<'tok, 'src: 'tok>(
             None => lhs,
         });
 
-    assign.labelled("expression").as_context()
+    assign.labelled("expression").as_context().erase()
 }
 
 fn climb_prec<'src, I>(

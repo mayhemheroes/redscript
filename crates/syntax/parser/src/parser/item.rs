@@ -16,9 +16,9 @@ use super::{
 use crate::lexer::Token;
 
 pub fn item_decl_rec<'tok, 'src: 'tok>(
-    item_decl: impl Parse<'tok, 'src, SourceItemDecl<'src>>,
-    block: impl Parse<'tok, 'src, SourceBlock<'src>>,
-    expr: impl Parse<'tok, 'src, (SourceExpr<'src>, Span)>,
+    item_decl: impl Parse<'tok, 'src, SourceItemDecl<'src>> + 'tok,
+    block: impl Parse<'tok, 'src, SourceBlock<'src>> + 'tok,
+    expr: impl Parse<'tok, 'src, (SourceExpr<'src>, Span)> + 'tok,
 ) -> impl Parse<'tok, 'src, SourceItemDecl<'src>> {
     let annotations = annotation(expr.clone())
         .map_with(|a, e| (a, e.span()))
@@ -35,12 +35,13 @@ pub fn item_decl_rec<'tok, 'src: 'tok>(
             ItemDecl::new(annotations, visibility, qualifiers.value, doc, item)
         })
         .labelled("declaration")
+        .erase()
 }
 
 pub fn item_rec<'tok, 'src: 'tok>(
-    item_decl: impl Parse<'tok, 'src, SourceItemDecl<'src>>,
-    block: impl Parse<'tok, 'src, SourceBlock<'src>>,
-    expr: impl Parse<'tok, 'src, (SourceExpr<'src>, Span)>,
+    item_decl: impl Parse<'tok, 'src, SourceItemDecl<'src>> + 'tok,
+    block: impl Parse<'tok, 'src, SourceBlock<'src>> + 'tok,
+    expr: impl Parse<'tok, 'src, (SourceExpr<'src>, Span)> + 'tok,
 ) -> impl Parse<'tok, 'src, SourceItem<'src>> {
     choice((
         import().map(Item::Import),
@@ -50,11 +51,12 @@ pub fn item_rec<'tok, 'src: 'tok>(
         field(expr).map(Item::Let),
     ))
     .labelled("item")
+    .erase()
 }
 
 fn function<'tok, 'src: 'tok>(
-    block: impl Parse<'tok, 'src, SourceBlock<'src>>,
-    expr: impl Parse<'tok, 'src, (SourceExpr<'src>, Span)>,
+    block: impl Parse<'tok, 'src, SourceBlock<'src>> + 'tok,
+    expr: impl Parse<'tok, 'src, (SourceExpr<'src>, Span)> + 'tok,
 ) -> impl Parse<'tok, 'src, SourceFunction<'src>> {
     let param_qualifiers = select! {
         Token::Ident("opt") => ParamQualifiers::OPTIONAL,
@@ -101,10 +103,11 @@ fn function<'tok, 'src: 'tok>(
                 body,
             )
         })
+        .erase()
 }
 
 fn field<'tok, 'src: 'tok>(
-    expr: impl Parse<'tok, 'src, (SourceExpr<'src>, Span)>,
+    expr: impl Parse<'tok, 'src, (SourceExpr<'src>, Span)> + 'tok,
 ) -> impl Parse<'tok, 'src, SourceField<'src>> {
     just(Token::Ident("let"))
         .ignore_then(extended_ident_with_span())
@@ -112,6 +115,7 @@ fn field<'tok, 'src: 'tok>(
         .then(just(Token::Assign).ignore_then(expr).or_not())
         .then_ignore(just(Token::Semicolon))
         .map(|((name, ty), default)| Field::new(name, ty.into(), default.map(Box::new)))
+        .erase()
 }
 
 fn enum_<'tok, 'src: 'tok>() -> impl Parse<'tok, 'src, SourceEnum<'src>> {
@@ -130,10 +134,11 @@ fn enum_<'tok, 'src: 'tok>() -> impl Parse<'tok, 'src, SourceEnum<'src>> {
         .then(variants)
         .then_ignore(just(Token::Semicolon).or_not())
         .map(|(name, variants)| Enum::new(name, variants))
+        .erase()
 }
 
 fn aggregate<'tok, 'src: 'tok>(
-    item_decl: impl Parse<'tok, 'src, SourceItemDecl<'src>>,
+    item_decl: impl Parse<'tok, 'src, SourceItemDecl<'src>> + 'tok,
 ) -> impl Parse<'tok, 'src, SourceItem<'src>> {
     let is_struct = select! {
         Token::Ident("class") => false,
@@ -169,6 +174,7 @@ fn aggregate<'tok, 'src: 'tok>(
                 Item::Class(aggregate)
             }
         })
+        .erase()
 }
 
 fn import<'tok, 'src: 'tok>() -> impl Parse<'tok, 'src, Import<'src>> {
@@ -197,6 +203,7 @@ fn import<'tok, 'src: 'tok>() -> impl Parse<'tok, 'src, Import<'src>> {
             Some(None) => Import::All(path),
             None => Import::Exact(path),
         })
+        .erase()
 }
 
 fn visibility<'tok, 'src: 'tok>() -> impl Parse<'tok, 'src, Visibility> {
@@ -209,7 +216,7 @@ fn visibility<'tok, 'src: 'tok>() -> impl Parse<'tok, 'src, Visibility> {
 }
 
 fn annotation<'tok, 'src: 'tok>(
-    expr: impl Parse<'tok, 'src, (SourceExpr<'src>, Span)>,
+    expr: impl Parse<'tok, 'src, (SourceExpr<'src>, Span)> + 'tok,
 ) -> impl Parse<'tok, 'src, SourceAnnotation<'src>> {
     just(Token::At)
         .ignore_then(ident())
@@ -220,6 +227,7 @@ fn annotation<'tok, 'src: 'tok>(
                 .delimited_by(just(Token::LParen), just(Token::RParen)),
         )
         .map(|(name, args)| Annotation::new(name, args))
+        .erase()
 }
 
 fn item_qualifier<'tok, 'src: 'tok>() -> impl Parse<'tok, 'src, ItemQualifiers> {

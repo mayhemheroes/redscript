@@ -7,15 +7,15 @@ use super::{ident_with_span, type_with_span, Parse};
 use crate::lexer::Token;
 
 pub fn stmt_rec<'tok, 'src: 'tok>(
-    expr: impl Parse<'tok, 'src, (SourceExpr<'src>, Span)>,
-    stmt: impl Parse<'tok, 'src, SourceStmt<'src>>,
-    block: impl Parse<'tok, 'src, SourceBlock<'src>>,
+    expr: impl Parse<'tok, 'src, (SourceExpr<'src>, Span)> + 'tok,
+    stmt: impl Parse<'tok, 'src, SourceStmt<'src>> + 'tok,
+    block: impl Parse<'tok, 'src, SourceBlock<'src>> + 'tok,
 ) -> impl Parse<'tok, 'src, SourceStmt<'src>> {
     let typ = type_with_span();
 
     let semicolon = just(Token::Semicolon).or_not().validate(|semi, ctx, errs| {
         if semi.is_none() {
-            errs.emit(Rich::custom(ctx.span(), "expected ';'"));
+            errs.emit(Rich::custom(ctx.span(), "expected ';' after expression"));
         }
     });
 
@@ -116,6 +116,7 @@ pub fn stmt_rec<'tok, 'src: 'tok>(
     ))
     .labelled("statement")
     .as_context()
+    .erase()
 }
 
 #[cfg(test)]
@@ -277,7 +278,7 @@ mod tests {
         assert_eq!(
             errors,
             vec![Error::Parse(
-                "expected ';' in statement".into(),
+                "expected ';' after expression in statement".into(),
                 Span::from((file, 0..1))
             )]
         );
@@ -300,7 +301,10 @@ mod tests {
                     "unexpected '.' in statement".into(),
                     Span::from((file, 0..2))
                 ),
-                Error::Parse("expected ';' in statement".into(), Span::from((file, 0..2)))
+                Error::Parse(
+                    "expected ';' after expression in statement".into(),
+                    Span::from((file, 0..2))
+                )
             ]
         );
         assert_eq!(

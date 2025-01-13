@@ -26,6 +26,20 @@ pub(super) type ParserExtra<'tok, 'src> = extra::Full<Rich<'tok, Token<'src>, Sp
 pub trait Parse<'tok, 'src: 'tok, A>:
     Parser<'tok, ParserInput<'tok, 'src>, A, ParserExtra<'tok, 'src>> + Clone
 {
+    /// Wraps the parser in a [`Boxed`] erasing the types when in debug mode. Makes compilation
+    /// significantly faster for complex parsers.
+    #[cfg(debug_assertions)]
+    fn erase<'a>(self) -> Boxed<'tok, 'a, ParserInput<'tok, 'src>, A, ParserExtra<'tok, 'src>>
+    where
+        Self: 'tok + 'a,
+    {
+        Parser::boxed(self)
+    }
+
+    #[cfg(not(debug_assertions))]
+    fn erase(self) -> impl Parse<'tok, 'src, A> {
+        self
+    }
 }
 
 impl<'tok, 'src: 'tok, A, P> Parse<'tok, 'src, A> for P where
@@ -86,7 +100,7 @@ fn block_stmt_expr_parsers<'tok, 'src: 'tok>() -> (
 }
 
 fn block_rec<'tok, 'src: 'tok>(
-    stmt: impl Parse<'tok, 'src, SourceStmt<'src>>,
+    stmt: impl Parse<'tok, 'src, SourceStmt<'src>> + 'tok,
 ) -> impl Parse<'tok, 'src, SourceBlock<'src>> {
     stmt.map_with(|stmt, e| (stmt, e.span()))
         .repeated()
@@ -103,6 +117,7 @@ fn block_rec<'tok, 'src: 'tok>(
             |span| Block::single((Stmt::Expr((Expr::Error, span).into()), span)),
         )))
         .labelled("block")
+        .erase()
 }
 
 pub fn module<'tok, 'src: 'tok>() -> impl Parse<'tok, 'src, SourceModule<'src>> {
@@ -121,6 +136,7 @@ pub fn module<'tok, 'src: 'tok>() -> impl Parse<'tok, 'src, SourceModule<'src>> 
                 .collect::<Vec<_>>(),
         )
         .map(|(path, items)| Module::new(path.map(Path::new), items))
+        .erase()
 }
 
 fn ident<'tok, 'src: 'tok>() -> impl Parse<'tok, 'src, &'src str> {
@@ -208,6 +224,7 @@ fn type_param<'tok, 'src: 'tok>() -> impl Parse<'tok, 'src, SourceTypeParam<'src
                 extends.map(Box::new),
             )
         })
+        .erase()
 }
 
 fn type_params<'tok, 'src: 'tok>() -> impl Parse<'tok, 'src, Vec<SourceTypeParam<'src>>> {
