@@ -35,7 +35,7 @@ pub fn item_decl_rec<'tok, 'src: 'tok>(
             ItemDecl::new(annotations, visibility, qualifiers.value, doc, item)
         })
         .labelled("declaration")
-        .erase()
+        .erased()
 }
 
 pub fn item_rec<'tok, 'src: 'tok>(
@@ -51,7 +51,7 @@ pub fn item_rec<'tok, 'src: 'tok>(
         field(expr).map(Item::Let),
     ))
     .labelled("item")
-    .erase()
+    .erased()
 }
 
 fn function<'tok, 'src: 'tok>(
@@ -103,7 +103,7 @@ fn function<'tok, 'src: 'tok>(
                 body,
             )
         })
-        .erase()
+        .erased()
 }
 
 fn field<'tok, 'src: 'tok>(
@@ -115,7 +115,7 @@ fn field<'tok, 'src: 'tok>(
         .then(just(Token::Assign).ignore_then(expr).or_not())
         .then_ignore(just(Token::Semicolon))
         .map(|((name, ty), default)| Field::new(name, ty.into(), default.map(Box::new)))
-        .erase()
+        .erased()
 }
 
 fn enum_<'tok, 'src: 'tok>() -> impl Parse<'tok, 'src, SourceEnum<'src>> {
@@ -134,7 +134,7 @@ fn enum_<'tok, 'src: 'tok>() -> impl Parse<'tok, 'src, SourceEnum<'src>> {
         .then(variants)
         .then_ignore(just(Token::Semicolon).or_not())
         .map(|(name, variants)| Enum::new(name, variants))
-        .erase()
+        .erased()
 }
 
 fn aggregate<'tok, 'src: 'tok>(
@@ -174,7 +174,7 @@ fn aggregate<'tok, 'src: 'tok>(
                 Item::Class(aggregate)
             }
         })
-        .erase()
+        .erased()
 }
 
 fn import<'tok, 'src: 'tok>() -> impl Parse<'tok, 'src, Import<'src>> {
@@ -203,7 +203,7 @@ fn import<'tok, 'src: 'tok>() -> impl Parse<'tok, 'src, Import<'src>> {
             Some(None) => Import::All(path),
             None => Import::Exact(path),
         })
-        .erase()
+        .erased()
 }
 
 fn visibility<'tok, 'src: 'tok>() -> impl Parse<'tok, 'src, Visibility> {
@@ -227,7 +227,7 @@ fn annotation<'tok, 'src: 'tok>(
                 .delimited_by(just(Token::LParen), just(Token::RParen)),
         )
         .map(|(name, args)| Annotation::new(name, args))
-        .erase()
+        .erased()
 }
 
 fn item_qualifier<'tok, 'src: 'tok>() -> impl Parse<'tok, 'src, ItemQualifiers> {

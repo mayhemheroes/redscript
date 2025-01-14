@@ -90,7 +90,7 @@ fn expr_with_span_impl<'tok, 'src: 'tok>(
         .collect::<Vec<_>>()
         .nested_in(select_ref! { Token::InterpStr(tok) = ex => parser_input(tok, *ex.ctx()) })
         .map(|parts| Expr::InterpolatedString(parts.into()))
-        .erase();
+        .erased();
 
     let ident = ident();
     let typ = type_with_span();
@@ -115,7 +115,7 @@ fn expr_with_span_impl<'tok, 'src: 'tok>(
             typ: typ.into(),
             args: args.into(),
         })
-        .erase();
+        .erased();
 
     let array = expr
         .clone()
@@ -124,7 +124,7 @@ fn expr_with_span_impl<'tok, 'src: 'tok>(
         .collect::<Vec<_>>()
         .delimited_by(just(Token::LBracket), just(Token::RBracket))
         .map(|els| Expr::ArrayLit(els.into()))
-        .erase();
+        .erased();
 
     let lambda = ident
         .clone()
@@ -145,7 +145,7 @@ fn expr_with_span_impl<'tok, 'src: 'tok>(
             params: params.into(),
             body,
         })
-        .erase();
+        .erased();
 
     let parens = expr
         .clone()
@@ -170,7 +170,7 @@ fn expr_with_span_impl<'tok, 'src: 'tok>(
         ],
         |span| (Expr::Error, span),
     )))
-    .erase();
+    .erased();
 
     let member_access = just(Token::Period)
         .ignore_then(extended_ident())
@@ -209,7 +209,7 @@ fn expr_with_span_impl<'tok, 'src: 'tok>(
             ],
             |span| (Expr::Error, span),
         )))
-        .erase();
+        .erased();
 
     let unops = unop.repeated().foldr_with(member, |op, expr, e| {
         let expr = Box::new(expr);
@@ -229,7 +229,7 @@ fn expr_with_span_impl<'tok, 'src: 'tok>(
         .clone()
         .then(binop.then(as_).repeated().collect::<Vec<_>>())
         .map(|(lhs, ops)| climb_prec(lhs, &mut ops.into_iter().peekable(), 0))
-        .erase();
+        .erased();
 
     let ternary = binops
         .then(
@@ -261,7 +261,7 @@ fn expr_with_span_impl<'tok, 'src: 'tok>(
             None => lhs,
         });
 
-    assign.labelled("expression").as_context().erase()
+    assign.labelled("expression").as_context().erased()
 }
 
 fn climb_prec<'src, I>(

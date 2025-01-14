@@ -116,7 +116,7 @@ pub fn stmt_rec<'tok, 'src: 'tok>(
     ))
     .labelled("statement")
     .as_context()
-    .erase()
+    .erased()
 }
 
 #[cfg(test)]

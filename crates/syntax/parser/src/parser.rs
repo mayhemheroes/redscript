@@ -29,7 +29,7 @@ pub trait Parse<'tok, 'src: 'tok, A>:
     /// Wraps the parser in a [`Boxed`] erasing the types when in debug mode. Makes compilation
     /// significantly faster for complex parsers.
     #[cfg(debug_assertions)]
-    fn erase<'a>(self) -> Boxed<'tok, 'a, ParserInput<'tok, 'src>, A, ParserExtra<'tok, 'src>>
+    fn erased<'a>(self) -> Boxed<'tok, 'a, ParserInput<'tok, 'src>, A, ParserExtra<'tok, 'src>>
     where
         Self: 'tok + 'a,
     {
@@ -37,7 +37,8 @@ pub trait Parse<'tok, 'src: 'tok, A>:
     }
 
     #[cfg(not(debug_assertions))]
-    fn erase(self) -> impl Parse<'tok, 'src, A> {
+    #[inline]
+    fn erased(self) -> impl Parse<'tok, 'src, A> {
         self
     }
 }
@@ -117,7 +118,7 @@ fn block_rec<'tok, 'src: 'tok>(
             |span| Block::single((Stmt::Expr((Expr::Error, span).into()), span)),
         )))
         .labelled("block")
-        .erase()
+        .erased()
 }
 
 pub fn module<'tok, 'src: 'tok>() -> impl Parse<'tok, 'src, SourceModule<'src>> {
@@ -136,7 +137,7 @@ pub fn module<'tok, 'src: 'tok>() -> impl Parse<'tok, 'src, SourceModule<'src>> 
                 .collect::<Vec<_>>(),
         )
         .map(|(path, items)| Module::new(path.map(Path::new), items))
-        .erase()
+        .erased()
 }
 
 fn ident<'tok, 'src: 'tok>() -> impl Parse<'tok, 'src, &'src str> {
@@ -224,7 +225,7 @@ fn type_param<'tok, 'src: 'tok>() -> impl Parse<'tok, 'src, SourceTypeParam<'src
                 extends.map(Box::new),
             )
         })
-        .erase()
+        .erased()
 }
 
 fn type_params<'tok, 'src: 'tok>() -> impl Parse<'tok, 'src, Vec<SourceTypeParam<'src>>> {
