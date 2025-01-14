@@ -1,3 +1,4 @@
+use std::fmt;
 use std::path::Path;
 
 pub use redscript_ast::{SourceMap, Span};
@@ -111,6 +112,14 @@ impl<'ctx> Diagnostics<'ctx> {
 impl<'ctx> From<Vec<Diagnostic<'ctx>>> for Diagnostics<'ctx> {
     fn from(diagnostics: Vec<Diagnostic<'ctx>>) -> Self {
         Self(diagnostics)
+    }
+}
+
+impl fmt::Display for Diagnostics<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.as_slice()
+            .iter()
+            .try_for_each(|d| writeln!(f, "{}", d))
     }
 }
 

@@ -1,0 +1,55 @@
+---
+source: crates/compiler/backend/tests/bytecode.rs
+expression: "BytecodePrinter::new(&bundle, bundle_len)"
+input_file: crates/compiler/backend/tests/data/number-literal.reds
+snapshot_kind: text
+---
+// Test; (0)
+assign
+local 0
+f32.const 1
+assign
+local 0
+f32.const 2
+assign
+local 1
+f64.const 3
+assign
+local 1
+f64.const 4
+assign
+local 1
+f64.const 5
+assign
+local 2
+i8.const 6
+assign
+local 3
+i16.const 7
+assign
+local 4
+i32.const 8
+assign
+local 5
+i64.const 7
+assign
+local 5
+i64.const 8
+assign
+local 6
+u8.const 9
+assign
+local 7
+u16.const 10
+assign
+local 8
+u32.const 11
+assign
+local 8
+u32.const 12
+assign
+local 9
+u64.const 13
+assign
+local 9
+u64.const 14

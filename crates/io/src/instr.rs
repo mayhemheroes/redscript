@@ -1,3 +1,4 @@
+use std::fmt;
 use std::ops::{Add, Sub};
 
 use byte::{Measure, TryRead, TryWrite};
@@ -493,6 +494,150 @@ impl<L> Instr<L> {
     }
 }
 
+impl<L: fmt::Display> fmt::Display for Instr<L> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Instr::Nop => write!(f, "nop"),
+            Instr::Null => write!(f, "ref.null"),
+            Instr::I32One => write!(f, "i32.one"),
+            Instr::I32Zero => write!(f, "i32.zero"),
+            Instr::I8Const(val) => write!(f, "i8.const {}", val),
+            Instr::I16Const(val) => write!(f, "i16.const {}", val),
+            Instr::I32Const(val) => write!(f, "i32.const {}", val),
+            Instr::I64Const(val) => write!(f, "i64.const {}", val),
+            Instr::U8Const(val) => write!(f, "u8.const {}", val),
+            Instr::U16Const(val) => write!(f, "u16.const {}", val),
+            Instr::U32Const(val) => write!(f, "u32.const {}", val),
+            Instr::U64Const(val) => write!(f, "u64.const {}", val),
+            Instr::F32Const(val) => write!(f, "f32.const {}", val),
+            Instr::F64Const(val) => write!(f, "f64.const {}", val),
+            Instr::CNameConst(idx) => write!(f, "cname.const {}", idx),
+            Instr::EnumConst { enum_, value } => write!(f, "enum.const {} {}", enum_, value),
+            Instr::StringConst(idx) => write!(f, "string.const {}", idx),
+            Instr::TweakDbIdConst(idx) => write!(f, "tweakdb.const {}", idx),
+            Instr::ResourceConst(idx) => write!(f, "resource.const {}", idx),
+            Instr::TrueConst => write!(f, "true.const"),
+            Instr::FalseConst => write!(f, "false.const"),
+            Instr::Breakpoint(bp) => write!(f, "breakpoint {}", bp.line),
+            Instr::Assign => write!(f, "assign"),
+            Instr::Target(label) => write!(f, "target {}", label),
+            Instr::Local(idx) => write!(f, "local {}", idx),
+            Instr::Param(idx) => write!(f, "param {}", idx),
+            Instr::ObjectField(idx) => write!(f, "object.field {}", idx),
+            Instr::ExternalVar => write!(f, "external"),
+            Instr::Switch(instr) => write!(f, "switch {}", instr.expr_type),
+            Instr::SwitchLabel(instr) => {
+                write!(f, "switch.label {} {}", instr.next_case, instr.body)
+            }
+            Instr::SwitchDefault => write!(f, "switch.default"),
+            Instr::Jump(label) => write!(f, "jump {}", label.target),
+            Instr::JumpIfFalse(label) => write!(f, "jump.if_not {}", label.target),
+            Instr::Skip(label) => write!(f, "skip {}", label.target),
+            Instr::Conditional(instr) => write!(f, "cond {} {}", instr.false_label, instr.exit),
+            Instr::Construct { arg_count, class } => {
+                write!(f, "struct.new {} {}", arg_count, class)
+            }
+            Instr::InvokeStatic {
+                exit,
+                line,
+                function,
+                flags,
+            } => write!(
+                f,
+                "invoke.static j{} l{} f{} {}",
+                exit.target, line, function, flags
+            ),
+            Instr::InvokeVirtual {
+                exit,
+                line,
+                function,
+                flags,
+            } => write!(
+                f,
+                "invoke.virtual j{} l{} f{} {}",
+                exit.target, line, function, flags
+            ),
+            Instr::ParamEnd => write!(f, "param.end"),
+            Instr::Return => write!(f, "return"),
+            Instr::StructField(idx) => write!(f, "struct.field {}", idx),
+            Instr::Context(label) => write!(f, "ctx {}", label.target),
+            Instr::Equals(idx) => write!(f, "eq {}", idx),
+            Instr::RefStringEqualsString(idx) => write!(f, "refstr.eq {}", idx),
+            Instr::StringEqualsRefString(idx) => write!(f, "str.eq {}", idx),
+            Instr::NotEquals(idx) => write!(f, "neq {}", idx),
+            Instr::RefStringNotEqualsString(idx) => {
+                write!(f, "refstr.neq {}", idx)
+            }
+            Instr::StringNotEqualsRefString(idx) => {
+                write!(f, "str.neq {}", idx)
+            }
+            Instr::New(idx) => write!(f, "object.new {}", idx),
+            Instr::Delete => write!(f, "object.delete"),
+            Instr::This => write!(f, "this"),
+            Instr::Profile(_) => write!(f, "profile"),
+            Instr::ArrayClear(idx) => write!(f, "array.clear {}", idx),
+            Instr::ArraySize(idx) => write!(f, "array.size {}", idx),
+            Instr::ArrayResize(idx) => write!(f, "array.resize {}", idx),
+            Instr::ArrayFindFirst(idx) => write!(f, "array.find_first {}", idx),
+            Instr::ArrayFindFirstFast(idx) => write!(f, "array.find_first_fast {}", idx),
+            Instr::ArrayFindLast(idx) => write!(f, "array.find_last {}", idx),
+            Instr::ArrayFindLastFast(idx) => write!(f, "array.find_last_fast {}", idx),
+            Instr::ArrayContains(idx) => write!(f, "array.contains {}", idx),
+            Instr::ArrayContainsFast(idx) => write!(f, "array.contains_fast {}", idx),
+            Instr::ArrayCount(idx) => write!(f, "array.count {}", idx),
+            Instr::ArrayCountFast(idx) => write!(f, "array.count_fast {}", idx),
+            Instr::ArrayPush(idx) => write!(f, "array.push {}", idx),
+            Instr::ArrayPop(idx) => write!(f, "array.pop {}", idx),
+            Instr::ArrayInsert(idx) => write!(f, "array.insert {}", idx),
+            Instr::ArrayRemove(idx) => write!(f, "array.remove {}", idx),
+            Instr::ArrayRemoveFast(idx) => write!(f, "array.remove_fast {}", idx),
+            Instr::ArrayGrow(idx) => write!(f, "array.grow {}", idx),
+            Instr::ArrayErase(idx) => write!(f, "array.erase {}", idx),
+            Instr::ArrayEraseFast(idx) => write!(f, "array.erase_fast {}", idx),
+            Instr::ArrayLast(idx) => write!(f, "array.last {}", idx),
+            Instr::ArrayElement(idx) => write!(f, "array.element {}", idx),
+            Instr::ArraySort(idx) => write!(f, "array.sort {}", idx),
+            Instr::ArraySortByPredicate(idx) => write!(f, "array.sort_by {}", idx),
+            Instr::StaticArraySize(idx) => write!(f, "static_array.size {}", idx),
+            Instr::StaticArrayFindFirst(idx) => write!(f, "static_array.find_first {}", idx),
+            Instr::StaticArrayFindFirstFast(idx) => {
+                write!(f, "static_array.find_first_fast {}", idx)
+            }
+            Instr::StaticArrayFindLast(idx) => write!(f, "static_array.find_last {}", idx),
+            Instr::StaticArrayFindLastFast(idx) => write!(f, "static_array.find_last_fast {}", idx),
+            Instr::StaticArrayContains(idx) => write!(f, "static_array.contains {}", idx),
+            Instr::StaticArrayContainsFast(idx) => write!(f, "static_array.contains_fast {}", idx),
+            Instr::StaticArrayCount(idx) => write!(f, "static_array.count {}", idx),
+            Instr::StaticArrayCountFast(idx) => write!(f, "static_array.count_fast {}", idx),
+            Instr::StaticArrayLast(idx) => write!(f, "static_array.last {}", idx),
+            Instr::StaticArrayElement(idx) => write!(f, "static_array.element {}", idx),
+            Instr::RefToBool => write!(f, "ref.to_bool"),
+            Instr::WeakRefToBool => write!(f, "wref_to_bool"),
+            Instr::EnumToI32 { enum_type, size } => write!(f, "enum.to_int {} {}", enum_type, size),
+            Instr::I32ToEnum { enum_type, size } => {
+                write!(f, "enum.from_int {} {}", enum_type, size)
+            }
+            Instr::DynamicCast { class, is_weak } if *is_weak => {
+                write!(f, "wref.dyncast {}", class)
+            }
+            Instr::DynamicCast { class, .. } => write!(f, "ref.dyncast {}", class),
+            Instr::ToString(idx) => write!(f, "to_string {}", idx),
+            Instr::ToVariant(idx) => write!(f, "variant.new {}", idx),
+            Instr::FromVariant(idx) => write!(f, "variant.extract {}", idx),
+            Instr::VariantIsDefined => write!(f, "variant.is_defined"),
+            Instr::VariantIsRef => write!(f, "variant.is_ref"),
+            Instr::VariantIsArray => write!(f, "variant.is_array"),
+            Instr::VariantTypeName => write!(f, "variant.type_name"),
+            Instr::VariantToString => write!(f, "variant.to_string"),
+            Instr::WeakRefToRef => write!(f, "wref.to_ref"),
+            Instr::RefToWeakRef => write!(f, "ref.to_wref"),
+            Instr::WeakRefNull => write!(f, "wref.null"),
+            Instr::AsRef(idx) => write!(f, "as_ref {}", idx),
+            Instr::Deref(idx) => write!(f, "deref {}", idx),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, TryRead, TryWrite, Measure)]
 pub struct Jump<Loc> {
     target: Loc,
@@ -672,6 +817,12 @@ impl Sub<i16> for Offset {
     }
 }
 
+impl fmt::Display for Offset {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, TryRead, TryWrite, Measure)]
 pub struct InvokeFlags(u16);
 
@@ -684,5 +835,11 @@ impl InvokeFlags {
     #[inline]
     pub fn is_rvalue_ref(&self, nth: u8) -> bool {
         self.0 & (1 << nth) != 0
+    }
+}
+
+impl fmt::Display for InvokeFlags {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:016b}", self.0)
     }
 }

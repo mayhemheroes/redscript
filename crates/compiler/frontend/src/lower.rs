@@ -233,39 +233,42 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 });
                 (ir::Expr::Local(local.id, *span), array_t)
             }
-            ast::Expr::InterpolatedString(elems) => elems
-                .iter()
-                .try_fold(None, |acc, elem| match elem {
-                    ast::StrPart::Expr(expr @ (_, span)) => {
-                        let result = match acc {
-                            Some(lhs) => {
-                                let args = [lhs, self.lower_expr(expr, env)?];
-                                let (call, typ) =
-                                    self.free_function_call("OperatorAdd", args, env, *span)?;
-                                let expr = ir::Expr::Call {
+            ast::Expr::InterpolatedString(elems) => {
+                let str = elems
+                    .iter()
+                    .try_fold(None, |acc, elem| {
+                        let elem = match elem {
+                            ast::StrPart::Expr(expr @ (_, span)) => {
+                                let args = [self.lower_expr(expr, env)?];
+                                let (call, _) =
+                                    self.free_function_call("ToString", args, env, *span)?;
+                                ir::Expr::Call {
                                     call: call.into(),
                                     span: *span,
-                                };
-                                (expr, typ)
+                                }
                             }
-                            None => self.lower_expr(expr, env)?,
+                            ast::StrPart::Str(str) => {
+                                ir::Expr::Const(ir::Const::Str(str.clone()), *span)
+                            }
                         };
-                        Ok(Some(result))
-                    }
-                    ast::StrPart::Str(str) => {
-                        let typ = PolyType::nullary(predef::STRING);
-                        Ok(Some((
-                            ir::Expr::Const(ir::Const::Str(str.clone()), *span),
-                            typ,
-                        )))
-                    }
-                })?
-                .unwrap_or_else(|| {
-                    (
-                        ir::Expr::Const(ir::Const::Str("".into()), *span),
-                        PolyType::nullary(predef::STRING),
-                    )
-                }),
+                        let res = match acc {
+                            Some(lhs) => {
+                                let args =
+                                    [lhs, elem].map(|e| (e, PolyType::nullary(predef::STRING)));
+                                let (call, _) =
+                                    self.free_function_call("OperatorAdd", args, env, *span)?;
+                                ir::Expr::Call {
+                                    call: call.into(),
+                                    span: *span,
+                                }
+                            }
+                            None => elem,
+                        };
+                        Ok(Some(res))
+                    })?
+                    .unwrap_or_else(|| ir::Expr::Const(ir::Const::Str("".into()), *span));
+                (str, PolyType::nullary(predef::STRING))
+            }
             ast::Expr::Assign { lhs, rhs } => {
                 let (lhs, lhs_t) = self.lower_expr(lhs, env)?;
                 let (mut rhs, rhs_t) = self.lower_expr_with(rhs, Some(&lhs_t), env)?;
@@ -653,6 +656,17 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 .ok_or(Error::CannotLookupMember(*expr_span))?
                 .into_owned();
 
+            let (upper_bound, mode) = if matches!(**expr, (ast::Expr::Super, _)) {
+                (
+                    upper_bound
+                        .instantiate_base(self.symbols)
+                        .ok_or(Error::NonExistentSuperType(*expr_span))?,
+                    ir::CallMode::ForceStatic,
+                )
+            } else {
+                (upper_bound, ir::CallMode::Normal)
+            };
+
             let mut candidates = self
                 .symbols
                 .query_methods(upper_bound.id(), member)
@@ -662,11 +676,6 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 break 'instance Some(self.field(expr_ir, member, upper_bound, *expr_span)?);
             }
 
-            let mode = if matches!(**expr, (ast::Expr::Super, _)) {
-                ir::CallMode::ForceStatic
-            } else {
-                ir::CallMode::Normal
-            };
             let res = self
                 .resolve_overload(
                     member,
@@ -729,7 +738,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 target_t.is_subtype_compatible(entry.func().type_().return_type(), self.symbols)
             });
         let res = self
-            .resolve_overload("Cast", args, type_args, candidates, None, env, expr_span)?
+            .resolve_overload("Cast", args, &[], candidates, None, env, expr_span)?
             .into_call();
         Ok(res)
     }
@@ -968,7 +977,9 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             (ast::Constant::I32(i), id) if id == predef::INT16 => {
                 i16::try_from(*i).map(ir::Const::I16).ok()
             }
-            (ast::Constant::I32(i), id) if id == predef::INT64 => Some(ir::Const::I32(*i)),
+            (ast::Constant::I32(i), id) if id == predef::INT64 => {
+                Some(ir::Const::I64(i64::from(*i)))
+            }
 
             (ast::Constant::I32(i), id) if id == predef::UINT8 => {
                 u8::try_from(*i).map(ir::Const::U8).ok()
@@ -1160,10 +1171,11 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         }
 
         let mut matches = matched_by_subtype(candidates, &arg_types, self.symbols).peekable();
-        let selected = matches
-            .next()
-            .or(fallback)
-            .ok_or(Error::UnresolvedFunction(name, span))?;
+        let selected = matches.next().or(fallback).ok_or_else(|| {
+            dbg!(&arg_types);
+
+            Error::UnresolvedFunction(name, span)
+        })?;
 
         let selected = if matches.peek().is_none() {
             selected
@@ -2483,6 +2495,8 @@ pub enum Error<'ctx> {
     WrongStringLiteral(TypeId<'ctx>, char, Span),
     #[error("'{0}' is an abstract class and cannot be instantiated")]
     InstantiatingAbstract(TypeId<'ctx>, Span),
+    #[error("this type has no super type to refer to")]
+    NonExistentSuperType(Span),
 }
 
 impl Error<'_> {
@@ -2507,7 +2521,8 @@ impl Error<'_> {
             | Self::CyclicType(span)
             | Self::LiteralOutOfRange(_, span)
             | Self::WrongStringLiteral(_, _, span)
-            | Self::InstantiatingAbstract(_, span) => *span,
+            | Self::InstantiatingAbstract(_, span)
+            | Self::NonExistentSuperType(span) => *span,
         }
     }
 }

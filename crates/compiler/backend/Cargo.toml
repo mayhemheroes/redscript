@@ -16,7 +16,10 @@ hashbrown.workspace = true
 indexmap.workspace = true
 
 [dev-dependencies]
+redscript-compiler-api.workspace = true
+
 similar-asserts.workspace = true
+insta.workspace = true
 
 [lints]
 workspace = true

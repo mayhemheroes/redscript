@@ -1,0 +1,14 @@
+---
+source: crates/compiler/backend/tests/bytecode.rs
+expression: "BytecodePrinter::new(&bundle, bundle_len)"
+input_file: crates/compiler/backend/tests/data/if-else.reds
+snapshot_kind: text
+---
+// Test;Bool (0)
+jump.if_not 14
+param 0
+return
+i32.one
+jump 2
+return
+i32.zero

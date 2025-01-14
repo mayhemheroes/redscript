@@ -1,0 +1,52 @@
+---
+source: crates/compiler/backend/tests/bytecode.rs
+expression: "BytecodePrinter::new(&bundle, bundle_len)"
+input_file: crates/compiler/backend/tests/data/for-loop.reds
+snapshot_kind: text
+---
+// Test; (0)
+array.resize 0
+local 0
+u64.const 2
+assign
+array.element 0
+local 0
+u64.const 0
+i32.zero
+assign
+array.element 0
+local 0
+u64.const 1
+i32.one
+assign
+local 1
+local 0
+assign
+local 2
+i32.zero
+jump.if_not 143
+invoke.static j43 l0 f1 0000000000000000
+local 2
+array.size 0
+local 1
+param.end
+assign
+local 3
+array.element 0
+local 1
+local 2
+invoke.static j26 l0 f2 0000000000000000
+local 2
+i32.one
+param.end
+invoke.static j34 l0 f3 0000000000000000
+to_string 1
+local 3
+param.end
+jump -146
+
+// OperatorLess (1)
+
+// OperatorAssignAdd (2)
+
+// Log (3)

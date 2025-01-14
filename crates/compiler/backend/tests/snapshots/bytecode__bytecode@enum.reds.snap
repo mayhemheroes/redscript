@@ -1,0 +1,19 @@
+---
+source: crates/compiler/backend/tests/bytecode.rs
+expression: "BytecodePrinter::new(&bundle, bundle_len)"
+input_file: crates/compiler/backend/tests/data/enum.reds
+snapshot_kind: text
+---
+// Testing;Direction (0)
+switch 7
+param 0
+switch.label 39 17
+enum.const 0 0
+return
+enum.to_int 0 4
+param 0
+switch.label 39 17
+enum.const 0 1
+return
+enum.to_int 0 4
+param 0

@@ -1,0 +1,30 @@
+---
+source: crates/compiler/backend/tests/bytecode.rs
+expression: "BytecodePrinter::new(&bundle, bundle_len)"
+input_file: crates/compiler/backend/tests/data/implicit-convert.reds
+snapshot_kind: text
+---
+// Method; (0)
+
+// Test; (1)
+invoke.static j30 l0 f2 0000000000000000
+as_ref 0
+string.const 0
+param.end
+assign
+local 0
+ref.to_wref
+object.new 0
+invoke.static j26 l0 f3 0000000000000000
+wref.to_ref
+local 0
+param.end
+ctx 26
+wref.to_ref
+local 0
+invoke.virtual j16 l0 f0 0000000000000000
+param.end
+
+// TakeScriptRef (2)
+
+// TakeRef (3)

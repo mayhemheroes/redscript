@@ -72,7 +72,7 @@ func VariantIsRef<A>(variant: Variant) -> Bool
 func VariantIsArray<A>(variant: Variant) -> Bool
 
 @intrinsic(VariantTypeName)
-func VariantTypeName<A>(variant: Variant) -> String
+func VariantTypeName(variant: Variant) -> String
 
 @intrinsic(AsRef)
 func AsRef<A>(a: A) -> script_ref<A>

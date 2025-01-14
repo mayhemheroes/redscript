@@ -1,0 +1,18 @@
+---
+source: crates/compiler/backend/tests/bytecode.rs
+expression: "BytecodePrinter::new(&bundle, bundle_len)"
+input_file: crates/compiler/backend/tests/data/dyn-cast.reds
+snapshot_kind: text
+---
+// Test; (0)
+assign
+local 0
+object.new 0
+ref.dyncast 0
+local 0
+assign
+local 1
+ref.to_wref
+local 0
+wref.dyncast 0
+local 1

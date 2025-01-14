@@ -1,9 +1,7 @@
 
-
 class UserClass {
   func HelloWorld(x: String) {}
 }
-
 
 @wrapMethod(UserClass)
 func HelloWorld(x: String) {

@@ -1,0 +1,50 @@
+---
+source: crates/compiler/backend/tests/bytecode.rs
+expression: "BytecodePrinter::new(&bundle, bundle_len)"
+input_file: crates/compiler/backend/tests/data/string-interp.reds
+snapshot_kind: text
+---
+// Test;Int32 (0)
+assign
+local 0
+i32.const 1990
+assign
+local 1
+string.const 0
+return
+invoke.static j212 l0 f1 0000000000000000
+as_ref 0
+invoke.static j173 l0 f2 0000000000000000
+as_ref 0
+invoke.static j96 l0 f3 0000000000000000
+as_ref 0
+invoke.static j57 l0 f4 0000000000000000
+as_ref 0
+string.const 1
+as_ref 0
+to_string 0
+local 1
+param.end
+as_ref 0
+string.const 2
+param.end
+as_ref 0
+to_string 1
+invoke.static j34 l0 f5 0000000000000000
+param 0
+local 0
+param.end
+param.end
+as_ref 0
+string.const 3
+param.end
+
+// OperatorAdd (1)
+
+// OperatorAdd (2)
+
+// OperatorAdd (3)
+
+// OperatorAdd (4)
+
+// OperatorSubtract (5)

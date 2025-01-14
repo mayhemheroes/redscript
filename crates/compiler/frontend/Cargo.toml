@@ -22,7 +22,6 @@ sequence_trie.workspace = true
 [dev-dependencies]
 redscript-compiler-api.workspace = true
 
-anyhow.workspace = true
 insta.workspace = true
 
 [lints]

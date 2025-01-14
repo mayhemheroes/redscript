@@ -1,0 +1,19 @@
+---
+source: crates/compiler/backend/tests/bytecode.rs
+expression: "BytecodePrinter::new(&bundle, bundle_len)"
+input_file: crates/compiler/backend/tests/data/variant.reds
+snapshot_kind: text
+---
+// Test; (0)
+assign
+local 0
+variant.new 0
+i32.one
+assign
+local 1
+variant.extract 0
+local 0
+assign
+local 2
+variant.type_name
+local 0

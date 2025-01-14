@@ -1094,6 +1094,8 @@ dependencies = [
  "hashbrown 0.15.2",
  "identity-hash",
  "indexmap",
+ "insta",
+ "redscript-compiler-api",
  "redscript-compiler-frontend",
  "redscript-io",
  "similar-asserts",
@@ -1106,7 +1108,6 @@ dependencies = [
 name = "redscript-compiler-frontend"
 version = "1.0.0-dev"
 dependencies = [
- "anyhow",
  "bitfield-struct",
  "derive-where",
  "elsa",

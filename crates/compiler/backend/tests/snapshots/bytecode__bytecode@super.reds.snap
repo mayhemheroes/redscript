@@ -1,0 +1,16 @@
+---
+source: crates/compiler/backend/tests/bytecode.rs
+expression: "BytecodePrinter::new(&bundle, bundle_len)"
+input_file: crates/compiler/backend/tests/data/super.reds
+snapshot_kind: text
+---
+// Testing; (0)
+return
+i32.zero
+
+// Testing; (1)
+return
+ctx 17
+this
+invoke.static j16 l0 f0 0000000000000000
+param.end

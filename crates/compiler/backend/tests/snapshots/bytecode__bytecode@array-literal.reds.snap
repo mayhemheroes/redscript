@@ -1,0 +1,70 @@
+---
+source: crates/compiler/backend/tests/bytecode.rs
+expression: "BytecodePrinter::new(&bundle, bundle_len)"
+input_file: crates/compiler/backend/tests/data/array-literal.reds
+snapshot_kind: text
+---
+// Test; (0)
+array.resize 0
+local 0
+u64.const 3
+assign
+array.element 0
+local 0
+u64.const 0
+i32.one
+assign
+array.element 0
+local 0
+u64.const 1
+i32.const 2
+assign
+array.element 0
+local 0
+u64.const 2
+i32.const 3
+assign
+local 1
+local 0
+array.resize 0
+local 2
+u64.const 2
+assign
+array.element 0
+local 2
+u64.const 0
+i32.one
+assign
+array.element 0
+local 2
+u64.const 1
+i32.const 2
+array.resize 0
+local 3
+u64.const 2
+assign
+array.element 0
+local 3
+u64.const 0
+i32.const 3
+assign
+array.element 0
+local 3
+u64.const 1
+i32.const 4
+array.resize 1
+local 4
+u64.const 2
+assign
+array.element 1
+local 4
+u64.const 0
+local 2
+assign
+array.element 1
+local 4
+u64.const 1
+local 3
+assign
+local 5
+local 4

@@ -1,0 +1,61 @@
+---
+source: crates/compiler/backend/tests/bytecode.rs
+expression: "BytecodePrinter::new(&bundle, bundle_len)"
+input_file: crates/compiler/backend/tests/data/local-init.reds
+snapshot_kind: text
+---
+// Test; (0)
+assign
+local 0
+struct.new 0 0
+assign
+local 1
+ref.null
+assign
+local 2
+wref.null
+assign
+local 3
+enum.from_int 0 1
+i8.const 0
+assign
+local 4
+string.const 0
+assign
+local 5
+cname.const 0
+assign
+local 6
+tweakdb.const 0
+array.clear 1
+local 7
+assign
+local 8
+i8.const 0
+assign
+local 9
+i16.const 0
+assign
+local 10
+i32.zero
+assign
+local 11
+i64.const 0
+assign
+local 12
+u8.const 0
+assign
+local 13
+u16.const 0
+assign
+local 14
+u32.const 0
+assign
+local 15
+u64.const 0
+assign
+local 16
+f32.const 0
+assign
+local 17
+f64.const 0

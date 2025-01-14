@@ -202,11 +202,11 @@ impl<'i> ScriptBundle<'i> {
     }
 
     #[inline]
-    pub fn definitions(&self) -> impl Iterator<Item = &Definition<'i>> {
+    pub fn definitions(&self) -> impl ExactSizeIterator<Item = &Definition<'i>> {
         self.definitions.iter().skip(1)
     }
 
-    pub fn indexed_definitions(&self) -> impl Iterator<Item = IndexedDefinition<'_, 'i>> {
+    pub fn indexed_definitions(&self) -> impl ExactSizeIterator<Item = IndexedDefinition<'_, 'i>> {
         self.definitions
             .iter()
             .enumerate()

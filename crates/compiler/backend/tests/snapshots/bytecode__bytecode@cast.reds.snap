@@ -1,0 +1,21 @@
+---
+source: crates/compiler/backend/tests/bytecode.rs
+expression: "BytecodePrinter::new(&bundle, bundle_len)"
+input_file: crates/compiler/backend/tests/data/cast.reds
+snapshot_kind: text
+---
+// Test; (0)
+assign
+local 0
+invoke.static j17 l0 f1 0000000000000000
+i32.one
+param.end
+assign
+local 1
+invoke.static j21 l0 f2 0000000000000000
+i32.const 2
+param.end
+
+// Cast (1)
+
+// Cast (2)
