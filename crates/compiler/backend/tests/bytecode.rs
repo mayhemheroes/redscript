@@ -64,12 +64,11 @@ impl fmt::Display for BytecodePrinter<'_> {
                 continue;
             };
 
-            writeln!(
-                f,
-                "// {} ({})",
-                self.bundle[func.name()],
-                indices.function(i)
-            )?;
+            write!(f, "// ")?;
+            if let Some(class) = func.class() {
+                write!(f, "{}::", self.bundle[self.bundle[class].name()])?;
+            }
+            writeln!(f, "{} ({})", self.bundle[func.name()], indices.function(i))?;
 
             for instr in func.body().code_iter() {
                 match instr.unwrap() {

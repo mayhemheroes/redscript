@@ -1,0 +1,69 @@
+---
+source: crates/compiler/backend/tests/bytecode.rs
+expression: "BytecodePrinter::new(&bundle, bundle_len)"
+input_file: crates/compiler/backend/tests/data/lambda.reds
+snapshot_kind: text
+---
+// Test; (0)
+assign
+local 0
+i32.one
+assign
+local 1
+invoke.static j25 l0 f1 0000000000000000
+local 0
+param.end
+
+// Function1<Int32,Int32>::Call;Int32 (2)
+
+// Function1<Int32,Function1<Int32,Int32>>::Call;Int32 (3)
+
+// lambda$11::Instantiate (1)
+assign
+local 2
+object.new 0
+assign
+ctx 15
+local 2
+object.field 0
+param 0
+return
+local 2
+
+// lambda$11::Call;Int32 (4)
+return
+invoke.static j34 l0 f5 0000000000000000
+object.field 0
+param 1
+param.end
+
+// lambda$16::Instantiate (5)
+assign
+local 3
+object.new 1
+assign
+ctx 15
+local 3
+object.field 1
+param 2
+assign
+ctx 15
+local 3
+object.field 2
+param 3
+return
+local 3
+
+// lambda$16::Call;Int32 (6)
+return
+invoke.static j59 l0 f7 0000000000000000
+invoke.static j34 l0 f8 0000000000000000
+object.field 1
+object.field 2
+param.end
+param 4
+param.end
+
+// OperatorAdd (7)
+
+// OperatorAdd (8)

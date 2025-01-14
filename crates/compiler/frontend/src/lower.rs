@@ -1171,11 +1171,10 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         }
 
         let mut matches = matched_by_subtype(candidates, &arg_types, self.symbols).peekable();
-        let selected = matches.next().or(fallback).ok_or_else(|| {
-            dbg!(&arg_types);
-
-            Error::UnresolvedFunction(name, span)
-        })?;
+        let selected = matches
+            .next()
+            .or(fallback)
+            .ok_or(Error::UnresolvedFunction(name, span))?;
 
         let selected = if matches.peek().is_none() {
             selected
@@ -1555,6 +1554,13 @@ impl<'ctx> InferredTypeApp<'ctx> {
             })
             .collect::<Result<Rc<_>, _>>()?;
         Ok(TypeApp::new(id, args))
+    }
+}
+
+impl fmt::Display for InferredTypeApp<'_> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.display(false).fmt(f)
     }
 }
 

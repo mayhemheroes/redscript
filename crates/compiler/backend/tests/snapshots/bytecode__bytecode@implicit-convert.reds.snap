@@ -4,7 +4,7 @@ expression: "BytecodePrinter::new(&bundle, bundle_len)"
 input_file: crates/compiler/backend/tests/data/implicit-convert.reds
 snapshot_kind: text
 ---
-// Method; (0)
+// Class::Method; (0)
 
 // Test; (1)
 invoke.static j30 l0 f2 0000000000000000

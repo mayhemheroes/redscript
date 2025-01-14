@@ -201,12 +201,7 @@ impl<'ctx, K: TypeKind> TypeApp<'ctx, K> {
             .collect()
     }
 
-    #[inline]
-    pub fn display_compact(&self) -> impl fmt::Display + use<'_, 'ctx, K> {
-        self.display(true)
-    }
-
-    fn display(&self, compact: bool) -> impl fmt::Display + use<'_, 'ctx, K> {
+    pub(super) fn display(&self, compact: bool) -> impl fmt::Display + use<'_, 'ctx, K> {
         let sep = if compact { "," } else { ", " };
         DisplayFn::new(move |f: &mut fmt::Formatter<'_>| {
             write!(f, "{}", self.id)?;
@@ -251,10 +246,17 @@ impl<'ctx> MonoType<'ctx> {
     }
 }
 
-impl<K: TypeKind> fmt::Display for TypeApp<'_, K> {
+impl fmt::Display for TypeApp<'_> {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.display(false).fmt(f)
+    }
+}
+
+impl fmt::Display for MonoType<'_> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.display(true).fmt(f)
     }
 }
 

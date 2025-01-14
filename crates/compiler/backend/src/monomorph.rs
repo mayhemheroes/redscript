@@ -266,7 +266,7 @@ impl<'ctx> Monomorphizer<'ctx> {
             arg: &MonoType<'ctx>,
             bundle: &mut ScriptBundle<'ctx>,
         ) -> PoolTypeIndex {
-            let inner_name = bundle.cnames_mut().add(arg.display_compact().to_string());
+            let inner_name = bundle.cnames_mut().add(arg.to_string());
             bundle.define(PoolType::new(inner_name, PoolTypeKind::Class))
         }
 
@@ -520,7 +520,7 @@ impl<'ctx> Monomorphizer<'ctx> {
             .with_is_import_only(aggregate.flags().is_import_only())
             .with_is_struct(aggregate.flags().is_struct());
 
-        let cname = bundle.cnames_mut().add(typ.display_compact().to_string());
+        let cname = bundle.cnames_mut().add(typ.to_string());
         let class = PoolClass::new(cname, Visibility::Public, flags).with_base(base);
         let idx = bundle.define(class);
 
@@ -805,10 +805,10 @@ impl fmt::Display for MangledType<'_, '_> {
             TypeSchema::Aggregate(agg)
                 if !agg.flags().is_struct() && !agg.flags().is_never_ref() =>
             {
-                write!(f, "ref:{}", self.typ.display_compact())
+                write!(f, "ref:{}", self.typ)
             }
             TypeSchema::Aggregate(_) | TypeSchema::Enum(_) => {
-                write!(f, "{}", self.typ.display_compact())
+                write!(f, "{}", self.typ)
             }
             TypeSchema::Primitive => match (self.typ.args(), self.typ.id().static_array_size()) {
                 ([arg], Some(size)) => {
@@ -918,15 +918,7 @@ impl<'ctx, F: FunctionKind<'ctx>> fmt::Display for MangledParams<'_, 'ctx, F> {
             if param.flags().is_out() {
                 write!(f, "Out")?;
             }
-            write!(
-                f,
-                "{}",
-                param
-                    .type_()
-                    .unwrap_ref_or_self()
-                    .mono(self.env)
-                    .display_compact()
-            )
+            write!(f, "{}", param.type_().unwrap_ref_or_self().mono(self.env))
         })
     }
 }
