@@ -4,7 +4,7 @@ expression: "BytecodePrinter::new(&bundle, bundle_len)"
 input_file: crates/compiler/backend/tests/data/local-init.reds
 snapshot_kind: text
 ---
-// Test; (0)
+// Test; (f0)
 assign
 local 0
 struct.new 0 0

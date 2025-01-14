@@ -4,11 +4,11 @@ expression: "BytecodePrinter::new(&bundle, bundle_len)"
 input_file: crates/compiler/backend/tests/data/super.reds
 snapshot_kind: text
 ---
-// Base::Testing; (0)
+// Base::Testing; (f0)
 return
 i32.zero
 
-// Class::Testing; (1)
+// Class::Testing; (f1)
 return
 ctx 17
 this

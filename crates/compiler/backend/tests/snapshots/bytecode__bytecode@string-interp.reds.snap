@@ -4,7 +4,7 @@ expression: "BytecodePrinter::new(&bundle, bundle_len)"
 input_file: crates/compiler/backend/tests/data/string-interp.reds
 snapshot_kind: text
 ---
-// Test;Int32 (0)
+// Test;Int32 (f0)
 assign
 local 0
 i32.const 1990
@@ -39,6 +39,6 @@ as_ref 0
 string.const 3
 param.end
 
-// OperatorAdd (1)
+// OperatorAdd (f1)
 
-// OperatorSubtract (2)
+// OperatorSubtract (f2)

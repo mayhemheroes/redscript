@@ -4,7 +4,7 @@ expression: "BytecodePrinter::new(&bundle, bundle_len)"
 input_file: crates/compiler/backend/tests/data/for-loop.reds
 snapshot_kind: text
 ---
-// Test; (0)
+// Test; (f0)
 array.resize 0
 local 0
 u64.const 2
@@ -45,8 +45,8 @@ local 3
 param.end
 jump -146
 
-// OperatorLess (1)
+// OperatorLess (f1)
 
-// OperatorAssignAdd (2)
+// OperatorAssignAdd (f2)
 
-// Log (3)
+// Log (f3)

@@ -4,7 +4,7 @@ expression: "BytecodePrinter::new(&bundle, bundle_len)"
 input_file: crates/compiler/backend/tests/data/generic-struct.reds
 snapshot_kind: text
 ---
-// Test; (0)
+// Test; (f0)
 assign
 local 0
 struct.new 2 0
@@ -21,7 +21,7 @@ invoke.static j25 l0 f1 0000000000000000
 local 1
 param.end
 
-// Tuple<String,Int32>::Swap;Tuple<String,Int32> (1)
+// Tuple<String,Int32>::Swap;Tuple<String,Int32> (f1)
 return
 struct.new 2 0
 struct.field 0

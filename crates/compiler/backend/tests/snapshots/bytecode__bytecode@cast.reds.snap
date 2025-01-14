@@ -4,7 +4,7 @@ expression: "BytecodePrinter::new(&bundle, bundle_len)"
 input_file: crates/compiler/backend/tests/data/cast.reds
 snapshot_kind: text
 ---
-// Test; (0)
+// Test; (f0)
 assign
 local 0
 invoke.static j17 l0 f1 0000000000000000
@@ -16,6 +16,6 @@ invoke.static j21 l0 f2 0000000000000000
 i32.const 2
 param.end
 
-// Cast (1)
+// Cast (f1)
 
-// Cast (2)
+// Cast (f2)

@@ -4,7 +4,7 @@ expression: "BytecodePrinter::new(&bundle, bundle_len)"
 input_file: crates/compiler/backend/tests/data/string-literal.reds
 snapshot_kind: text
 ---
-// Test; (0)
+// Test; (f0)
 assign
 local 0
 string.const 0

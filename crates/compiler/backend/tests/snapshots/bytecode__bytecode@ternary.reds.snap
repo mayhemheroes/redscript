@@ -4,7 +4,7 @@ expression: "BytecodePrinter::new(&bundle, bundle_len)"
 input_file: crates/compiler/backend/tests/data/ternary.reds
 snapshot_kind: text
 ---
-// Test;Int32 (0)
+// Test;Int32 (f0)
 return
 cond 50 49
 invoke.static j47 l0 f1 0000000000000000
@@ -17,6 +17,6 @@ param.end
 true.const
 false.const
 
-// OperatorEqual (1)
+// OperatorEqual (f1)
 
-// OperatorModulo (2)
+// OperatorModulo (f2)

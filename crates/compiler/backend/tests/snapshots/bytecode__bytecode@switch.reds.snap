@@ -4,7 +4,7 @@ expression: "BytecodePrinter::new(&bundle, bundle_len)"
 input_file: crates/compiler/backend/tests/data/switch.reds
 snapshot_kind: text
 ---
-// Test;Int32 (0)
+// Test;Int32 (f0)
 switch 4
 invoke.static j30 l0 f1 0000000000000000
 param 0
@@ -23,4 +23,4 @@ true.const
 return
 false.const
 
-// OperatorModulo (1)
+// OperatorModulo (f1)
