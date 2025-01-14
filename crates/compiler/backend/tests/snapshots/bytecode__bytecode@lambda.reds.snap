@@ -57,7 +57,7 @@ local 3
 // lambda$16::Call;Int32 (6)
 return
 invoke.static j59 l0 f7 0000000000000000
-invoke.static j34 l0 f8 0000000000000000
+invoke.static j34 l0 f7 0000000000000000
 object.field 1
 object.field 2
 param.end
@@ -65,5 +65,3 @@ param 4
 param.end
 
 // OperatorAdd (7)
-
-// OperatorAdd (8)

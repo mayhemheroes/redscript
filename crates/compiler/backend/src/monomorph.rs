@@ -125,6 +125,9 @@ impl<'ctx> Monomorphizer<'ctx> {
 
             while let Some((sig, &index)) = self.functions.next_unmarked() {
                 let func = &symbols[*sig.id()];
+                if func.flags().is_native() {
+                    continue;
+                }
                 let repr = &unit.functions[sig.id()];
                 let env = func
                     .type_()
@@ -182,9 +185,7 @@ impl<'ctx> Monomorphizer<'ctx> {
             f.with_parameters(params)
         });
 
-        if !flags.is_native() {
-            self.functions.insert(sig, idx);
-        }
+        self.functions.insert(sig, idx);
         idx
     }
 

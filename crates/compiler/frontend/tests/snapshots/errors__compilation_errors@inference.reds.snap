@@ -5,11 +5,11 @@ input_file: crates/compiler/frontend/tests/data/inference.reds
 snapshot_kind: text
 ---
 At tests\data\inference.reds:12:10
-  return str;
-         ^^^
-type mismatch: found Int32 when expected String
+  return i;
+         ^
+type mismatch: found String when expected Int32
 
 At tests\data\inference.reds:10:7
   let f = (a) -> (b, c) -> (d) -> d(a(b), c);
       ^^
-type is too broad (Int32 <: T <: String for some type T), consider adding type annotations
+type is too broad (String <: T <: Int32 for some type T), consider adding type annotations
