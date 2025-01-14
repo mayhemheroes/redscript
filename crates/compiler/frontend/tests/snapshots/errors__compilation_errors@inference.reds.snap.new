@@ -1,0 +1,15 @@
+---
+source: crates/compiler/frontend/tests/errors.rs
+assertion_line: 19
+expression: "DisplayDiagnostics(diagnostics, &sources)"
+input_file: crates/compiler/frontend/tests/data/inference.reds
+---
+At tests\data\inference.reds:12:10
+  return i;
+         ^
+type mismatch: found String when expected Int32
+
+At tests\data\inference.reds:10:7
+  let f = (a) -> (b, c) -> (d) -> d(a(b), c);
+      ^^
+type is too broad (String <: T <: Int32 for some type T), consider adding type annotations

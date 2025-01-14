@@ -1,13 +1,13 @@
 
 
-func ValidInference() -> String {
+func ValidInference() -> Int32 {
   let f = (a) -> (b, c) -> (d) -> d(a(b), c);
-  let str = f((x) -> x)(1, "")((_, y) -> y);
-  return str;
+  let i = f((x) -> x)(1, "")((x, _) -> x);
+  return i;
 }
 
-func InferenceError() -> String {
+func ValidInference() -> Int32 {
   let f = (a) -> (b, c) -> (d) -> d(a(b), c);
-  let str = f((x) -> x)("", 1)((_, y) -> y);
-  return str;
+  let i = f((x) -> x)("", 1)((x, _) -> x);
+  return i;
 }
