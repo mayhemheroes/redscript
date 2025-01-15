@@ -820,17 +820,19 @@ impl fmt::Display for MangledType<'_, '_> {
             TypeSchema::Aggregate(_) | TypeSchema::Enum(_) => {
                 write!(f, "{}", self.typ)
             }
-            TypeSchema::Primitive => match (self.typ.args(), self.typ.id().static_array_size()) {
-                ([arg], Some(size)) => {
+            TypeSchema::Primitive => match (
+                self.typ.id(),
+                self.typ.id().static_array_size(),
+                self.typ.args(),
+            ) {
+                (_, Some(size), [arg]) => {
                     write!(f, "{}[{}]", MangledType::new(arg, self.symbols), size)
                 }
-                ([arg], _) => write!(
-                    f,
-                    "{}:{}",
-                    self.typ.id(),
-                    MangledType::new(arg, self.symbols)
-                ),
-                _ => write!(f, "{}", self.typ.id()),
+                (id, _, [arg]) if id == predef::REF || id == predef::WREF => {
+                    write!(f, "{id}:{arg}")
+                }
+                (id, _, [arg]) => write!(f, "{id}:{}", MangledType::new(arg, self.symbols)),
+                (id, _, _) => write!(f, "{id}"),
             },
         }
     }
