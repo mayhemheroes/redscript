@@ -21,6 +21,8 @@ use thiserror::Error;
 use crate::monomorph::Monomorphizer;
 use crate::IndexMap;
 
+const NEVER_REF_WHITELIST: [&str; 1] = ["ReactionData"];
+
 #[derive(Debug)]
 pub struct CompilationInputs<'ctx> {
     symbols: Symbols<'ctx>,
@@ -138,7 +140,8 @@ impl<'ctx> CompilationInputs<'ctx> {
                         .with_is_native(cls.flags().is_native())
                         .with_is_final(cls.flags().is_final())
                         .with_is_import_only(cls.flags().is_import_only())
-                        .with_is_struct(cls.flags().is_struct());
+                        .with_is_struct(cls.flags().is_struct())
+                        .with_is_never_ref(NEVER_REF_WHITELIST.contains(&class_name.as_ref()));
                     let agg = Aggregate::new(flags, base, fields, methods, None);
                     let def = TypeDef::new([], TypeSchema::Aggregate(agg.into()), []);
                     inputs.symbols.add_type(class_id, def);

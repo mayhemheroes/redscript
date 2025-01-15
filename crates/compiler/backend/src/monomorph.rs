@@ -283,12 +283,29 @@ impl<'ctx> Monomorphizer<'ctx> {
             bundle.define(PoolType::new(cname, pool_type))
         }
 
+        let schema = symbols[typ.id()].schema();
+
+        match schema {
+            TypeSchema::Aggregate(agg)
+                if !agg.flags().is_struct() && !agg.flags().is_never_ref() =>
+            {
+                return self.type_(&MonoType::new(predef::REF, [typ.clone()]), symbols, bundle)
+            }
+            _ => {}
+        }
+
         if let Some(&idx) = self.types.get(typ) {
             return idx;
         }
 
-        let idx = match symbols[typ.id()].schema() {
+        let idx = match schema {
             TypeSchema::Primitive => match (typ.id(), typ.args()) {
+                (id, [arg]) if id == predef::REF => {
+                    self.class(arg, symbols, bundle);
+
+                    let class = define_class(arg, bundle);
+                    define_type(typ, PoolTypeKind::Ref(class), symbols, bundle)
+                }
                 (id, [arg]) if id == predef::WREF => {
                     self.class(arg, symbols, bundle);
 
@@ -316,14 +333,6 @@ impl<'ctx> Monomorphizer<'ctx> {
                     }
                 }
             },
-            TypeSchema::Aggregate(agg)
-                if !agg.flags().is_struct() && !agg.flags().is_never_ref() =>
-            {
-                self.class(typ, symbols, bundle);
-
-                let class = define_class(typ, bundle);
-                define_type(typ, PoolTypeKind::Ref(class), symbols, bundle)
-            }
             _ => define_class(typ, bundle),
         };
         self.types.insert(typ.clone(), idx);
