@@ -5,6 +5,7 @@ use thiserror::Error;
 use {redscript_ast as ast, redscript_parser as parser};
 
 use crate::lower::{LowerResult, Poly, TypeError};
+use crate::stages::FunctionAnnotation;
 use crate::utils::fmt::{lowercase, sep_by, DisplayFn};
 use crate::{predef, CoalesceError, LowerError, Param, PolyType, Type, TypeId, Variance};
 
@@ -42,8 +43,8 @@ pub enum Diagnostic<'ctx> {
     NameRedefinition(Span),
     #[error("'{0}' is not a valid target for this annotation")]
     InvalidAnnotationType(&'ctx str, Span),
-    #[error("could not find a method with a matching signature for the @{0} annotation")]
-    AnnotatedMethodNotFound(&'ctx str, Span),
+    #[error("could not find a method with a matching signature for the {0} annotation")]
+    AnnotatedMethodNotFound(FunctionAnnotation<'ctx>, Span),
     #[error("the annotations on this function are incompatible with each other")]
     IncompatibleAnnotations(Span),
     #[error("this class is missing some required method implementation(s):\n{}", sep_by(.0, "\n"))]

@@ -1,12 +1,12 @@
 use std::borrow::Cow;
 use std::collections::BTreeSet;
-use std::mem;
 use std::ops::{BitAndAssign, Not};
 use std::rc::Rc;
+use std::{fmt, mem};
 
 use hashbrown::{HashMap, HashSet};
 use identity_hash::BuildIdentityHasher;
-use redscript_ast::{self as ast, Span};
+use redscript_ast::{self as ast, Span, Spanned};
 
 use super::infer::{ClassItem, FuncItem, FuncItemKind, InferStageModule};
 use super::TypeInference;
@@ -121,16 +121,58 @@ impl<'ctx> NameResolution<'ctx> {
                         .symbols
                         .add_free_function(path.clone(), FreeFunction::default());
 
-                    let res = self
-                        .module_map
-                        .add_function(path, index)
-                        .map_err(|_| Diagnostic::NameRedefinition(name_span));
-                    self.reporter.unwrap_err(res);
+                    let mut annotation: Option<FunctionAnnotation<'_>> = None;
+
+                    for (ann, ann_span) in &meta.annotations {
+                        match (ann.name, &ann.args[..]) {
+                            (
+                                INTRINSIC_ANNOTATION
+                                | WRAP_METHOD_ANNOTATION
+                                | REPLACE_METHOD_ANNOTATION
+                                | ADD_METHOD_ANNOTATION,
+                                _,
+                            ) if annotation.is_some() => {
+                                self.reporter
+                                    .report(Diagnostic::IncompatibleAnnotations(*ann_span));
+                            }
+                            (INTRINSIC_ANNOTATION, &[(ast::Expr::Ident(name), span)]) => {
+                                let intrinsic = ir::Intrinsic::try_from(name).map_err(|name| {
+                                    Diagnostic::UnknownIntrinsic(name.into(), span)
+                                });
+                                annotation = self
+                                    .reporter
+                                    .unwrap_err(intrinsic)
+                                    .map(FunctionAnnotation::Intrinsic);
+                            }
+                            (REPLACE_METHOD_ANNOTATION, &[(ast::Expr::Ident(name), span)]) => {
+                                annotation = Some(FunctionAnnotation::Replace((name, span)));
+                            }
+                            (ADD_METHOD_ANNOTATION, &[(ast::Expr::Ident(name), span)]) => {
+                                annotation = Some(FunctionAnnotation::Add((name, span)));
+                            }
+                            (WRAP_METHOD_ANNOTATION, &[(ast::Expr::Ident(name), span)]) => {
+                                annotation = Some(FunctionAnnotation::Wrap((name, span)));
+                            }
+                            _ => {
+                                self.reporter
+                                    .report(Diagnostic::UnknownAnnotation(ann.name, *ann_span));
+                            }
+                        }
+                    }
+
+                    if matches!(annotation, None | Some(FunctionAnnotation::Intrinsic(_))) {
+                        let res = self
+                            .module_map
+                            .add_function(path, index)
+                            .map_err(|_| Diagnostic::NameRedefinition(name_span));
+                        self.reporter.unwrap_err(res);
+                    }
 
                     functions.push(ParsedFunction {
                         index,
                         meta,
                         function,
+                        annotation,
                     });
                 }
                 ast::Item::Enum(enum_) => {
@@ -434,83 +476,72 @@ impl<'ctx> NameResolution<'ctx> {
         types: &TypeEnv<'scope, 'ctx>,
     ) -> Option<FuncItemKind<'scope, 'ctx>> {
         let func = entry.function;
-        let (_, name_span) = func.name;
+        let (name, name_span) = func.name;
         let (func_t, type_scope) = self.create_function_env(&func, types);
 
         let mut intrinsic: Option<ir::Intrinsic> = None;
         let mut replaced: Option<MethodId<'ctx>> = None;
         let mut wrapped: Option<MethodId<'ctx>> = None;
 
-        for (ann, ann_span) in &entry.meta.annotations {
-            match (ann.name, &ann.args[..]) {
-                (INTRINSIC_ANNOTATION, &[(ast::Expr::Ident(name), span)]) => {
-                    let matched = ir::Intrinsic::try_from(name)
-                        .map_err(|name| Diagnostic::UnknownIntrinsic(name.into(), span));
-                    intrinsic = self.reporter.unwrap_err(matched);
-                }
-                (REPLACE_METHOD_ANNOTATION, &[(ast::Expr::Ident(class), span)]) => {
-                    let class = (class, span);
-                    if let Some(id) = self.resolve_existing_annotated_method(
-                        func.name, class, &func_t, ann.name, types,
-                    ) {
-                        replaced = Some(id);
-                    }
-                }
-                (WRAP_METHOD_ANNOTATION, &[(ast::Expr::Ident(class), span)]) => {
-                    let class = (class, span);
-                    if let Some(id) = self.resolve_existing_annotated_method(
-                        func.name, class, &func_t, ann.name, types,
-                    ) {
-                        wrapped = Some(id);
-                    }
-                }
-                (ADD_METHOD_ANNOTATION, &[(ast::Expr::Ident(class), span)]) => {
-                    let (name, _) = func.name;
-                    if !func_t.type_params().is_empty() {
-                        self.reporter
-                            .report(Diagnostic::GenericMethodAnnotation(name_span));
-                    }
-
-                    if self
-                        .resolve_annotated_method(name, (class, span), &func_t, types)
-                        .is_some()
-                    {
-                        self.reporter
-                            .report(Diagnostic::DuplicateMethodAnnotation(*ann_span));
-                    }
-
-                    let (id, agg) = self.resolve_annotated_type((class, span), types)?;
-                    let parent_flags = agg.flags();
-                    if agg.is_user_defined() {
-                        self.reporter
-                            .report(Diagnostic::UserSymbolAnnotation(name_span));
-                    }
-                    let qs = entry.meta.qualifiers;
-                    let flags = self.process_method_flags(qs, &func, parent_flags, name_span);
-
-                    if func.body.is_none() && !flags.is_native() {
-                        self.reporter
-                            .report(Diagnostic::MissingFunctionBody(name_span));
-                        return None;
-                    };
-
-                    let member = Method::new(flags, func_t, None, entry.meta.doc, Some(name_span));
-                    let idx = self.symbols[id]
-                        .schema_mut()
-                        .as_aggregate_mut()
-                        .unwrap()
-                        .methods_mut()
-                        .add(name, member);
-
-                    let item =
-                        FuncItem::new(MethodId::new(id, idx), name_span, func.body, type_scope);
-                    return Some(FuncItemKind::AddMethod(item));
-                }
-                _ => {
-                    self.reporter
-                        .report(Diagnostic::UnknownAnnotation(ann.name, *ann_span));
+        match &entry.annotation {
+            &Some(FunctionAnnotation::Intrinsic(i)) => {
+                intrinsic = Some(i);
+            }
+            Some(ann @ FunctionAnnotation::Replace(class)) => {
+                if let Some(id) =
+                    self.resolve_existing_annotated_method(func.name, *class, &func_t, ann, types)
+                {
+                    replaced = Some(id);
                 }
             }
+            &Some(FunctionAnnotation::Add(class)) => {
+                if !func_t.type_params().is_empty() {
+                    self.reporter
+                        .report(Diagnostic::GenericMethodAnnotation(name_span));
+                }
+
+                if self
+                    .resolve_annotated_method(name, class, &func_t, types)
+                    .is_some()
+                {
+                    self.reporter
+                        .report(Diagnostic::DuplicateMethodAnnotation(name_span));
+                }
+
+                let (id, agg) = self.resolve_annotated_type(class, types)?;
+                let parent_flags = agg.flags();
+                if agg.is_user_defined() {
+                    self.reporter
+                        .report(Diagnostic::UserSymbolAnnotation(name_span));
+                }
+                let qs = entry.meta.qualifiers;
+                let flags = self.process_method_flags(qs, &func, parent_flags, name_span);
+
+                if func.body.is_none() && !flags.is_native() {
+                    self.reporter
+                        .report(Diagnostic::MissingFunctionBody(name_span));
+                    return None;
+                };
+
+                let member = Method::new(flags, func_t, None, entry.meta.doc, Some(name_span));
+                let idx = self.symbols[id]
+                    .schema_mut()
+                    .as_aggregate_mut()
+                    .unwrap()
+                    .methods_mut()
+                    .add(name, member);
+
+                let item = FuncItem::new(MethodId::new(id, idx), name_span, func.body, type_scope);
+                return Some(FuncItemKind::AddMethod(item));
+            }
+            Some(ann @ FunctionAnnotation::Wrap(class)) => {
+                if let Some(id) =
+                    self.resolve_existing_annotated_method(func.name, *class, &func_t, ann, types)
+                {
+                    wrapped = Some(id);
+                }
+            }
+            _ => {}
         }
 
         let mut qs = entry.meta.qualifiers;
@@ -537,17 +568,6 @@ impl<'ctx> NameResolution<'ctx> {
             (Some(body), None, None, Some(wrapped)) => {
                 let func = FuncItem::new(wrapped, name_span, body, type_scope);
                 return Some(FuncItemKind::WrapMethod(func));
-            }
-            (_, intrinsic, replace, wrap)
-                if [intrinsic.is_some(), replace.is_some(), wrap.is_some()]
-                    .iter()
-                    .filter(|&&exists| exists)
-                    .count()
-                    > 1 =>
-            {
-                self.reporter
-                    .report(Diagnostic::IncompatibleAnnotations(name_span));
-                return None;
             }
             (Some(_), _, _, _) => {
                 self.reporter
@@ -1057,14 +1077,16 @@ impl<'ctx> NameResolution<'ctx> {
         (func_name, func_span): ast::Spanned<&'ctx str>,
         (cls_name, cls_span): ast::Spanned<&'ctx str>,
         func_type: &FunctionType<'ctx>,
-        annotation: &'ctx str,
+        annotation: &FunctionAnnotation<'ctx>,
         types: &TypeEnv<'_, 'ctx>,
     ) -> Option<MethodId<'ctx>> {
         let Some((id, method)) =
             self.resolve_annotated_method(func_name, (cls_name, cls_span), func_type, types)
         else {
-            self.reporter
-                .report(Diagnostic::AnnotatedMethodNotFound(annotation, func_span));
+            self.reporter.report(Diagnostic::AnnotatedMethodNotFound(
+                annotation.clone(),
+                func_span,
+            ));
             return None;
         };
         if method.is_user_defined() {
@@ -1187,6 +1209,7 @@ struct ParsedFunction<'ctx> {
     index: FreeFunctionIndex,
     meta: ParsedMeta<'ctx>,
     function: ast::SourceFunction<'ctx>,
+    annotation: Option<FunctionAnnotation<'ctx>>,
 }
 
 #[derive(Debug)]
@@ -1200,6 +1223,29 @@ struct ParsedEnum<'ctx> {
     id: TypeId<'ctx>,
     meta: ParsedMeta<'ctx>,
     enum_: ast::SourceEnum<'ctx>,
+}
+
+#[derive(Debug, Clone)]
+pub enum FunctionAnnotation<'ctx> {
+    Intrinsic(ir::Intrinsic),
+    Replace(Spanned<&'ctx str>),
+    Add(Spanned<&'ctx str>),
+    Wrap(Spanned<&'ctx str>),
+}
+
+impl fmt::Display for FunctionAnnotation<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FunctionAnnotation::Intrinsic(i) => {
+                write!(f, "@{INTRINSIC_ANNOTATION}({})", <&str>::from(*i))
+            }
+            FunctionAnnotation::Replace((name, _)) => {
+                write!(f, "@{REPLACE_METHOD_ANNOTATION}({name})")
+            }
+            FunctionAnnotation::Add((name, _)) => write!(f, "@{ADD_METHOD_ANNOTATION}({name})"),
+            FunctionAnnotation::Wrap((name, _)) => write!(f, "@{WRAP_METHOD_ANNOTATION}({name})"),
+        }
+    }
 }
 
 #[derive(Debug)]

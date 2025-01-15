@@ -17,7 +17,7 @@ At tests\data\annotation-checks.reds:10:13
 At tests\data\annotation-checks.reds:11:6
 func HelloWorld(x: String) {
      ^^^^^^^^^^
-could not find a method with a matching signature for the @wrapMethod annotation
+could not find a method with a matching signature for the @wrapMethod(NonExistingClass) annotation
 
 At tests\data\annotation-checks.reds:15:6
 func ForbiddenGenericAnnotatedMethod<A>(a: A) {
