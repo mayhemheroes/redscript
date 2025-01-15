@@ -630,6 +630,13 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
         let exit = self.new_label();
         let func = &self.bundle[index];
 
+        let mut flags = InvokeFlags::default();
+        for (arg, i) in args.iter().zip(0u8..) {
+            if arg.is_prvalue_ref(self.symbols) {
+                flags.set_is_rvalue_ref(i);
+            }
+        }
+
         if func.flags().is_final()
             || func.flags().is_static()
             || func.flags().is_native()
@@ -639,14 +646,14 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 exit: Jump::new(exit),
                 line: 0,
                 function: index,
-                flags: InvokeFlags::default(),
+                flags,
             });
         } else {
             self.emit(Instr::InvokeVirtual {
                 exit: Jump::new(exit),
                 line: 0,
                 function: func.name(),
-                flags: InvokeFlags::default(),
+                flags,
             });
         }
         for (i, arg) in args.iter().enumerate() {

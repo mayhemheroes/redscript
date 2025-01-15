@@ -151,7 +151,7 @@ pub enum Expr<'ctx> {
     Null(Span),
 }
 
-impl Expr<'_> {
+impl<'ctx> Expr<'ctx> {
     pub fn span(&self) -> Span {
         match self {
             Self::NewClass { span, .. }
@@ -167,6 +167,32 @@ impl Expr<'_> {
             | Self::Capture(_, span)
             | Self::Const(_, span)
             | Self::Null(span) => *span,
+        }
+    }
+
+    pub fn is_prvalue(&self, symbols: &Symbols<'ctx>) -> bool {
+        match self {
+            Self::Local(_, _) | Self::Capture(_, _) | Self::Field { .. } | Self::Index { .. } => {
+                false
+            }
+            Self::Call { call, .. } => !matches!(
+                &**call,
+                Call::FreeFunction { function, .. }
+                    if symbols[*function].intrinsic().is_some_and(|i| i == Intrinsic::Deref)
+            ),
+            _ => true,
+        }
+    }
+
+    pub fn is_prvalue_ref(&self, symbols: &Symbols<'ctx>) -> bool {
+        match self {
+            Self::Call { call, .. } => matches!(
+                &**call,
+                Call::FreeFunction { function, args, .. }
+                    if symbols[*function].intrinsic().is_some_and(|i| i == Intrinsic::AsRef)
+                        && matches!(&args[..], [arg] if arg.is_prvalue(symbols))
+            ),
+            _ => false,
         }
     }
 }
@@ -262,7 +288,7 @@ impl<'ctx> From<&ast::Constant<'ctx>> for Const<'ctx> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Intrinsic {
     Equals,
     NotEquals,

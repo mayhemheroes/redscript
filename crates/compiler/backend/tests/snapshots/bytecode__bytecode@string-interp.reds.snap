@@ -12,13 +12,13 @@ assign
 local 1
 string.const 0
 return
-invoke.static j212 l0 f1 0000000000000000
+invoke.static j212 l0 f1 0000000000000011
 as_ref 0
-invoke.static j173 l0 f1 0000000000000000
+invoke.static j173 l0 f1 0000000000000011
 as_ref 0
-invoke.static j96 l0 f1 0000000000000000
+invoke.static j96 l0 f1 0000000000000011
 as_ref 0
-invoke.static j57 l0 f1 0000000000000000
+invoke.static j57 l0 f1 0000000000000011
 as_ref 0
 string.const 1
 as_ref 0

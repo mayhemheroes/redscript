@@ -7,7 +7,7 @@ snapshot_kind: text
 // Class::Method; (f0)
 
 // Test; (f1)
-invoke.static j30 l0 f2 0000000000000000
+invoke.static j30 l0 f2 0000000000000001
 as_ref 0
 string.const 0
 param.end
