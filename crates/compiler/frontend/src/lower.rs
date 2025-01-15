@@ -35,9 +35,9 @@ pub type FreeFunctionIndexes = SmallVec<[FreeFunctionIndex; 1]>;
 #[derive(Debug)]
 pub struct Lower<'scope, 'ctx> {
     locals: Locals<'scope, 'ctx>,
-    stmt_prefix: Vec<ir::Stmt<'ctx>>,
     return_type: PolyType<'ctx>,
     captures: IndexSet<Capture>,
+    stmt_prefixes: Vec<Vec<ir::Stmt<'ctx>>>,
     symbols: &'scope Symbols<'ctx>,
     reporter: &'scope mut LowerReporter<'ctx>,
 }
@@ -53,8 +53,8 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         Self {
             locals,
             return_type,
-            stmt_prefix: Vec::new(),
             captures: IndexSet::default(),
+            stmt_prefixes: Vec::new(),
             symbols,
             reporter,
         }
@@ -105,14 +105,13 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         ) -> (ir::Block<'ctx>, LowerOutput<'ctx>) {
             match body {
                 ast::FunctionBody::Block(block) => {
-                    let mut typer = Lower::new(locals, ret_t.clone(), symbols, reporter);
-                    (typer.lower_block(&block.stmts, env), typer.into_output())
+                    let mut lower = Lower::new(locals, ret_t.clone(), symbols, reporter);
+                    (lower.lower_block(&block.stmts, env), lower.into_output())
                 }
                 ast::FunctionBody::Inline(expr) => {
                     let result = Lower::expr(expr, locals, env, ret_t, symbols, reporter);
-                    let (expr, output) = reporter.unwrap_err(result).unzip();
-                    let body = ir::Block::new([ir::Stmt::Return(expr.map(Box::new))]);
-                    (body, output.unwrap_or_default())
+                    let (body, output) = reporter.unwrap_err(result).unzip();
+                    (body.unwrap_or_default(), output.unwrap_or_default())
                 }
             }
         }
@@ -131,11 +130,14 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         return_t: PolyType<'ctx>,
         symbols: &Symbols<'ctx>,
         reporter: &mut LowerReporter<'ctx>,
-    ) -> LowerResult<'ctx, (ir::Expr<'ctx>, LowerOutput<'ctx>)> {
-        let mut typer = Lower::new(locals, return_t.clone(), symbols, reporter);
-        let (mut expr, typ) = typer.lower_expr_with(expr, Some(&return_t), env)?;
-        typer.coerce(&mut expr, typ, return_t, env, *span)?;
-        Ok((expr, typer.into_output()))
+    ) -> LowerResult<'ctx, (ir::Block<'ctx>, LowerOutput<'ctx>)> {
+        let mut lower = Lower::new(locals, return_t.clone(), symbols, reporter);
+        let (mut expr, typ) = lower.lower_expr_with(expr, Some(&return_t), env)?;
+        lower.coerce(&mut expr, typ, return_t, env, *span)?;
+
+        let mut stmts = lower.stmt_prefixes.pop().unwrap_or_default();
+        stmts.push(ir::Stmt::Return(Some(expr.into())));
+        Ok((ir::Block::new(stmts), lower.into_output()))
     }
 
     fn lower_block(
@@ -144,13 +146,19 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         env: &mut Env<'_, 'ctx>,
     ) -> ir::Block<'ctx> {
         let mut accumulator = Vec::with_capacity(stmts.len());
+        self.stmt_prefixes.push(vec![]);
+
         for (stmt, span) in stmts {
             let res = self.lower_stmt(stmt, env, *span);
             if let Some(stmt) = self.reporter.unwrap_err(res) {
-                accumulator.append(&mut self.stmt_prefix);
+                if let Some(prefix) = self.stmt_prefixes.last_mut() {
+                    accumulator.extend(prefix.drain(..));
+                }
                 accumulator.push(stmt);
             }
         }
+
+        self.stmt_prefixes.pop();
         ir::Block::new(accumulator)
     }
 
@@ -225,12 +233,19 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 let array_t = Type::app(predef::ARRAY, [elem_typ.clone()]).into_poly();
                 let local = self.locals.add_var(array_t.clone(), None);
 
-                self.stmt_prefix.push(ir::Stmt::InitArray {
+                let mut top = self
+                    .stmt_prefixes
+                    .last_mut()
+                    .map(mem::take)
+                    .unwrap_or_default();
+                top.push(ir::Stmt::InitArray {
                     local: local.id,
                     elements: elems.into(),
                     element_type: elem_typ.into(),
                     span: *span,
                 });
+                self.stmt_prefixes.push(top);
+
                 (ir::Expr::Local(local.id, *span), array_t)
             }
             ast::Expr::InterpolatedString(elems) => {
@@ -273,6 +288,10 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 let (lhs, lhs_t) = self.lower_expr(lhs, env)?;
                 let (mut rhs, rhs_t) = self.lower_expr_with(rhs, Some(&lhs_t), env)?;
                 self.coerce(&mut rhs, rhs_t, lhs_t, env, *span)?;
+
+                if lhs.is_prvalue(self.symbols) {
+                    self.reporter.report(Error::InvalidPlaceExpr(*span));
+                }
 
                 let ir = ir::Expr::Assign {
                     place: lhs.into(),
@@ -2503,6 +2522,8 @@ pub enum Error<'ctx> {
     InstantiatingAbstract(TypeId<'ctx>, Span),
     #[error("this type has no super type to refer to")]
     NonExistentSuperType(Span),
+    #[error("this expression is not a place that can be written to")]
+    InvalidPlaceExpr(Span),
 }
 
 impl Error<'_> {
@@ -2528,7 +2549,8 @@ impl Error<'_> {
             | Self::LiteralOutOfRange(_, span)
             | Self::WrongStringLiteral(_, _, span)
             | Self::InstantiatingAbstract(_, span)
-            | Self::NonExistentSuperType(span) => *span,
+            | Self::NonExistentSuperType(span)
+            | Self::InvalidPlaceExpr(span) => *span,
         }
     }
 }
