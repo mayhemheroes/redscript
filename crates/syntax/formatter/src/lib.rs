@@ -59,10 +59,17 @@ pub fn format_document<'a>(
 
     let mut collector = PrefixCollector::new(&ws);
     collector.visit_module(&module).ok();
+    let (prefixes, remainder) = collector.into_inner();
+    let remainder = remainder
+        .iter()
+        .filter(|(t, _)| !matches!(t, Token::LineFeed))
+        .map(|(t, _)| t.clone())
+        .collect::<Vec<_>>();
 
     let display = DisplayFn(move |f: &mut fmt::Formatter<'_>| {
-        let ctx = FormatCtx::new(settings, &collector.prefixes);
-        write!(f, "{}", module.as_fmt(ctx))
+        let ctx = FormatCtx::new(settings, &prefixes);
+        writeln!(f, "{}", module.as_fmt(ctx))?;
+        remainder.iter().try_for_each(|t| writeln!(f, "{t}"))
     });
     (Some(display), errors)
 }
@@ -1303,23 +1310,32 @@ pub enum Prefix<'src> {
 #[derive(Debug)]
 struct PrefixCollector<'ctx, 'src> {
     prefixes: HashMap<NodeId, Vec<Prefix<'src>>>,
-    tokens: &'ctx [Spanned<Token<'src>>],
+    remainder: &'ctx [Spanned<Token<'src>>],
 }
 
 impl<'ctx, 'src> PrefixCollector<'ctx, 'src> {
     fn new(tokens: &'ctx [Spanned<Token<'src>>]) -> Self {
         Self {
             prefixes: HashMap::new(),
-            tokens,
+            remainder: tokens,
         }
     }
 
+    fn into_inner(
+        self,
+    ) -> (
+        HashMap<NodeId, Vec<Prefix<'src>>>,
+        &'ctx [Spanned<Token<'src>>],
+    ) {
+        (self.prefixes, self.remainder)
+    }
+
     fn skip_until(&mut self, span: Span) {
-        while let [(Token::LineFeed, s), rest @ ..] = self.tokens {
+        while let [(Token::LineFeed, s), rest @ ..] = self.remainder {
             if s.start > span.start {
                 break;
             }
-            self.tokens = rest;
+            self.remainder = rest;
         }
     }
 }
@@ -1331,7 +1347,7 @@ impl<'src> AstVisitor<'src, WithSpan> for PrefixCollector<'_, 'src> {
         let mut prefixes = vec![];
         let mut is_lf_seq = false;
 
-        while let [(fst, span), rest @ ..] = self.tokens {
+        while let [(fst, span), rest @ ..] = self.remainder {
             if span.start > node.span().start {
                 break;
             }
@@ -1341,14 +1357,14 @@ impl<'src> AstVisitor<'src, WithSpan> for PrefixCollector<'_, 'src> {
                     if matches!(node, AstNode::Stmt(_)) && span.start <= node.span().start =>
                 {
                     is_lf_seq = true;
-                    self.tokens = rest;
+                    self.remainder = rest;
                 }
                 _ => {
                     if is_lf_seq {
                         prefixes.push(Prefix::LineBreak);
                         is_lf_seq = false;
                     }
-                    self.tokens = rest;
+                    self.remainder = rest;
                 }
             }
             match fst {
@@ -1367,11 +1383,11 @@ impl<'src> AstVisitor<'src, WithSpan> for PrefixCollector<'_, 'src> {
     }
 
     fn post_visit_node(&mut self, node: AstNode<'_, 'src, WithSpan>) -> Result<(), Self::Error> {
-        while let [(Token::LineFeed, span), rest @ ..] = self.tokens {
+        while let [(Token::LineFeed, span), rest @ ..] = self.remainder {
             if span.start >= node.span().end {
                 break;
             }
-            self.tokens = rest;
+            self.remainder = rest;
         }
 
         Ok(())

@@ -1,9 +1,4 @@
----
-source: crates/syntax/formatter/tests/formatted.rs
-expression: module
-input_file: crates/syntax/formatter/tests/data/ControlFlow.reds
-snapshot_kind: text
----
+
 func Test() {
   if true
     && false
@@ -77,3 +72,5 @@ func Test() {
   };
   let f3 = (a: Int32) -> a;
 }
+
+// trailing comment
