@@ -318,10 +318,12 @@ impl<'ctx> NameResolution<'ctx> {
         let (_, name_span) = aggregate.name;
 
         let mut qs = entry.meta.qualifiers;
+        let is_import_only = qs.take_flag(ast::ItemQualifiers::IMPORT_ONLY);
+        let is_native = is_import_only || qs.take_flag(ast::ItemQualifiers::NATIVE);
         let mut class_flags = AggregateFlags::default()
-            .with_is_native(qs.take_flag(ast::ItemQualifiers::NATIVE))
+            .with_is_import_only(is_import_only)
+            .with_is_native(is_native)
             .with_is_final(qs.take_flag(ast::ItemQualifiers::FINAL))
-            .with_is_import_only(qs.take_flag(ast::ItemQualifiers::IMPORT_ONLY))
             .with_is_abstract(qs.take_flag(ast::ItemQualifiers::ABSTRACT))
             .with_is_struct(is_struct);
 
