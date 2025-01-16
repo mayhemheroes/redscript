@@ -23,7 +23,7 @@ use crate::types::{
     MAX_STATIC_ARRAY_SIZE,
 };
 use crate::utils::{Lazy, ScopedMap};
-use crate::{ir, FreeFunction, IndexMap, IndexSet, LowerReporter, MethodId};
+use crate::{ir, FreeFunction, IndexMap, IndexSet, LowerReporter, MethodId, Param};
 
 pub type InferredType<'ctx> = Type<'ctx, Poly>;
 pub type InferredTypeApp<'ctx> = TypeApp<'ctx, Poly>;
@@ -152,7 +152,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             let res = self.lower_stmt(stmt, env, *span);
             if let Some(stmt) = self.reporter.unwrap_err(res) {
                 if let Some(prefix) = self.stmt_prefixes.last_mut() {
-                    accumulator.extend(prefix.drain(..));
+                    accumulator.append(prefix);
                 }
                 accumulator.push(stmt);
             }
@@ -346,6 +346,10 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 index_t
                     .constrain(&PolyType::nullary(predef::INT32), self.symbols)
                     .with_span(*index_span)?;
+
+                if expr.is_prvalue(self.symbols) {
+                    self.reporter.report(Error::InvalidTemporary(*expr_span));
+                }
 
                 (
                     ir::Expr::Index {
@@ -1109,7 +1113,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                     let expected = PolyType::from_type_with_env(param.type_(), &type_env)
                         .map_err(|var| Error::UnresolvedVar(var, *span))?;
                     let (mut expr, typ) = self.lower_expr_with(arg, Some(&expected), env)?;
-                    self.coerce(&mut expr, typ.clone(), expected, env, *span)?;
+                    self.arg(&mut expr, typ.clone(), expected, param, env, *span)?;
                     Ok(expr)
                 })
                 .collect::<Result<_, _>>()?;
@@ -1230,7 +1234,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             let span = arg.span();
             let expected = PolyType::from_type_with_env(param.type_(), &type_env)
                 .map_err(|var| Error::UnresolvedVar(var, span))?;
-            self.coerce(&mut *arg, typ.clone(), expected, env, span)?;
+            self.arg(&mut *arg, typ.clone(), expected, param, env, span)?;
         }
 
         let return_t =
@@ -1279,6 +1283,25 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         Ok(PolyType::from_type(&env.types.resolve(typ, span)?))
     }
 
+    fn arg(
+        &mut self,
+        expr: &mut ir::Expr<'ctx>,
+        lhs: PolyType<'ctx>,
+        rhs: PolyType<'ctx>,
+        param: &Param<'ctx>,
+        env: &Env<'_, 'ctx>,
+        span: Span,
+    ) -> LowerResult<'ctx, ()> {
+        if param.flags().is_out() {
+            rhs.constrain(&lhs, self.symbols).with_span(span)?;
+            if expr.is_prvalue(self.symbols) {
+                self.reporter.report(Error::InvalidTemporary(span));
+            }
+        }
+        self.coerce(expr, lhs, rhs, env, span)?;
+        Ok(())
+    }
+
     fn coerce(
         &mut self,
         expr: &mut ir::Expr<'ctx>,
@@ -1322,7 +1345,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
     }
 
     fn field(
-        &self,
+        &mut self,
         ir: ir::Expr<'ctx>,
         member: &'ctx str,
         upper_t: InferredTypeApp<'ctx>,
@@ -1337,10 +1360,19 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             .ok_or_else(|| Error::UnresolvedMember(upper_t.id(), member, span))?;
         let this_t = upper_t
             .instantiate_as(target_id, self.symbols)
-            .expect("should instantiate subtype");
+            .expect("should instantiate as base type");
         let env = this_t.type_env(self.symbols);
         let typ = PolyType::from_type_with_env(field.type_(), &env)
             .map_err(|var| Error::UnresolvedVar(var, span))?;
+
+        if self.symbols[target_id]
+            .schema()
+            .as_aggregate()
+            .is_some_and(|agg| agg.flags().is_struct())
+            && ir.is_prvalue(self.symbols)
+        {
+            self.reporter.report(Error::InvalidTemporary(span));
+        }
 
         let field = FieldId::new(target_id, field_idx);
         let ir = ir::Expr::Field {
@@ -1389,7 +1421,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         }
 
         for ((_, var), (arg, span)) in map.top().iter().zip(type_args) {
-            var.constrain(&self.resolve_type(arg, env, *span)?, self.symbols)
+            var.constrain_invariant(&self.resolve_type(arg, env, *span)?, self.symbols)
                 .with_span(*span)?;
         }
 
@@ -2524,6 +2556,8 @@ pub enum Error<'ctx> {
     NonExistentSuperType(Span),
     #[error("this expression is not a place that can be written to")]
     InvalidPlaceExpr(Span),
+    #[error("a temporary cannot be used here, consider storing this value in a variable")]
+    InvalidTemporary(Span),
 }
 
 impl Error<'_> {
@@ -2550,7 +2584,8 @@ impl Error<'_> {
             | Self::WrongStringLiteral(_, _, span)
             | Self::InstantiatingAbstract(_, span)
             | Self::NonExistentSuperType(span)
-            | Self::InvalidPlaceExpr(span) => *span,
+            | Self::InvalidPlaceExpr(span)
+            | Self::InvalidTemporary(span) => *span,
         }
     }
 }

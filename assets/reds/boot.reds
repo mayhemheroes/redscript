@@ -9,46 +9,46 @@ func NotEquals<A>(lhs: A, rhs: A) -> Bool
 func ArrayClear<A>(out array: [A])
 
 @intrinsic(ArraySize)
-func ArraySize<A>(array: [A]) -> Int32
+func ArraySize<A>(out array: [A]) -> Int32
 
 @intrinsic(ArrayResize)
-func ArrayResize<A>(array: [A], newSize: Int32)
+func ArrayResize<A>(out array: [A], newSize: Int32)
 
 @intrinsic(ArrayFindFirst)
-func ArrayFindFirst<A>(array: [A], needle: A) -> Int32
+func ArrayFindFirst<A>(out array: [A], needle: A) -> Int32
 
 @intrinsic(ArrayFindLast)
-func ArrayFindLast<A>(array: [A], needle: A) -> Int32
+func ArrayFindLast<A>(out array: [A], needle: A) -> Int32
 
 @intrinsic(ArrayContains)
-func ArrayContains<A>(array: [A], needle: A) -> Bool
+func ArrayContains<A>(out array: [A], needle: A) -> Bool
 
 @intrinsic(ArrayCount)
-func ArrayCount<A>(array: [A], needle: A) -> Int32
+func ArrayCount<A>(out array: [A], needle: A) -> Int32
 
 @intrinsic(ArrayPush)
-func ArrayPush<A>(array: [A], elem: A)
+func ArrayPush<A>(out array: [A], elem: A)
 
 @intrinsic(ArrayPop)
-func ArrayPop<A>(array: [A]) -> A
+func ArrayPop<A>(out array: [A]) -> A
 
 @intrinsic(ArrayInsert)
-func ArrayInsert<A>(array: [A], index: Int32, elem: A)
+func ArrayInsert<A>(out array: [A], index: Int32, elem: A)
 
 @intrinsic(ArrayRemove)
-func ArrayRemove<A>(array: [A], elem: A) -> Bool
+func ArrayRemove<A>(out array: [A], elem: A) -> Bool
 
 @intrinsic(ArrayGrow)
-func ArrayGrow<A>(array: [A], count: Int32)
+func ArrayGrow<A>(out array: [A], count: Int32)
 
 @intrinsic(ArrayErase)
-func ArrayErase<A>(array: [A], index: Int32)
+func ArrayErase<A>(out array: [A], index: Int32)
 
 @intrinsic(ArrayLast)
-func ArrayLast<A>(array: [A]) -> A
+func ArrayLast<A>(out array: [A]) -> A
 
 @intrinsic(ArraySort)
-func ArraySort<A>(array: [A])
+func ArraySort<A>(out array: [A])
 
 @intrinsic(ToString)
 func ToString<A>(a: A) -> String

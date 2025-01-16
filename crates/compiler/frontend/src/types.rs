@@ -58,7 +58,10 @@ impl<'ctx, K: TypeKind> Type<'ctx, K> {
 
     pub fn is_primitive(&self, symbols: &Symbols<'ctx>) -> bool {
         match self {
-            Self::Data(typ) => matches!(symbols[typ.id()].schema(), TypeSchema::Primitive),
+            Self::Data(typ) => matches!(
+                symbols[typ.id()].schema(),
+                TypeSchema::Primitive | TypeSchema::Enum(_)
+            ),
             _ => false,
         }
     }
