@@ -124,6 +124,7 @@ pub enum Expr<'ctx> {
     Field {
         receiver: Box<Self>,
         receiver_type: TypeApp<'ctx>,
+        receiver_ref: Option<RefType>,
         field: FieldId<'ctx>,
         span: Span,
     },

@@ -440,13 +440,17 @@ impl<'ctx> Monomorphizer<'ctx> {
             for (i, func) in funcs.iter().rev().enumerate() {
                 let name = format!("wrapper{}${}", i, bundle[wrapped_name]);
                 let cname = bundle.cnames_mut().add(name);
-                let flags = wrapped
-                    .flags()
+                let flags = PoolFunctionFlags::default()
+                    .with_is_static(wrapped.flags().is_static())
+                    .with_is_timer(wrapped.flags().is_timer())
+                    .with_is_final(wrapped.flags().is_final())
+                    .with_is_quest(wrapped.flags().is_quest())
                     .with_is_callback(wrapped.flags().is_callback() && i == 0);
 
                 let def = PoolFunction::new(cname, wrapped.visibility(), flags)
                     .with_class(wrapped.class())
-                    .with_base_method(wrapped.base_method().filter(|_| i == 0));
+                    .with_base_method(wrapped.base_method().filter(|_| i == 0))
+                    .with_return_type(wrapped.return_type());
                 let next = bundle.define_and_init(def, |bundle, next, def| {
                     let parameters = wrapped
                         .parameters()
@@ -501,8 +505,11 @@ impl<'ctx> Monomorphizer<'ctx> {
                 })
                 .collect::<Result<Vec<_>, AssembleError<'ctx>>>()?;
 
+            let flags = wrapped.flags();
+
             bundle[index] = wrapped
                 .with_name(bundle[index].name())
+                .with_flags(flags.with_is_callback(false))
                 .with_locals(locals)
                 .with_parameters(params)
                 .with_code(code);

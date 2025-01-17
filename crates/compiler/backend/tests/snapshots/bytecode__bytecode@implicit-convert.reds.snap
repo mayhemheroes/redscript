@@ -24,6 +24,10 @@ wref.to_ref
 local 0
 invoke.virtual j16 l0 f0 0000000000000000
 param.end
+ctx 19
+wref.to_ref
+local 0
+object.field 0
 
 // TakeScriptRef (f2)
 

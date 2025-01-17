@@ -351,6 +351,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
             ir::Expr::Field {
                 receiver,
                 receiver_type,
+                receiver_ref,
                 field,
                 ..
             } => {
@@ -368,6 +369,9 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                     _ => {
                         let exit = self.new_label();
                         self.emit(Instr::Context(Jump::new(exit)));
+                        if matches!(receiver_ref, Some(RefType::Weak)) {
+                            self.emit(Instr::WeakRefToRef);
+                        }
                         self.assemble_expr(receiver)?;
                         self.emit(Instr::ObjectField(field));
                         self.mark_label(exit);

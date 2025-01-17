@@ -673,6 +673,12 @@ impl<'i> Function<'i> {
     }
 
     #[inline]
+    pub fn with_flags(mut self, flags: FunctionFlags) -> Self {
+        self.flags = flags;
+        self
+    }
+
+    #[inline]
     pub fn with_class(mut self, class: Option<ClassIndex>) -> Self {
         self.class = class;
         self

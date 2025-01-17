@@ -670,8 +670,8 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 return Ok(res);
             }
 
-            let (expr_ir, typ) = self.lower_expr(expr, env)?;
-            let (ref_type, stripped) = typ.strip_ref(self.symbols).unzip();
+            let (ir, typ) = self.lower_expr(expr, env)?;
+            let (ref_t, stripped) = typ.strip_ref(self.symbols).unzip();
             let upper_bound = stripped
                 .unwrap_or(typ.clone())
                 .force_upper_bound(self.symbols)
@@ -696,7 +696,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 .filter(|entry| !entry.func().flags().is_static())
                 .peekable();
             if candidates.peek().is_none() {
-                break 'instance Some(self.field(expr_ir, member, upper_bound, *expr_span)?);
+                break 'instance Some(self.field(ir, member, upper_bound, ref_t, *expr_span)?);
             }
 
             let res = self
@@ -709,7 +709,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                     env,
                     *expr_span,
                 )?
-                .into_instance_call(expr_ir, upper_bound, ref_type, mode);
+                .into_instance_call(ir, upper_bound, ref_t, mode);
             return Ok(res);
         };
 
@@ -853,13 +853,14 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         };
 
         let (ir, typ) = self.lower_expr(expr, env)?;
-        let upper_bound = typ
-            .unwrap_ref_or_self(self.symbols)
+        let (ref_type, upper_bound) = typ.strip_ref(self.symbols).unzip();
+        let upper_bound = upper_bound
+            .unwrap_or(typ)
             .force_upper_bound(self.symbols)
             .with_span(*span)?
             .ok_or(Error::CannotLookupMember(*span))?
             .into_owned();
-        self.field(ir, member, upper_bound, *span)
+        self.field(ir, member, upper_bound, ref_type, *span)
     }
 
     fn lower_for_in(
@@ -1349,6 +1350,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         ir: ir::Expr<'ctx>,
         member: &'ctx str,
         upper_t: InferredTypeApp<'ctx>,
+        ref_t: Option<RefType>,
         span: Span,
     ) -> LowerResult<'ctx, (ir::Expr<'ctx>, PolyType<'ctx>)> {
         let (target_id, (field_idx, field)) = self
@@ -1376,8 +1378,9 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
 
         let field = FieldId::new(target_id, field_idx);
         let ir = ir::Expr::Field {
-            receiver_type: this_t.into(),
             receiver: ir.into(),
+            receiver_type: this_t.into(),
+            receiver_ref: ref_t,
             field,
             span,
         };
