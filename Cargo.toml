@@ -107,4 +107,6 @@ panic = "abort"
 
 [workspace.metadata.release]
 pre-release-commit-message = "chore: release {{version}}"
+tag-prefix = ""
+shared-version = true
 publish = false
