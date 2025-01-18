@@ -26,7 +26,8 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
-      - env:
+      - name: Publish release
+        env:
           GH_TOKEN: ${{ github.token }}
         run: |
           FLAGS=()
