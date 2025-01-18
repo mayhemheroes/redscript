@@ -13,6 +13,7 @@ pub struct Arguments {
     pub no_testonly: bool,
     pub no_breakpoint: bool,
     pub profile: bool,
+    pub script_paths_file: Option<PathBuf>,
     pub cache_file: Option<PathBuf>,
     pub no_exec: bool,
     pub no_debug: bool,
@@ -37,6 +38,7 @@ impl Arguments {
                 let mut no_testonly = false;
                 let mut no_breakpoint = false;
                 let mut profile = false;
+                let mut script_paths_file = None;
                 let mut cache_file = None;
                 let mut no_exec = false;
                 let mut no_debug = false;
@@ -51,6 +53,7 @@ impl Arguments {
                                     .parse()
                                     .map_err(|_| OptsError::InvalidArgument("threads"))?;
                             }
+                            "compilePathsFile" => script_paths_file = Some(PathBuf::from(value)),
                             _ => {}
                         },
                         Arg::Flag { name } => match name {
@@ -76,6 +79,7 @@ impl Arguments {
                     no_testonly,
                     no_breakpoint,
                     profile,
+                    script_paths_file,
                     cache_file,
                     no_exec,
                     no_debug,

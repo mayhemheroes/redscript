@@ -29,7 +29,8 @@ fn main() -> anyhow::Result<()> {
                 .context("provided scripts directory has no parent directory")?;
             logger::setup(r6);
 
-            let settings = SccSettings::from_r6_dir_and_args(r6.to_path_buf(), args);
+            let settings = SccSettings::from_r6_dir_and_args(r6.to_path_buf(), args)
+                .context("failed to create the settings")?;
             if let Err(err) = compile(&settings) {
                 log::error!("An unexpected error ocurred: {err}");
                 return Err(err);

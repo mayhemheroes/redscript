@@ -1,4 +1,6 @@
 use std::borrow::Cow;
+use std::fs::File;
+use std::io::BufRead;
 use std::path::{Path, PathBuf};
 use std::{io, iter};
 
@@ -23,13 +25,25 @@ pub struct SccSettings {
 }
 
 impl SccSettings {
-    pub fn from_r6_dir_and_args(r6_dir: impl Into<PathBuf>, args: Arguments) -> Self {
-        Self {
+    pub fn from_r6_dir_and_args(r6_dir: impl Into<PathBuf>, args: Arguments) -> io::Result<Self> {
+        let additional_script_paths = args
+            .script_paths_file
+            .as_deref()
+            .map(|path| {
+                io::BufReader::new(File::open(path)?)
+                    .lines()
+                    .map(|line| Ok(PathBuf::from(line?)))
+                    .collect::<io::Result<Vec<_>>>()
+            })
+            .transpose()?
+            .unwrap_or_default();
+
+        Ok(Self {
             r6_dir: r6_dir.into(),
             custom_cache_file: args.cache_file.map(Into::into),
             output_cache_file: None,
-            additional_script_paths: vec![],
-        }
+            additional_script_paths,
+        })
     }
 
     fn default_cache_file_path(&self) -> PathBuf {
