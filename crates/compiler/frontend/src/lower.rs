@@ -643,7 +643,9 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             };
 
             let res = self
-                .resolve_overload(name, args, type_args, candidates, None, env, *expr_span)?
+                .resolve_overload(
+                    name, args, type_args, candidates, None, hint, env, *expr_span,
+                )?
                 .into_call();
             return Ok(res);
         };
@@ -687,6 +689,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                         type_args,
                         candidates,
                         Some(typ.clone()),
+                        hint,
                         env,
                         *expr_span,
                     )?
@@ -730,6 +733,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                     type_args,
                     candidates,
                     Some(upper_bound.clone()),
+                    hint,
                     env,
                     *expr_span,
                 )?
@@ -785,7 +789,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 target_t.is_subtype_compatible(entry.func().type_().return_type(), self.symbols)
             });
         let res = self
-            .resolve_overload("Cast", args, &[], candidates, None, env, expr_span)?
+            .resolve_overload("Cast", args, &[], candidates, None, hint, env, expr_span)?
             .into_call();
         Ok(res)
     }
@@ -1093,6 +1097,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         type_args: &[Spanned<ast::SourceType<'ctx>>],
         candidates: impl IntoIterator<Item = FunctionEntry<Key, Name, Func>>,
         receiver: Option<InferredTypeApp<'ctx>>,
+        return_hint: Option<&PolyType<'ctx>>,
         env: &Env<'_, 'ctx>,
         span: Span,
     ) -> LowerResult<'ctx, FunctionResultWithArgs<'ctx, Key>>
@@ -1132,6 +1137,14 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 self.function_env(primary.func().type_(), type_args, env, span)?
                     .pop_scope(),
             );
+
+            let return_t =
+                PolyType::from_type_with_env(primary.func().type_().return_type(), &type_env)
+                    .map_err(|var| Error::UnresolvedVar(var, span))?;
+            if let Some(hint) = return_hint {
+                return_t.constrain(hint, self.symbols).ok();
+            }
+
             let checked_args: Box<[_]> = args
                 .zip(primary.func().type_().params())
                 .map(|(arg @ (_, span), param)| {
@@ -1143,9 +1156,6 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 })
                 .collect::<Result<_, _>>()?;
 
-            let return_t =
-                PolyType::from_type_with_env(primary.func().type_().return_type(), &type_env)
-                    .map_err(|var| Error::UnresolvedVar(var, span))?;
             let type_args = type_env
                 .pop_scope()
                 .into_values()
