@@ -10,14 +10,14 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-    name: Package and upload release artifacts
+  package:
+    name: Package and upload artifacts
     uses: ./.github/workflows/package.yml
 
   publish:
     name: Publish release
     runs-on: ubuntu-latest
-    needs: build
+    needs: package
     permissions:
       contents: write
     steps:
@@ -28,8 +28,13 @@ jobs:
           merge-multiple: true
       - env:
           GH_TOKEN: ${{ github.token }}
-        run:
-          IS_PRE_RELEASE=$(echo ${{ github.ref_name }} | grep -E 'v[0-9]+\.[0-9]+\.[0-9]+-.+')
+        run: |
+          FLAGS=()
           ARTIFACTS=$(find ./artifacts -type f)
 
-          gh release create ${{ github.ref_name }}"${IS_PRE_RELEASE:+ --prerelease}" $ARTIFACTS
+          IS_PRE_RELEASE=$(echo ${{ github.ref_name }} | grep -E 'v[0-9]+\.[0-9]+\.[0-9]+-.+')
+          if [ -n "$IS_PRE_RELEASE" ]; then
+            FLAGS+=("--prerelease")
+          fi
+
+          gh release create ${{ github.ref_name }} ${FLAGS[@]} $ARTIFACTS
