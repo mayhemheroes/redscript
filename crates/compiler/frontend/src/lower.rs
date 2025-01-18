@@ -1336,10 +1336,11 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         span: Span,
     ) -> LowerResult<'ctx, ()> {
         let name = match lhs.coerce(&rhs, self.symbols).with_span(span)? {
-            Some(Coercion::From(RefType::Weak)) => ir::Intrinsic::WeakRefToRef,
-            Some(Coercion::Into(RefType::Weak)) => ir::Intrinsic::RefToWeakRef,
-            Some(Coercion::From(RefType::Script)) => ir::Intrinsic::Deref,
-            Some(Coercion::Into(RefType::Script)) => ir::Intrinsic::AsRef,
+            Some(Coercion::FromRef(RefType::Weak)) => ir::Intrinsic::WeakRefToRef,
+            Some(Coercion::IntoRef(RefType::Weak)) => ir::Intrinsic::RefToWeakRef,
+            Some(Coercion::FromRef(RefType::Script)) => ir::Intrinsic::Deref,
+            Some(Coercion::IntoRef(RefType::Script)) => ir::Intrinsic::AsRef,
+            Some(Coercion::IntoVariant) => ir::Intrinsic::ToVariant,
             None => return Ok(()),
         };
         let arg = mem::replace(expr, ir::Expr::Null(span));
@@ -1873,16 +1874,19 @@ impl<'ctx> PolyType<'ctx> {
         match (self.strip_ref(symbols), other.strip_ref(symbols)) {
             (Some((from, pointee)), None) => {
                 pointee.constrain(other, symbols)?;
-                Ok(Some(Coercion::From(from)))
+                Ok(Some(Coercion::FromRef(from)))
             }
             (None, Some((to, pointee))) => {
                 self.constrain(&pointee, symbols)?;
-                Ok(Some(Coercion::Into(to)))
+                Ok(Some(Coercion::IntoRef(to)))
             }
-            _ => {
-                self.constrain(other, symbols)?;
-                Ok(None)
-            }
+            _ => match self.constrain(other, symbols) {
+                Err(_) if matches!(other, PolyType::Mono(Type::Data(to)) if to.id() == predef::VARIANT) => {
+                    Ok(Some(Coercion::IntoVariant))
+                }
+                Err(err) => Err(err),
+                Ok(()) => Ok(None),
+            },
         }
     }
 
@@ -2408,8 +2412,9 @@ impl<'sym, 'ctx> Simplifier<'sym, 'ctx> {
 
 #[derive(Debug, Clone, Copy)]
 enum Coercion {
-    From(RefType),
-    Into(RefType),
+    FromRef(RefType),
+    IntoRef(RefType),
+    IntoVariant,
 }
 
 #[derive(Debug)]
