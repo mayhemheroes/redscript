@@ -123,6 +123,30 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         inner(symbols, reporter, locals, return_t, body, &mut env)
     }
 
+    pub fn constant(
+        expr @ (_, span): &Spanned<ast::SourceExpr<'ctx>>,
+        env: &Env<'_, 'ctx>,
+        expected: PolyType<'ctx>,
+        symbols: &Symbols<'ctx>,
+    ) -> (Option<ir::Const<'ctx>>, Vec<Error<'ctx>>) {
+        let mut reporter = LowerReporter::default();
+        let counter = Cell::new(0);
+        let locals = Locals::new(&counter, 0);
+        let mut lower = Lower::new(locals, expected.clone(), symbols, &mut reporter);
+        let res = (|| {
+            let (mut expr, typ) = lower.lower_expr_with(expr, Some(&expected), env)?;
+            lower.coerce(&mut expr, typ, expected, env, *span)?;
+
+            if let ir::Expr::Const(const_, _) = &expr {
+                Ok(const_.clone())
+            } else {
+                Err(Error::UnexpectedNonConstant(*span))
+            }
+        })();
+        let res = reporter.unwrap_err(res);
+        (res, reporter.into_reported())
+    }
+
     fn expr(
         expr @ (_, span): &Spanned<ast::SourceExpr<'ctx>>,
         locals: Locals<'_, 'ctx>,
@@ -2561,6 +2585,8 @@ pub enum Error<'ctx> {
     InvalidPlaceExpr(Span),
     #[error("a temporary cannot be used here, consider storing this value in a variable")]
     InvalidTemporary(Span),
+    #[error("only constants can be used here")]
+    UnexpectedNonConstant(Span),
 }
 
 impl Error<'_> {
@@ -2588,7 +2614,8 @@ impl Error<'_> {
             | Self::InstantiatingAbstract(_, span)
             | Self::NonExistentSuperType(span)
             | Self::InvalidPlaceExpr(span)
-            | Self::InvalidTemporary(span) => *span,
+            | Self::InvalidTemporary(span)
+            | Self::UnexpectedNonConstant(span) => *span,
         }
     }
 }

@@ -8,7 +8,7 @@ use identity_hash::BuildIdentityHasher;
 use indexmap::Equivalent;
 use redscript_compiler_frontend::utils::ScopedMap;
 use redscript_compiler_frontend::{
-    predef, Field, FreeFunction, FreeFunctionIndex, FunctionIndex, FunctionKind,
+    ir, predef, Field, FreeFunction, FreeFunctionIndex, FunctionIndex, FunctionKind,
     LoweredCompilationUnit, LoweredFunction, Method, MethodId, MonoType, Param, QualifiedName,
     Symbols, TypeId, TypeSchema,
 };
@@ -18,7 +18,7 @@ use redscript_io::{
     FieldFlags as PoolFieldFlags, FieldIndex as PoolFieldIndex, Function as PoolFunction,
     FunctionFlags as PoolFunctionFlags, FunctionIndex as PoolFunctionIndex, Instr,
     LocalIndex as PoolLocalIndex, Parameter as PoolParameter, ParameterFlags as PoolParameterFlags,
-    ParameterIndex as PoolParameterIndex, ScriptBundle, Type as PoolType,
+    ParameterIndex as PoolParameterIndex, Property, ScriptBundle, Type as PoolType,
     TypeIndex as PoolTypeIndex, TypeKind as PoolTypeKind, Visibility,
 };
 use smallvec::{smallvec, SmallVec};
@@ -96,7 +96,7 @@ impl<'ctx> Monomorphizer<'ctx> {
                     .as_aggregate()
                     .expect("every class should be an aggregate");
 
-                let queue = aggregate
+                let methods = aggregate
                     .methods()
                     .iter()
                     .filter(|entry| {
@@ -107,8 +107,15 @@ impl<'ctx> Monomorphizer<'ctx> {
                     .map(|entry| (class.methods()[entry.key()], &repr.methods[entry.key()]))
                     .collect::<Vec<_>>();
 
+                for (idx, default) in &repr.fields {
+                    let mangled = MangledConstant::new(default, symbols);
+                    let field_idx = bundle[class.index()].fields_mut()[usize::from(*idx)];
+                    bundle[field_idx]
+                        .set_defaults([Property::new(typ.id().as_str(), mangled.to_string())]);
+                }
+
                 let env = typ.type_env(symbols);
-                queue.into_iter().try_for_each(|(index, func)| {
+                methods.into_iter().try_for_each(|(index, func)| {
                     self.function_body(index, func, &env, symbols, bundle)
                 })?;
             }
@@ -363,11 +370,16 @@ impl<'ctx> Monomorphizer<'ctx> {
     ) -> Result<(), AssembleError<'ctx>> {
         let env = ScopedMap::default();
 
-        for &id in &unit.added_fields {
-            let (name, field) = symbols.get_field(id).expect("field should exist");
+        for (id, expr) in &unit.added_fields {
+            let (name, field) = symbols.get_field(*id).expect("field should exist");
             let class = self.classes[&MonoType::nullary(id.parent())].index();
             let idx = self.add_field_to_pool(name, field, class, &env, symbols, bundle);
             bundle[class].add_field(idx);
+
+            if let Some(default) = expr {
+                let default = MangledConstant::new(default, symbols).to_string();
+                bundle[idx].set_defaults([Property::new(id.parent().as_str(), default)]);
+            }
         }
 
         Ok(())
@@ -939,6 +951,47 @@ impl<'ctx, F: FunctionKind<'ctx>> fmt::Display for MangledParams<'_, 'ctx, F> {
             }
             write!(f, "{}", param.type_().unwrap_ref_or_self().mono(self.env))
         })
+    }
+}
+
+#[derive(Debug)]
+struct MangledConstant<'a, 'ctx> {
+    const_: &'a ir::Const<'ctx>,
+    symbols: &'a Symbols<'ctx>,
+}
+
+impl<'a, 'ctx> MangledConstant<'a, 'ctx> {
+    fn new(const_: &'a ir::Const<'ctx>, symbols: &'a Symbols<'ctx>) -> Self {
+        Self { const_, symbols }
+    }
+}
+
+impl fmt::Display for MangledConstant<'_, '_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.const_ {
+            ir::Const::Str(cow)
+            | ir::Const::CName(cow)
+            | ir::Const::Resource(cow)
+            | ir::Const::TweakDbId(cow) => write!(f, "{cow}"),
+            ir::Const::EnumVariant(field_id) => {
+                let (name, _) = self
+                    .symbols
+                    .get_enum_variant(*field_id)
+                    .expect("field should exist");
+                write!(f, "{}.{}", field_id.parent(), name)
+            }
+            ir::Const::F32(val) => write!(f, "{val}"),
+            ir::Const::F64(val) => write!(f, "{val}"),
+            ir::Const::I8(val) => write!(f, "{val}"),
+            ir::Const::I16(val) => write!(f, "{val}"),
+            ir::Const::I32(val) => write!(f, "{val}"),
+            ir::Const::I64(val) => write!(f, "{val}"),
+            ir::Const::U8(val) => write!(f, "{val}"),
+            ir::Const::U16(val) => write!(f, "{val}"),
+            ir::Const::U32(val) => write!(f, "{val}"),
+            ir::Const::U64(val) => write!(f, "{val}"),
+            ir::Const::Bool(val) => write!(f, "{val}"),
+        }
     }
 }
 

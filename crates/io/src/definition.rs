@@ -375,6 +375,11 @@ impl Class {
     }
 
     #[inline]
+    pub fn fields_mut(&mut self) -> &mut Vec<FieldIndex> {
+        &mut self.fields
+    }
+
+    #[inline]
     pub fn overrides(&self) -> &[FieldIndex] {
         &self.overrides
     }
@@ -1063,9 +1068,14 @@ impl<'i> Field<'i> {
 
     #[inline]
     pub fn with_defaults(mut self, defaults: impl Into<Vec<Property<'i>>>) -> Self {
+        self.set_defaults(defaults);
+        self
+    }
+
+    #[inline]
+    pub fn set_defaults(&mut self, defaults: impl Into<Vec<Property<'i>>>) {
         self.defaults = defaults.into();
         self.flags.set_has_default(!self.defaults.is_empty());
-        self
     }
 
     pub fn into_owned(self) -> Field<'static> {

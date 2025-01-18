@@ -8,7 +8,7 @@ use hashbrown::{HashMap, HashSet};
 use identity_hash::BuildIdentityHasher;
 use redscript_ast::{self as ast, Span, Spanned};
 
-use super::infer::{ClassItem, FuncItem, FuncItemKind, InferStageModule};
+use super::infer::{ClassItem, FieldItem, FuncItem, FuncItemKind, InferStageModule};
 use super::TypeInference;
 use crate::diagnostic::MissingMethod;
 use crate::lower::{FreeFunctionIndexes, InferredTypeApp, TypeEnv};
@@ -285,8 +285,8 @@ impl<'ctx> NameResolution<'ctx> {
 
             let mut fields = vec![];
             for let_ in module.lets {
-                if let Some(field) = self.process_free_field(let_, &type_scope) {
-                    fields.push(field);
+                if let Some(item) = self.process_free_field(let_, &type_scope) {
+                    fields.push(item);
                 }
             }
 
@@ -350,6 +350,7 @@ impl<'ctx> NameResolution<'ctx> {
         let mut methods = MethodMap::default();
 
         let mut method_items = vec![];
+        let mut field_items = vec![];
 
         for (item, item_span) in aggregate.items {
             match item.item {
@@ -377,9 +378,9 @@ impl<'ctx> NameResolution<'ctx> {
                     };
                     method_items.push(FuncItem::new(id, name_span, body, type_scope));
                 }
-                ast::Item::Let(field) => {
-                    let (name, name_span) = field.name;
-                    let (typ, span) = field.typ.as_ref();
+                ast::Item::Let(let_) => {
+                    let (name, name_span) = let_.name;
+                    let (typ, span) = let_.typ.as_ref();
 
                     let Some(typ) = self.reporter.unwrap_err(types.resolve(typ, *span)) else {
                         continue;
@@ -391,7 +392,11 @@ impl<'ctx> NameResolution<'ctx> {
                     let res = fields
                         .add(name, field)
                         .map_err(|_| Diagnostic::NameRedefinition(name_span));
-                    self.reporter.unwrap_err(res);
+                    let idx = self.reporter.unwrap_err(res);
+
+                    if let (Some(idx), Some(default)) = (idx, let_.default) {
+                        field_items.push(FieldItem::new(idx, Some(default)));
+                    }
                 }
                 _ => self.reporter.report(Diagnostic::UnexpectedItem(item_span)),
             }
@@ -427,7 +432,7 @@ impl<'ctx> NameResolution<'ctx> {
             .into_iter()
             .filter_map(|(k, v)| Some((k, v.force()?)))
             .collect();
-        ClassItem::new(entry.id, name_span, type_scope, method_items)
+        ClassItem::new(entry.id, name_span, type_scope, method_items, field_items)
     }
 
     fn process_enum(&mut self, entry: ParsedEnum<'ctx>, types: &mut TypeEnv<'_, 'ctx>) {
@@ -598,7 +603,7 @@ impl<'ctx> NameResolution<'ctx> {
         &mut self,
         entry: ParsedLet<'ctx>,
         types: &TypeEnv<'scope, 'ctx>,
-    ) -> Option<FieldId<'ctx>> {
+    ) -> Option<FieldItem<'ctx, FieldId<'ctx>>> {
         let field = entry.let_;
         let mut doc = entry.meta.doc;
         let (name, name_span) = field.name;
@@ -648,7 +653,7 @@ impl<'ctx> NameResolution<'ctx> {
             self.reporter.report(Diagnostic::UnexpectedItem(name_span));
         }
 
-        id
+        Some(FieldItem::new(id?, field.default))
     }
 
     fn process_method_flags(
@@ -740,8 +745,8 @@ impl<'ctx> NameResolution<'ctx> {
             self.reporter.unwrap_err(self.check_func_type(func_t, span));
         }
 
-        for &field in module.fields() {
-            let field = &self.symbols[field];
+        for field in module.fields() {
+            let field = &self.symbols[*field.id()];
             let span = field.span().expect("user field should have a span");
             self.reporter
                 .unwrap_err(self.check_type(field.type_(), Variance::Covariant, span));

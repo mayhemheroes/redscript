@@ -2,15 +2,15 @@ use std::mem;
 use std::rc::Rc;
 
 use identity_hash::BuildIdentityHasher;
-use redscript_ast::{self as ast, Span};
+use redscript_ast::{self as ast, Span, Spanned};
 use smallvec::smallvec;
 
 use super::resolution::{Scope, THIS_IDENT, WRAPPED_METHOD_IDENT};
 use crate::lower::{Env, FreeFunctionIndexes, Lower};
 use crate::{
-    ir, CompileErrorReporter, Diagnostic, FieldId, FreeFunction, FreeFunctionIndex, FunctionIndex,
-    FunctionType, IndexMap, IndexSet, MethodId, PolyType, Symbols, Type, TypeId, TypeRef,
-    TypeScope,
+    ir, CompileErrorReporter, Diagnostic, FieldId, FieldIndex, FreeFunction, FreeFunctionIndex,
+    FunctionIndex, FunctionType, IndexMap, IndexSet, MethodId, PolyType, Symbols, Type, TypeId,
+    TypeRef, TypeScope,
 };
 
 #[derive(Debug)]
@@ -48,7 +48,6 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
 
             for class in mod_.classes {
                 let types = scope.types.push_scope(class.scope);
-                let mut methods = IndexMap::default();
                 let class_t = &self.symbols[class.id];
 
                 let class_type_args = class_t
@@ -59,6 +58,7 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                 let this_t = PolyType::from_type(&Type::app(class.id, class_type_args));
                 let this = ir::LocalInfo::new(ir::Local::This, this_t, None);
 
+                let mut methods = IndexMap::default();
                 for item in class.methods {
                     let id = MethodId::new(class.id, item.id);
                     let method = &self.symbols[id];
@@ -79,7 +79,20 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                     methods.insert(item.id, func);
                 }
 
-                compiled.classes.insert(class.id, LoweredClass { methods });
+                let mut fields = IndexMap::default();
+                for item in class.fields {
+                    if let Some(expr) = item.default.and_then(|default| {
+                        let env = Env::new(&types, &scope.funcs);
+                        let id = FieldId::new(class.id, item.id);
+                        lower_constant(id, &default, &env, &self.symbols, &mut self.reporter)
+                    }) {
+                        fields.insert(item.id, expr);
+                    }
+                }
+
+                compiled
+                    .classes
+                    .insert(class.id, LoweredClass { methods, fields });
             }
 
             for enum_id in mod_.enums {
@@ -136,8 +149,16 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                 }
             }
 
-            for field in mod_.fields {
-                compiled.added_fields.insert(field);
+            for item in mod_.fields {
+                let expr = item
+                    .default
+                    .and_then(|default| {
+                        let env = Env::new(&scope.types, &scope.funcs);
+                        lower_constant(item.id, &default, &env, &self.symbols, &mut self.reporter)
+                    })
+                    .map(Box::new);
+
+                compiled.added_fields.insert(item.id, expr);
             }
         }
 
@@ -192,6 +213,19 @@ fn lower_func<'ctx>(
     LoweredFunction { block, locals }
 }
 
+fn lower_constant<'ctx>(
+    id: FieldId<'ctx>,
+    expr: &Spanned<ast::SourceExpr<'ctx>>,
+    env: &Env<'_, 'ctx>,
+    symbols: &Symbols<'ctx>,
+    reporter: &mut CompileErrorReporter<'ctx>,
+) -> Option<ir::Const<'ctx>> {
+    let field = &symbols[id];
+    let (expr, errors) = Lower::constant(expr, env, PolyType::from_type(field.type_()), symbols);
+    reporter.report_many(errors);
+    expr
+}
+
 #[derive(Debug)]
 pub struct InferStageModule<'scope, 'ctx> {
     type_scope: IndexMap<&'ctx str, TypeRef<'scope, 'ctx>>,
@@ -200,7 +234,7 @@ pub struct InferStageModule<'scope, 'ctx> {
     classes: Vec<ClassItem<'scope, 'ctx>>,
     enums: Vec<TypeId<'ctx>>,
     functions: Vec<FuncItemKind<'scope, 'ctx>>,
-    fields: Vec<FieldId<'ctx>>,
+    fields: Vec<FieldItem<'ctx, FieldId<'ctx>>>,
 }
 
 impl<'scope, 'ctx> InferStageModule<'scope, 'ctx> {
@@ -211,7 +245,7 @@ impl<'scope, 'ctx> InferStageModule<'scope, 'ctx> {
         classes: Vec<ClassItem<'scope, 'ctx>>,
         enums: Vec<TypeId<'ctx>>,
         functions: Vec<FuncItemKind<'scope, 'ctx>>,
-        fields: Vec<FieldId<'ctx>>,
+        fields: Vec<FieldItem<'ctx, FieldId<'ctx>>>,
     ) -> Self {
         Self {
             type_scope,
@@ -234,8 +268,26 @@ impl<'scope, 'ctx> InferStageModule<'scope, 'ctx> {
     }
 
     #[inline]
-    pub fn fields(&self) -> &[FieldId<'ctx>] {
+    pub fn fields(&self) -> &[FieldItem<'ctx, FieldId<'ctx>>] {
         &self.fields
+    }
+}
+
+#[derive(Debug)]
+pub struct FieldItem<'ctx, K> {
+    id: K,
+    default: Option<Box<Spanned<ast::SourceExpr<'ctx>>>>,
+}
+
+impl<'ctx, K> FieldItem<'ctx, K> {
+    #[inline]
+    pub fn new(id: K, default: Option<Box<Spanned<ast::SourceExpr<'ctx>>>>) -> Self {
+        Self { id, default }
+    }
+
+    #[inline]
+    pub fn id(&self) -> &K {
+        &self.id
     }
 }
 
@@ -270,6 +322,7 @@ pub struct ClassItem<'scope, 'ctx> {
     name_span: Span,
     scope: TypeScope<'scope, 'ctx>,
     methods: Vec<FuncItem<'scope, 'ctx, FunctionIndex>>,
+    fields: Vec<FieldItem<'ctx, FieldIndex>>,
 }
 
 impl<'scope, 'ctx> ClassItem<'scope, 'ctx> {
@@ -279,12 +332,14 @@ impl<'scope, 'ctx> ClassItem<'scope, 'ctx> {
         name_span: Span,
         scope: TypeScope<'scope, 'ctx>,
         methods: Vec<FuncItem<'scope, 'ctx, FunctionIndex>>,
+        fields: Vec<FieldItem<'ctx, FieldIndex>>,
     ) -> Self {
         Self {
             id,
             name_span,
             scope,
             methods,
+            fields,
         }
     }
 
@@ -319,7 +374,7 @@ pub struct LoweredCompilationUnit<'ctx> {
     pub enums: IndexSet<TypeId<'ctx>, BuildIdentityHasher<usize>>,
     pub functions: IndexMap<FreeFunctionIndex, LoweredFunction<'ctx>>,
 
-    pub added_fields: IndexSet<FieldId<'ctx>>,
+    pub added_fields: IndexMap<FieldId<'ctx>, Option<Box<ir::Const<'ctx>>>>,
     pub added_methods: IndexMap<MethodId<'ctx>, Option<LoweredFunction<'ctx>>>,
     pub method_replacements: IndexMap<MethodId<'ctx>, LoweredFunction<'ctx>>,
     pub method_wrappers: IndexMap<MethodId<'ctx>, Vec<LoweredFunction<'ctx>>>,
@@ -328,4 +383,5 @@ pub struct LoweredCompilationUnit<'ctx> {
 #[derive(Debug, Default)]
 pub struct LoweredClass<'ctx> {
     pub methods: IndexMap<FunctionIndex, LoweredFunction<'ctx>>,
+    pub fields: IndexMap<FieldIndex, ir::Const<'ctx>>,
 }

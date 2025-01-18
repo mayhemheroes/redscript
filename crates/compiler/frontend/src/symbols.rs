@@ -137,6 +137,13 @@ impl<'ctx> Symbols<'ctx> {
         Some((name, val))
     }
 
+    pub fn get_enum_variant(&self, id: FieldId<'ctx>) -> Option<(&'ctx str, i64)> {
+        let def = self.get_type(id.parent)?;
+        let enm = def.schema.as_enum()?;
+        let (name, &val) = enm.variants.get_index(id.index.0)?;
+        Some((name, val))
+    }
+
     pub(super) fn lub(&self, lhs: TypeId<'ctx>, rhs: TypeId<'ctx>) -> Option<TypeId<'ctx>> {
         if lhs == rhs {
             Some(lhs)
