@@ -37,5 +37,5 @@ jobs:
       - run: cargo test --all-features
 
   build:
-    name: Build and upload release artifacts
-    uses: ./.github/workflows/build.yml
+    name: Package and upload artifacts
+    uses: ./.github/workflows/package.yml
