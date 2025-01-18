@@ -104,3 +104,7 @@ strip = true
 lto = true
 codegen-units = 1
 panic = "abort"
+
+[workspace.metadata.release]
+pre-release-commit-message = "chore: release {{version}}"
+publish = false
