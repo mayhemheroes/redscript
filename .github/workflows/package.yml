@@ -5,7 +5,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  package:
     runs-on: windows-latest
     env:
       ARCHIVE_NAME: redscript-${{ github.ref_name }}.zip
