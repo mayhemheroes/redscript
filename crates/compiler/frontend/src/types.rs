@@ -17,7 +17,7 @@ pub(super) const MAX_STATIC_ARRAY_SIZE: usize = 16;
 
 pub type MonoType<'ctx> = TypeApp<'ctx, Mono>;
 
-#[derive_where(Debug, Clone, PartialEq, Eq)]
+#[derive_where(Debug, Clone)]
 pub enum Type<'ctx, K: TypeKind = Immutable> {
     Nothing,
     Data(TypeApp<'ctx, K>),
@@ -104,6 +104,20 @@ impl<'ctx> From<(TypeId<'ctx>, Rc<[Type<'ctx>]>)> for Type<'ctx> {
         Self::app(id, args)
     }
 }
+
+impl<K: TypeKind> PartialEq for Type<'_, K> {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Nothing, Self::Nothing) => true,
+            (Self::Data(a), Self::Data(b)) => a == b,
+            (Self::Ctx(a), Self::Ctx(b)) => Rc::ptr_eq(a, b),
+            _ => false,
+        }
+    }
+}
+
+impl<K: TypeKind> Eq for Type<'_, K> {}
 
 impl<'ctx> From<(TypeId<'ctx>, Rc<[MonoType<'ctx>]>)> for MonoType<'ctx> {
     #[inline]
@@ -315,15 +329,6 @@ impl<'ctx, K: TypeKind> CtxVar<'ctx, K> {
         self.upper.as_ref()
     }
 }
-
-impl<K: TypeKind> PartialEq for CtxVar<'_, K> {
-    #[inline]
-    fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
-    }
-}
-
-impl<K: TypeKind> Eq for CtxVar<'_, K> {}
 
 impl<K: TypeKind> Hash for CtxVar<'_, K> {
     #[inline]

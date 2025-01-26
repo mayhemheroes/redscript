@@ -57,6 +57,8 @@ pub enum Diagnostic<'ctx> {
     CircularInheritance(Span),
     #[error("type {} expects {} type arguments", .0, .1)]
     InvalidTypeArgCount(TypeId<'ctx>, usize, Span),
+    #[error("type {0} does not satisfy expected bound {1}")]
+    UnsastisfiedBound(Box<Type<'ctx>>, Box<Type<'ctx>>, Span),
     #[error("this annotation attempts to modify a user-defined symbol, which is not allowed")]
     UserSymbolAnnotation(Span),
     #[error("the type '{0}' appears in {1} position, which is incompatible with its declaration")]
@@ -114,6 +116,7 @@ impl<'ctx> Diagnostic<'ctx> {
             | Self::FinalMethodOverride(_, span)
             | Self::CircularInheritance(span)
             | Self::InvalidTypeArgCount(_, _, span)
+            | Self::UnsastisfiedBound(_, _, span)
             | Self::UserSymbolAnnotation(span)
             | Self::InvalidVariance(_, _, span)
             | Self::IncompatibleBaseType(_, span)

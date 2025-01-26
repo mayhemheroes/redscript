@@ -1140,6 +1140,28 @@ impl<'ctx> NameResolution<'ctx> {
         }
     }
 
+    fn check_var(
+        &self,
+        var: &CtxVar<'ctx>,
+        typ: &Type<'ctx>,
+        span: Span,
+    ) -> Result<(), Diagnostic<'ctx>> {
+        match (typ, var.upper()) {
+            (x, Some(y)) if x == y => {}
+            (Type::Data(x), Some(Type::Data(y))) if self.symbols.is_subtype(x.id(), y.id()) => {}
+            (x, Some(y)) => {
+                return Err(Diagnostic::UnsastisfiedBound(
+                    x.clone().into(),
+                    y.clone().into(),
+                    span,
+                ))
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
     fn check_type_app(
         &self,
         type_app: &TypeApp<'ctx>,
@@ -1153,6 +1175,7 @@ impl<'ctx> NameResolution<'ctx> {
                 .iter()
                 .zip(params)
                 .try_for_each(|(arg, param)| {
+                    self.check_var(param, arg, span)?;
                     self.check_type(arg, variance * param.variance(), span)
                 })
         } else {

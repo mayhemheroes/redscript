@@ -65,3 +65,17 @@ class ClassWithBadVariance<+A, -B> {
   func MethodA(a: A)
   func MethodB() -> B
 }
+
+class Animal {}
+
+class Chair {}
+
+class Dog extends Animal {}
+
+class ClassWithBound<A extends Animal> {
+}
+
+class ClassViolatingBound extends ClassWithBound<Chair> {}
+
+class ClassNotViolatingBound1 extends ClassWithBound<Animal> {}
+class ClassNotViolatingBound2 extends ClassWithBound<Dog> {}

@@ -94,6 +94,11 @@ At tests\data\class-checks.reds:66:8
        ^^^^^^^
 the type 'B' appears in covariant position, which is incompatible with its declaration
 
+At tests\data\class-checks.reds:78:7
+class ClassViolatingBound extends ClassWithBound<Chair> {}
+      ^^^^^^^^^^^^^^^^^^^^
+type Chair does not satisfy expected bound Animal
+
 At tests\data\class-checks.reds:25:7
 class ClassWithDuplicateMethod {
       ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -105,13 +110,13 @@ class IncompleteClass extends AbstractClass<Int32> {}
 this class is missing some required method implementation(s):
   func UnimplementedMethod(a: Int32) {}
 
+At tests\data\class-checks.reds:30:7
+class ClassOverridingFinalMethod extends AbstractClass<Int32> {
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+this class overrides a final method 'FinalMethod'
+
 At tests\data\class-checks.reds:35:7
 class ClassWithInvalidTypeArgCounts extends AbstractClass<Int32, Int32> {
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 this class is missing some required method implementation(s):
   func UnimplementedMethod(a: Int32) {}
-
-At tests\data\class-checks.reds:30:7
-class ClassOverridingFinalMethod extends AbstractClass<Int32> {
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-this class overrides a final method 'FinalMethod'
