@@ -10,6 +10,7 @@ use redscript_ast::{self as ast, Span, Spanned};
 
 use super::infer::{ClassItem, FieldItem, FuncItem, FuncItemKind, InferStageModule};
 use super::TypeInference;
+use crate::cte::{self, Evaluator};
 use crate::diagnostic::MissingMethod;
 use crate::lower::{FreeFunctionIndexes, InferredTypeApp, TypeEnv};
 use crate::modules::{Export, ModuleMap};
@@ -18,8 +19,8 @@ use crate::{
     ir, predef, Aggregate, AggregateFlags, CompileErrorReporter, CtxVar, Diagnostic, Enum, Field,
     FieldFlags, FieldId, FieldMap, FreeFunction, FreeFunctionFlags, FreeFunctionIndex,
     FunctionIndex, FunctionType, IndexMap, IndexSet, LowerError, Method, MethodFlags, MethodId,
-    MethodMap, Param, ParamFlags, PolyType, QualifiedName, Reporter, Symbols, Type, TypeApp,
-    TypeDef, TypeId, TypeInterner, TypeRef, TypeSchema, TypeScope, Variance,
+    MethodMap, Param, ParamFlags, PolyType, QualifiedName, Symbols, Type, TypeApp, TypeDef, TypeId,
+    TypeInterner, TypeRef, TypeSchema, TypeScope, Variance,
 };
 
 pub(super) const WRAP_METHOD_ANNOTATION: &str = "wrapMethod";
@@ -39,19 +40,36 @@ pub struct NameResolution<'ctx> {
     symbols: Symbols<'ctx>,
     module_map: ModuleMap<'ctx>,
     reporter: CompileErrorReporter<'ctx>,
+    evaluator: Evaluator<'ctx>,
 }
 
 impl<'ctx> NameResolution<'ctx> {
-    pub fn new(symbols: Symbols<'ctx>) -> Self {
-        Self {
+    pub fn new(
+        modules: Vec<ast::SourceModule<'ctx>>,
+        symbols: Symbols<'ctx>,
+        reporter: CompileErrorReporter<'ctx>,
+        interner: &'ctx TypeInterner,
+    ) -> Self {
+        let names = modules
+            .iter()
+            .filter_map(|m| m.path.as_ref())
+            .map(|path| path.segments.clone())
+            .collect::<HashSet<_>>();
+
+        let mut this = Self {
             symbols,
             module_map: ModuleMap::default(),
-            reporter: Reporter::default(),
+            reporter,
             modules: vec![],
+            evaluator: Evaluator::new(names),
+        };
+        for module in modules {
+            this.add_module(module, interner);
         }
+        this
     }
 
-    pub fn add_module(&mut self, module: ast::SourceModule<'ctx>, interner: &'ctx TypeInterner) {
+    fn add_module(&mut self, module: ast::SourceModule<'ctx>, interner: &'ctx TypeInterner) {
         let path_root = module
             .path
             .as_ref()
@@ -76,15 +94,34 @@ impl<'ctx> NameResolution<'ctx> {
             item_span,
         ) in module.items.into_vec()
         {
+            let mut include = true;
+
+            let mut annotations = annotations.into_vec();
+            annotations.retain(|(ann, _)| match (ann.name, &*ann.args) {
+                ("if", [arg]) => {
+                    let result = self.reporter.unwrap_err(self.evaluator.eval(arg));
+                    include = include && !matches!(result, Some(cte::Value::Bool(false)));
+                    false
+                }
+                _ => true,
+            });
+
+            if !include {
+                continue;
+            }
+
             let meta = ParsedMeta {
-                annotations,
+                annotations: annotations.into(),
                 visibility,
                 qualifiers,
                 doc,
             };
             match item {
                 ast::Item::Import(import) => {
-                    imports.push((import, item_span));
+                    imports.push(ParsedImport {
+                        import,
+                        span: item_span,
+                    });
                 }
                 ast::Item::Class(ref aggregate) | ast::Item::Struct(ref aggregate) => {
                     let (name, name_span) = aggregate.name;
@@ -232,14 +269,14 @@ impl<'ctx> NameResolution<'ctx> {
             let mut type_scope = scope.types.introduce_scope();
             let mut func_scope = scope.funcs.introduce_scope();
 
-            for (import, span) in &module.imports {
+            for entry in &module.imports {
                 self.module_map.visit_import(
-                    import,
+                    &entry.import,
                     |name, typ| type_scope.add(name, TypeRef::Name(typ)),
                     |name, func| func_scope.top_mut().entry(name).or_default().push(func),
                     |name| {
                         self.reporter
-                            .report(Diagnostic::ImportNotFound(name, *span));
+                            .report(Diagnostic::ImportNotFound(name, entry.span));
                     },
                 );
             }
@@ -1200,16 +1237,12 @@ impl<'ctx> NameResolution<'ctx> {
         }
         self.check_type(func_type.return_type(), Variance::Covariant, span)
     }
-
-    pub(crate) fn reporter_mut(&mut self) -> &mut CompileErrorReporter<'ctx> {
-        &mut self.reporter
-    }
 }
 
 #[derive(Debug)]
 struct ResolutionStageModule<'ctx> {
     path: Option<ast::Path<'ctx>>,
-    imports: Vec<ast::Spanned<ast::Import<'ctx>>>,
+    imports: Vec<ParsedImport<'ctx>>,
     classes: Vec<ParsedAggregate<'ctx>>,
     structs: Vec<ParsedAggregate<'ctx>>,
     functions: Vec<ParsedFunction<'ctx>>,
@@ -1225,6 +1258,12 @@ struct ParsedMeta<'ctx> {
     visibility: Option<ast::Visibility>,
     qualifiers: ast::ItemQualifiers,
     doc: Box<[&'ctx str]>,
+}
+
+#[derive(Debug)]
+struct ParsedImport<'ctx> {
+    import: ast::Import<'ctx>,
+    span: Span,
 }
 
 #[derive(Debug)]

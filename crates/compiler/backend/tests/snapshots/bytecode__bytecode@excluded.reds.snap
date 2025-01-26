@@ -1,0 +1,9 @@
+---
+source: crates/compiler/backend/tests/bytecode.rs
+expression: "BytecodePrinter::new(&bundle, bundle_len)"
+input_file: crates/compiler/backend/tests/data/excluded.reds
+snapshot_kind: text
+---
+// IncludedClass::IncludedMethod; (f0)
+
+// IncludedFunc; (f1)

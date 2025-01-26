@@ -1,3 +1,4 @@
+mod cte;
 mod diagnostic;
 pub mod ir;
 mod lower;
@@ -41,17 +42,18 @@ pub fn infer_from_sources<'ctx>(
     Vec<Diagnostic<'ctx>>,
 ) {
     let mut scope = Scope::new(&symbols);
-
-    let mut resolution = NameResolution::new(symbols);
+    let mut reporter = CompileErrorReporter::default();
+    let mut modules = vec![];
 
     for (id, file) in sources.files() {
         let (module, errs) = parser::parse_module(file.source(), id);
-        resolution.reporter_mut().report_many(errs);
+        reporter.report_many(errs);
 
         if let Some(module) = module {
-            resolution.add_module(module, interner);
+            modules.push(module);
         }
     }
+    let mut resolution = NameResolution::new(modules, symbols, reporter, interner);
 
     resolution.populate_globals(&mut scope);
     resolution.progress(&scope).finish(&scope)

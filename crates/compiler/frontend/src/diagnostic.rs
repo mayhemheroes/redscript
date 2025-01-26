@@ -7,7 +7,7 @@ use {redscript_ast as ast, redscript_parser as parser};
 use crate::lower::{LowerResult, Poly, TypeError};
 use crate::stages::FunctionAnnotation;
 use crate::utils::fmt::{lowercase, sep_by, DisplayFn};
-use crate::{predef, CoalesceError, LowerError, Param, PolyType, Type, TypeId, Variance};
+use crate::{cte, predef, CoalesceError, LowerError, Param, PolyType, Type, TypeId, Variance};
 
 #[derive(Debug, Error)]
 pub enum Diagnostic<'ctx> {
@@ -79,6 +79,8 @@ pub enum Diagnostic<'ctx> {
     InvalidPersistentField(Span),
     #[error("fields cannot be added to structs")]
     StructFieldAddition(Span),
+    #[error("{0}")]
+    EvalFailed(#[from] cte::Error),
 }
 
 impl<'ctx> Diagnostic<'ctx> {
@@ -95,6 +97,7 @@ impl<'ctx> Diagnostic<'ctx> {
         match self {
             Self::SyntaxError(err) => err.span(),
             Self::TypeError(err) => err.span(),
+            Self::EvalFailed(err) => err.span(),
             Self::CoalesceError(_, span)
             | Self::DuplicateVariantName(span)
             | Self::DuplicateVariantValue(span)
