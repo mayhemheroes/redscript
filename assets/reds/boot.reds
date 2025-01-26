@@ -89,6 +89,9 @@ func WeakRefToRef<A>(weak: wref<A>) -> A
 @intrinsic(IsDefined)
 func IsDefined(a: IScriptable) -> Bool
 
+@intrinsic(NameOf)
+func NameOf<A>() -> CName
+
 abstract class Function0<+R> {
   public func Call() -> R
 }

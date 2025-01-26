@@ -322,6 +322,7 @@ pub enum Intrinsic {
     RefToWeakRef,
     WeakRefToRef,
     IsDefined,
+    NameOf,
 }
 
 impl From<Intrinsic> for &'static str {
@@ -358,6 +359,7 @@ impl From<Intrinsic> for &'static str {
             Intrinsic::RefToWeakRef => "RefToWeakRef",
             Intrinsic::WeakRefToRef => "WeakRefToRef",
             Intrinsic::IsDefined => "IsDefined",
+            Intrinsic::NameOf => "NameOf",
         }
     }
 }
@@ -398,6 +400,7 @@ impl<'a> TryFrom<&'a str> for Intrinsic {
             "RefToWeakRef" => Intrinsic::RefToWeakRef,
             "WeakRefToRef" => Intrinsic::WeakRefToRef,
             "IsDefined" => Intrinsic::IsDefined,
+            "NameOf" => Intrinsic::NameOf,
             _ => return Err(UnknownIntrinsic(value)),
         };
         Ok(res)

@@ -724,6 +724,10 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
             (ir::Intrinsic::RefToWeakRef, [_]) => self.emit(Instr::RefToWeakRef),
             (ir::Intrinsic::WeakRefToRef, [_]) => self.emit(Instr::WeakRefToRef),
             (ir::Intrinsic::IsDefined, []) => self.emit(Instr::RefToBool),
+            (ir::Intrinsic::NameOf, [arg]) => {
+                let name = self.bundle.cnames_mut().add(arg.to_string());
+                self.emit(Instr::CNameConst(name));
+            }
             (
                 ir::Intrinsic::ArrayClear
                 | ir::Intrinsic::ArraySize
