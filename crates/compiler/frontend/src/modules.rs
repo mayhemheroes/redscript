@@ -50,6 +50,10 @@ impl<'ctx> ModuleMap<'ctx> {
         Some(it)
     }
 
+    pub fn exists(&self, path: impl IntoIterator<Item = &'ctx str>) -> bool {
+        self.map.get_node(path).is_some()
+    }
+
     pub fn visit_import(
         &self,
         import: &ast::Import<'ctx>,

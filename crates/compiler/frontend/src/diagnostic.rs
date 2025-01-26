@@ -81,6 +81,12 @@ pub enum Diagnostic<'ctx> {
     StructFieldAddition(Span),
     #[error("{0}")]
     EvalFailed(#[from] cte::Error),
+    #[error("the name of an implementation must be a valid identifier")]
+    InvalidImplName(Span),
+    #[error("the type of an implementation must have no free type variables")]
+    InvalidImplType(Span),
+    #[error("this implementation is a duplicate of a previous one")]
+    DuplicateImpl(Span),
 }
 
 impl<'ctx> Diagnostic<'ctx> {
@@ -129,7 +135,10 @@ impl<'ctx> Diagnostic<'ctx> {
             | Self::NonStaticStructMethod(span)
             | Self::NativeMemberOfScriptedType(span)
             | Self::InvalidPersistentField(span)
-            | Self::StructFieldAddition(span) => *span,
+            | Self::StructFieldAddition(span)
+            | Self::InvalidImplName(span)
+            | Self::InvalidImplType(span)
+            | Self::DuplicateImpl(span) => *span,
         }
     }
 

@@ -14,7 +14,7 @@ use smallvec::SmallVec;
 
 use crate::types::{CtxVar, Type, TypeApp, TypeId};
 use crate::utils::fmt::sep_by;
-use crate::{ir, predef, Immutable, IndexMap, TypeKind, Variance};
+use crate::{ir, predef, Immutable, IndexMap, MonoType, TypeKind, Variance};
 
 #[derive(Debug)]
 pub struct Symbols<'ctx> {
@@ -400,6 +400,7 @@ pub struct Aggregate<'ctx> {
     base: Option<TypeApp<'ctx>>,
     fields: FieldMap<'ctx>,
     methods: MethodMap<'ctx>,
+    implementations: HashMap<MonoType<'ctx>, QualifiedName<'ctx>>,
     span: Option<Span>,
 }
 
@@ -410,13 +411,15 @@ impl<'ctx> Aggregate<'ctx> {
         base: Option<TypeApp<'ctx>>,
         fields: FieldMap<'ctx>,
         methods: MethodMap<'ctx>,
+        implementations: HashMap<MonoType<'ctx>, QualifiedName<'ctx>>,
         span: Option<Span>,
     ) -> Self {
         Self {
             flags,
+            base,
             fields,
             methods,
-            base,
+            implementations,
             span,
         }
     }
@@ -454,6 +457,11 @@ impl<'ctx> Aggregate<'ctx> {
     #[inline]
     pub fn methods_mut(&mut self) -> &mut MethodMap<'ctx> {
         &mut self.methods
+    }
+
+    #[inline]
+    pub fn named_implementation(&self, typ: &MonoType<'ctx>) -> Option<&QualifiedName<'ctx>> {
+        self.implementations.get(typ)
     }
 
     #[inline]

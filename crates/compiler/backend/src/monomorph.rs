@@ -122,6 +122,10 @@ impl<'ctx> Monomorphizer<'ctx> {
 
             while let Some((sig, &index)) = self.methods.next_unmarked() {
                 let func = &symbols[sig.id().method()];
+                if func.flags().is_native() {
+                    continue;
+                }
+
                 let repr = &unit.classes[&sig.id().receiver.id()].methods[&sig.id().index];
 
                 let mut env = sig.id().receiver.type_env(symbols);
@@ -166,7 +170,7 @@ impl<'ctx> Monomorphizer<'ctx> {
             .zip(sig.types().iter().cloned())
             .collect();
 
-        let return_t = func.type_().return_type().mono(&env);
+        let return_t = func.type_().return_type().assume_mono(&env);
         let return_t = if return_t.id() == predef::VOID {
             None
         } else {
@@ -549,7 +553,10 @@ impl<'ctx> Monomorphizer<'ctx> {
             .with_is_import_only(aggregate.flags().is_import_only())
             .with_is_struct(aggregate.flags().is_struct());
 
-        let cname = bundle.cnames_mut().add(typ.to_string());
+        let name = aggregate
+            .named_implementation(&typ)
+            .map_or_else(|| typ.to_string(), ToString::to_string);
+        let cname = bundle.cnames_mut().add(name);
         let class = PoolClass::new(cname, Visibility::Public, flags).with_base(base);
         let idx = bundle.define(class);
 
@@ -568,7 +575,7 @@ impl<'ctx> Monomorphizer<'ctx> {
         let mut methods = IndexMap::default();
         for entry in aggregate.methods().iter() {
             let func = entry.func();
-            if !should_method_monomorphize(func, &typ) && !func.flags().is_native() {
+            if !should_method_monomorphize(func, &typ) {
                 continue;
             }
 
@@ -636,7 +643,7 @@ impl<'ctx> Monomorphizer<'ctx> {
     ) -> PoolFunctionIndex {
         let cname = bundle.cnames_mut().add(name);
 
-        let return_t = method.type_().return_type().mono(env);
+        let return_t = method.type_().return_type().assume_mono(env);
         let return_t = if return_t.id() == predef::VOID || return_t.id() == predef::NOTHING {
             None
         } else {
@@ -673,7 +680,7 @@ impl<'ctx> Monomorphizer<'ctx> {
         bundle: &mut ScriptBundle<'ctx>,
     ) -> PoolParameterIndex {
         let name = bundle.cnames_mut().add(param.name());
-        let resolved = param.type_().mono(env);
+        let resolved = param.type_().assume_mono(env);
         let typ = self.type_(&resolved, symbols, bundle);
         let flags = PoolParameterFlags::default()
             .with_is_optional(param.flags().is_optional())
@@ -691,7 +698,7 @@ impl<'ctx> Monomorphizer<'ctx> {
         bundle: &mut ScriptBundle<'ctx>,
     ) -> PoolFieldIndex {
         let cname = bundle.cnames_mut().add(name);
-        let typ = field.type_().mono(env);
+        let typ = field.type_().assume_mono(env);
         let typ = self.type_(&typ, symbols, bundle);
         let flags = PoolFieldFlags::default()
             .with_is_native(field.flags().is_native())
@@ -831,12 +838,17 @@ impl<'a, 'ctx> MangledType<'a, 'ctx> {
 impl fmt::Display for MangledType<'_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.symbols[self.typ.id()].schema() {
-            TypeSchema::Aggregate(agg)
-                if !agg.flags().is_struct() && !agg.flags().is_never_ref() =>
-            {
-                write!(f, "ref:{}", self.typ)
+            TypeSchema::Aggregate(agg) => {
+                if !agg.flags().is_struct() && !agg.flags().is_never_ref() {
+                    write!(f, "ref:")?;
+                }
+                if let Some(name) = agg.named_implementation(self.typ) {
+                    write!(f, "{}", name)
+                } else {
+                    write!(f, "{}", self.typ)
+                }
             }
-            TypeSchema::Aggregate(_) | TypeSchema::Enum(_) => {
+            TypeSchema::Enum(_) => {
                 write!(f, "{}", self.typ)
             }
             TypeSchema::Primitive => match (
@@ -949,7 +961,8 @@ impl<'ctx, F: FunctionKind<'ctx>> fmt::Display for MangledParams<'_, 'ctx, F> {
             if param.flags().is_out() {
                 write!(f, "Out")?;
             }
-            write!(f, "{}", param.type_().unwrap_ref_or_self().mono(self.env))
+            let typ = param.type_().unwrap_ref_or_self().assume_mono(self.env);
+            write!(f, "{typ}",)
         })
     }
 }

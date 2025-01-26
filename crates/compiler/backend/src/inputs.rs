@@ -142,7 +142,8 @@ impl<'ctx> CompilationInputs<'ctx> {
                         .with_is_import_only(cls.flags().is_import_only())
                         .with_is_struct(cls.flags().is_struct())
                         .with_is_never_ref(NEVER_REF_WHITELIST.contains(&class_name.as_ref()));
-                    let agg = Aggregate::new(flags, base, fields, methods, None);
+                    let agg =
+                        Aggregate::new(flags, base, fields, methods, HashMap::default(), None);
                     let def = TypeDef::new([], TypeSchema::Aggregate(agg.into()), []);
                     inputs.symbols.add_type(class_id, def);
 

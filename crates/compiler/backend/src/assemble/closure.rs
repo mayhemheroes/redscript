@@ -28,7 +28,7 @@ pub fn emit_closure<'ctx>(
         .bundle
         .cnames_mut()
         .add(format!("lambda${cname_idx}"));
-    let func_t = closure.typ.coalesced(symbols)?.mono(type_env);
+    let func_t = closure.typ.coalesced(symbols)?.assume_mono(type_env);
     let func_t_idx = assembler
         .monomorphizer
         .type_(&func_t, symbols, assembler.bundle);
@@ -83,7 +83,7 @@ pub fn emit_closure<'ctx>(
     let call = assembler
         .bundle
         .define_and_try_init(call, |bundle, idx, func| {
-            let typ = closure.typ.coalesced(symbols)?.mono(type_env);
+            let typ = closure.typ.coalesced(symbols)?.assume_mono(type_env);
             let symbols = assembler.symbols;
             let monomorphizer = &mut assembler.monomorphizer;
             create_apply_method(idx, func, class, &typ, symbols, bundle, monomorphizer)

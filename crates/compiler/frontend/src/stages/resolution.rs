@@ -29,6 +29,7 @@ pub(super) const ADD_METHOD_ANNOTATION: &str = "addMethod";
 pub(super) const ADD_FIELD_ANNOTATION: &str = "addField";
 pub(super) const INTRINSIC_ANNOTATION: &str = "intrinsic";
 pub(super) const NEVER_REF_ANNOTATION: &str = "neverRef";
+pub(super) const NAME_IMPLEMENTATION_ANNOTATION: &str = "nameImplementation";
 
 pub(super) const THIS_IDENT: &str = "this";
 pub(super) const WRAPPED_METHOD_IDENT: &str = "wrappedMethod";
@@ -39,8 +40,8 @@ pub struct NameResolution<'ctx> {
 
     symbols: Symbols<'ctx>,
     module_map: ModuleMap<'ctx>,
-    reporter: CompileErrorReporter<'ctx>,
     evaluator: Evaluator<'ctx>,
+    reporter: CompileErrorReporter<'ctx>,
 }
 
 impl<'ctx> NameResolution<'ctx> {
@@ -57,11 +58,12 @@ impl<'ctx> NameResolution<'ctx> {
             .collect::<HashSet<_>>();
 
         let mut this = Self {
+            modules: vec![],
+
             symbols,
             module_map: ModuleMap::default(),
-            reporter,
-            modules: vec![],
             evaluator: Evaluator::new(names),
+            reporter,
         };
         for module in modules {
             this.add_module(module, interner);
@@ -262,6 +264,7 @@ impl<'ctx> NameResolution<'ctx> {
         let mut modules = vec![];
 
         for module in mem::take(&mut self.modules) {
+            let path = module.path.as_ref();
             let mut type_scope = scope.types.introduce_scope();
             let mut func_scope = scope.funcs.introduce_scope();
 
@@ -289,10 +292,10 @@ impl<'ctx> NameResolution<'ctx> {
 
             let mut classes = vec![];
             for entry in module.classes {
-                classes.push(self.process_aggregate(entry, &type_scope, false));
+                classes.push(self.process_aggregate(entry, path, &type_scope, false));
             }
             for entry in module.structs {
-                classes.push(self.process_aggregate(entry, &type_scope, true));
+                classes.push(self.process_aggregate(entry, path, &type_scope, true));
             }
 
             let mut enums = vec![];
@@ -344,6 +347,7 @@ impl<'ctx> NameResolution<'ctx> {
     fn process_aggregate<'scope>(
         &mut self,
         entry: ParsedAggregate<'ctx>,
+        path: Option<&ast::Path<'ctx>>,
         types: &TypeEnv<'scope, 'ctx>,
         is_struct: bool,
     ) -> ClassItem<'scope, 'ctx> {
@@ -365,10 +369,48 @@ impl<'ctx> NameResolution<'ctx> {
                 .report(Diagnostic::UnusedItemQualifiers(qs, name_span));
         }
 
+        let mut implementations = HashMap::default();
+
         for (ann, ann_span) in &entry.meta.annotations {
             match (ann.name, &ann.args[..]) {
                 (NEVER_REF_ANNOTATION, &[]) => {
                     class_flags.set_is_never_ref(true);
+                }
+                (
+                    NAME_IMPLEMENTATION_ANNOTATION,
+                    [(ast::Expr::DynCast { expr, typ }, expr_span)],
+                ) => {
+                    let (typ, type_span) = typ.as_ref();
+                    let Some(typ) = self.reporter.unwrap_err(types.resolve(typ, *type_span)) else {
+                        continue;
+                    };
+                    let Type::Data(typ) = typ else {
+                        self.reporter
+                            .report(Diagnostic::InvalidImplType(*type_span));
+                        continue;
+                    };
+                    let &(ast::Expr::Ident(name), name_span) = &**expr else {
+                        self.reporter
+                            .report(Diagnostic::InvalidImplName(*expr_span));
+                        continue;
+                    };
+                    let base = path.map(AsRef::as_ref).unwrap_or_default();
+                    let name = QualifiedName::from_base_and_name(base, name);
+                    if self.module_map.exists(&name) {
+                        self.reporter
+                            .report(Diagnostic::NameRedefinition(name_span));
+                        continue;
+                    }
+
+                    let Ok(typ) = typ.mono(&ScopedMap::default()) else {
+                        self.reporter
+                            .report(Diagnostic::InvalidImplType(*type_span));
+                        continue;
+                    };
+
+                    if implementations.insert(typ, name).is_some() {
+                        self.reporter.report(Diagnostic::DuplicateImpl(*type_span));
+                    }
                 }
                 _ => {
                     self.reporter
@@ -455,7 +497,14 @@ impl<'ctx> NameResolution<'ctx> {
                     .then(|| TypeApp::nullary(predef::ISCRIPTABLE))
             });
 
-        let aggregate = Aggregate::new(class_flags, base, fields, methods, Some(name_span));
+        let aggregate = Aggregate::new(
+            class_flags,
+            base,
+            fields,
+            methods,
+            implementations,
+            Some(name_span),
+        );
         let schema = TypeSchema::Aggregate(aggregate.into());
         let def = TypeDef::new(vars, schema, entry.meta.doc);
         self.symbols.add_type(entry.id, def);

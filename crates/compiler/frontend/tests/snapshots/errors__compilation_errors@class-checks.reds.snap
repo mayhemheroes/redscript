@@ -54,6 +54,16 @@ At tests\data\class-checks.reds:45:8
        ^^^^^^
 struct methods must be static
 
+At tests\data\class-checks.reds:85:21
+@nameImplementation(ClashingIntStruct as GenericStruct<Int32>)
+                    ^^^^^^^^^^^^^^^^^^
+this name is already defined in the scope
+
+At tests\data\class-checks.reds:87:46
+@nameImplementation(DuplicateStringStruct as GenericStruct<String>)
+                                             ^^^^^^^^^^^^^^^^^^^^^
+this implementation is a duplicate of a previous one
+
 At tests\data\class-checks.reds:4:7
 class ClassExtendingStruct extends Struct {}
       ^^^^^^^^^^^^^^^^^^^^^

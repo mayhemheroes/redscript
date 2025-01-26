@@ -86,15 +86,23 @@ impl<'ctx> Type<'ctx> {
         self.unwrap_ref().map_or(self, |t| t)
     }
 
-    pub fn mono(&self, env: &ScopedMap<'_, &'ctx str, MonoType<'ctx>>) -> MonoType<'ctx> {
+    pub fn mono(
+        &self,
+        env: &ScopedMap<'_, &'ctx str, MonoType<'ctx>>,
+    ) -> Result<MonoType<'ctx>, UnresolvedVar<'ctx>> {
         match self {
             Self::Ctx(var) => env
                 .get(var.name())
-                .expect("unresolved type variable")
-                .clone(),
+                .ok_or_else(|| UnresolvedVar(var.name()))
+                .cloned(),
             Self::Data(typ) => typ.mono(env),
-            Self::Nothing => MonoType::nullary(predef::NOTHING),
+            Self::Nothing => Ok(MonoType::nullary(predef::NOTHING)),
         }
+    }
+
+    pub fn assume_mono(&self, env: &ScopedMap<'_, &'ctx str, MonoType<'ctx>>) -> MonoType<'ctx> {
+        self.mono(env)
+            .expect("all vars should be resolved at this point")
     }
 }
 
@@ -231,9 +239,21 @@ impl<'ctx, K: TypeKind> TypeApp<'ctx, K> {
 }
 
 impl<'ctx> TypeApp<'ctx> {
-    pub fn mono(&self, env: &ScopedMap<'_, &'ctx str, MonoType<'ctx>>) -> MonoType<'ctx> {
-        let args = self.args().iter().map(|t| t.mono(env)).collect::<Rc<_>>();
-        MonoType::new(self.id(), args)
+    pub fn mono(
+        &self,
+        env: &ScopedMap<'_, &'ctx str, MonoType<'ctx>>,
+    ) -> Result<MonoType<'ctx>, UnresolvedVar<'ctx>> {
+        let args = self
+            .args()
+            .iter()
+            .map(|t| t.mono(env))
+            .collect::<Result<Rc<_>, _>>()?;
+        Ok(MonoType::new(self.id(), args))
+    }
+
+    pub fn assume_mono(&self, env: &ScopedMap<'_, &'ctx str, MonoType<'ctx>>) -> MonoType<'ctx> {
+        self.mono(env)
+            .expect("all vars should be resolved at this point")
     }
 }
 
@@ -259,7 +279,7 @@ impl<'ctx> MonoType<'ctx> {
         );
         let base = class.schema().base_type()?;
         let env = class.vars().zip(self.args().iter().cloned()).collect();
-        Some(base.mono(&env))
+        Some(base.mono(&env).expect("env should be complete"))
     }
 }
 
@@ -545,6 +565,15 @@ impl Default for TypeInterner {
                 .map(|id| Cow::Borrowed(id.0))
                 .collect(),
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct UnresolvedVar<'ctx>(&'ctx str);
+
+impl AsRef<str> for UnresolvedVar<'_> {
+    fn as_ref(&self) -> &str {
+        self.0
     }
 }
 

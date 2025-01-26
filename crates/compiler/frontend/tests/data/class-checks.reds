@@ -79,3 +79,10 @@ class ClassViolatingBound extends ClassWithBound<Chair> {}
 
 class ClassNotViolatingBound1 extends ClassWithBound<Animal> {}
 class ClassNotViolatingBound2 extends ClassWithBound<Dog> {}
+
+struct ClashingIntStruct {}
+
+@nameImplementation(ClashingIntStruct as GenericStruct<Int32>)
+@nameImplementation(NonClashingStringStruct as GenericStruct<String>)
+@nameImplementation(DuplicateStringStruct as GenericStruct<String>)
+struct GenericStruct<A> {}

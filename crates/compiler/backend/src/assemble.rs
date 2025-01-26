@@ -75,7 +75,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
             match local {
                 ir::Local::Var(i) => {
                     let name = bundle.cnames_mut().add(format!("var{}", i));
-                    let typ = monomorphizer.type_(&typ.mono(type_env), symbols, bundle);
+                    let typ = monomorphizer.type_(&typ.assume_mono(type_env), symbols, bundle);
                     let flags = PoolLocalFlags::default();
                     let idx = bundle.define(PoolLocal::new(name, index, typ, flags));
                     local_indices.push((local, idx));
@@ -200,7 +200,9 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 let end = self.new_label();
                 let mut next_label = self.new_label();
 
-                let typ = scrutinee_type.coalesced(self.symbols)?.mono(self.type_env);
+                let typ = scrutinee_type
+                    .coalesced(self.symbols)?
+                    .assume_mono(self.type_env);
                 let typ = self.monomorphizer.type_(&typ, self.symbols, self.bundle);
 
                 self.emit(Instr::Switch(Switch::new(typ, next_label)));
@@ -245,7 +247,9 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 let local = self
                     .resolve_local(*local)
                     .expect("every local should be defined");
-                let element_t = element_type.coalesced(self.symbols)?.mono(self.type_env);
+                let element_t = element_type
+                    .coalesced(self.symbols)?
+                    .assume_mono(self.type_env);
                 let array_t = MonoType::new(predef::ARRAY, [element_t]);
                 let array_t = self
                     .monomorphizer
@@ -268,7 +272,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 let local = self
                     .resolve_local(*local)
                     .expect("every local should be defined");
-                let typ = typ.coalesced(self.symbols)?.mono(self.type_env);
+                let typ = typ.coalesced(self.symbols)?.assume_mono(self.type_env);
 
                 if typ.id() == predef::ARRAY {
                     let array_t = self.monomorphizer.type_(&typ, self.symbols, self.bundle);
@@ -316,7 +320,9 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
             ir::Expr::Const(const_, _) => self.assemble_const(const_)?,
             ir::Expr::Null(_) => self.emit(Instr::Null),
             ir::Expr::NewClass { class_type, .. } => {
-                let class_t = class_type.coalesced(self.symbols)?.mono(self.type_env);
+                let class_t = class_type
+                    .coalesced(self.symbols)?
+                    .assume_mono(self.type_env);
                 let class_t = self
                     .monomorphizer
                     .class(&class_t, self.symbols, self.bundle);
@@ -327,7 +333,9 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 struct_type,
                 ..
             } => {
-                let struct_t = struct_type.coalesced(self.symbols)?.mono(self.type_env);
+                let struct_t = struct_type
+                    .coalesced(self.symbols)?
+                    .assume_mono(self.type_env);
                 let struct_t = self
                     .monomorphizer
                     .class(&struct_t, self.symbols, self.bundle);
@@ -355,7 +363,9 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 field,
                 ..
             } => {
-                let receiver_t = receiver_type.coalesced(self.symbols)?.mono(self.type_env);
+                let receiver_t = receiver_type
+                    .coalesced(self.symbols)?
+                    .assume_mono(self.type_env);
                 let id = receiver_t.id();
                 let class = self
                     .monomorphizer
@@ -384,7 +394,9 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 index,
                 ..
             } => {
-                let array_t = array_type.coalesced(self.symbols)?.mono(self.type_env);
+                let array_t = array_type
+                    .coalesced(self.symbols)?
+                    .assume_mono(self.type_env);
                 let array_t = self
                     .monomorphizer
                     .type_(&array_t, self.symbols, self.bundle);
@@ -413,8 +425,12 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 target_type,
                 ..
             } => {
-                let expr_t = expr_type.coalesced(self.symbols)?.mono(self.type_env);
-                let target_t = target_type.coalesced(self.symbols)?.mono(self.type_env);
+                let expr_t = expr_type
+                    .coalesced(self.symbols)?
+                    .assume_mono(self.type_env);
+                let target_t = target_type
+                    .coalesced(self.symbols)?
+                    .assume_mono(self.type_env);
                 let class = self
                     .monomorphizer
                     .class(&target_t, self.symbols, self.bundle);
@@ -450,7 +466,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 let free_function = &self.symbols[*function];
                 let type_args = type_args
                     .iter()
-                    .map(|t| Ok(t.coalesced(self.symbols)?.mono(self.type_env)))
+                    .map(|t| Ok(t.coalesced(self.symbols)?.assume_mono(self.type_env)))
                     .collect::<Result<Box<_>, AssembleError<'ctx>>>()?;
 
                 if let Some(intrinsic) = free_function.intrinsic() {
@@ -479,7 +495,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
             } => {
                 let parent_t_args = parent_type_args
                     .iter()
-                    .map(|typ| Ok(typ.coalesced(self.symbols)?.mono(self.type_env)))
+                    .map(|typ| Ok(typ.coalesced(self.symbols)?.assume_mono(self.type_env)))
                     .collect::<Result<Box<_>, CoalesceError<'ctx>>>()?;
                 let parent_t = MonoType::new(*parent_id, parent_t_args);
 
@@ -491,7 +507,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                     let id = MethodWithReceiver::new(parent_t, method.index());
                     let types = type_args
                         .iter()
-                        .map(|typ| Ok(typ.coalesced(self.symbols)?.mono(self.type_env)))
+                        .map(|typ| Ok(typ.coalesced(self.symbols)?.assume_mono(self.type_env)))
                         .collect::<Result<Box<_>, CoalesceError<'ctx>>>()?;
                     let sig = Signature::new(id, types);
                     self.monomorphizer.method(sig, self.symbols, self.bundle)
@@ -511,7 +527,9 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 mode,
             } => {
                 let exit = self.new_label();
-                let receiver_t = receiver_type.coalesced(self.symbols)?.mono(self.type_env);
+                let receiver_t = receiver_type
+                    .coalesced(self.symbols)?
+                    .assume_mono(self.type_env);
                 let parent_t = receiver_t
                     .instantiate_as(method.parent(), self.symbols)
                     .expect("should instantiate as parent");
@@ -531,7 +549,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                     let id = MethodWithReceiver::new(parent_t.into_owned(), method.index());
                     let types = type_args
                         .iter()
-                        .map(|t| Ok(t.coalesced(self.symbols)?.mono(self.type_env)))
+                        .map(|t| Ok(t.coalesced(self.symbols)?.assume_mono(self.type_env)))
                         .collect::<Result<Box<_>, CoalesceError<'ctx>>>()?;
                     let sig = Signature::new(id, types);
                     self.monomorphizer.method(sig, self.symbols, self.bundle)
@@ -545,7 +563,9 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 closure_type,
                 args,
             } => {
-                let closure_t = closure_type.coalesced(self.symbols)?.mono(self.type_env);
+                let closure_t = closure_type
+                    .coalesced(self.symbols)?
+                    .assume_mono(self.type_env);
                 let call = self.symbols[closure_t.id()]
                     .schema()
                     .as_aggregate()

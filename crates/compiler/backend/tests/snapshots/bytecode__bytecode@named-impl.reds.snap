@@ -1,0 +1,13 @@
+---
+source: crates/compiler/backend/tests/bytecode.rs
+expression: "BytecodePrinter::new(&bundle, bundle_len)"
+input_file: crates/compiler/backend/tests/data/named-impl.reds
+snapshot_kind: text
+---
+// CurveData.Test; (f0)
+assign
+local 0
+invoke.static j16 l0 f1 0000000000000000
+param.end
+
+// CurveData.CurveDataFloat::Create (f1)
