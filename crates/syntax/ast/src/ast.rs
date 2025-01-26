@@ -61,7 +61,7 @@ pub enum Import<'src> {
 
 #[derive_where(Debug, PartialEq)]
 pub struct ItemDecl<'src, K: AstKind = Identity> {
-    pub annotations: Box<[AnnotationT<'src, K>]>,
+    pub annotations: Vec<AnnotationT<'src, K>>,
     pub visibility: Option<Visibility>,
     pub qualifiers: ItemQualifiers,
     pub doc: Box<[&'src str]>,
@@ -71,7 +71,7 @@ pub struct ItemDecl<'src, K: AstKind = Identity> {
 impl<'src, K: AstKind> ItemDecl<'src, K> {
     #[inline]
     pub fn new(
-        annotations: impl Into<Box<[AnnotationT<'src, K>]>>,
+        annotations: impl Into<Vec<AnnotationT<'src, K>>>,
         visibility: Option<Visibility>,
         qualifiers: ItemQualifiers,
         doc: impl Into<Box<[&'src str]>>,
@@ -90,7 +90,6 @@ impl<'src, K: AstKind> ItemDecl<'src, K> {
         ItemDecl {
             annotations: self
                 .annotations
-                .into_vec()
                 .into_iter()
                 .map(|a| a.into_wrapped().unwrapped())
                 .collect(),
@@ -152,7 +151,7 @@ pub struct Aggregate<'src, K: AstKind = Identity> {
     pub name: K::Inner<&'src str>,
     pub type_params: Box<[TypeParam<'src, K>]>,
     pub extends: Option<Box<TypeT<'src, K>>>,
-    pub items: Box<[ItemDeclT<'src, K>]>,
+    pub items: Vec<ItemDeclT<'src, K>>,
 }
 
 impl<'src, K: AstKind> Aggregate<'src, K> {
@@ -161,7 +160,7 @@ impl<'src, K: AstKind> Aggregate<'src, K> {
         name: K::Inner<&'src str>,
         type_params: impl Into<Box<[TypeParam<'src, K>]>>,
         extends: Option<Box<TypeT<'src, K>>>,
-        items: impl Into<Box<[ItemDeclT<'src, K>]>>,
+        items: impl Into<Vec<ItemDeclT<'src, K>>>,
     ) -> Self {
         Self {
             name,
@@ -185,7 +184,6 @@ impl<'src, K: AstKind> Aggregate<'src, K> {
                 .map(|typ| (*typ).into_wrapped().unwrapped().into()),
             items: self
                 .items
-                .into_vec()
                 .into_iter()
                 .map(|m| m.into_wrapped().unwrapped())
                 .collect(),

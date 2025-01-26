@@ -85,28 +85,16 @@ impl<'ctx> NameResolution<'ctx> {
 
         for (
             ast::ItemDecl {
-                annotations,
+                mut annotations,
                 visibility,
                 qualifiers,
-                item,
+                mut item,
                 doc,
             },
             item_span,
         ) in module.items.into_vec()
         {
-            let mut include = true;
-
-            let mut annotations = annotations.into_vec();
-            annotations.retain(|(ann, _)| match (ann.name, &*ann.args) {
-                ("if", [arg]) => {
-                    let result = self.reporter.unwrap_err(self.evaluator.eval(arg));
-                    include = include && !matches!(result, Some(cte::Value::Bool(false)));
-                    false
-                }
-                _ => true,
-            });
-
-            if !include {
+            if !process_conditionals(&mut annotations, &self.evaluator, &mut self.reporter) {
                 continue;
             }
 
@@ -123,7 +111,15 @@ impl<'ctx> NameResolution<'ctx> {
                         span: item_span,
                     });
                 }
-                ast::Item::Class(ref aggregate) | ast::Item::Struct(ref aggregate) => {
+                ast::Item::Class(ref mut aggregate) | ast::Item::Struct(ref mut aggregate) => {
+                    aggregate.items.retain_mut(|(item, _)| {
+                        process_conditionals(
+                            &mut item.annotations,
+                            &self.evaluator,
+                            &mut self.reporter,
+                        )
+                    });
+
                     let (name, name_span) = aggregate.name;
                     let path = QualifiedName::from_base_and_name(path_root, name);
                     let id = interner.intern(Cow::from(&path));
@@ -1237,6 +1233,25 @@ impl<'ctx> NameResolution<'ctx> {
         }
         self.check_type(func_type.return_type(), Variance::Covariant, span)
     }
+}
+
+fn process_conditionals<'ctx>(
+    annotations: &mut Vec<Spanned<ast::SourceAnnotation<'ctx>>>,
+    evaluator: &Evaluator<'ctx>,
+    reporter: &mut CompileErrorReporter<'ctx>,
+) -> bool {
+    let mut include = true;
+
+    annotations.retain(|(ann, _)| match (ann.name, &*ann.args) {
+        ("if", [arg]) => {
+            let result = reporter.unwrap_err(evaluator.eval(arg));
+            include = include && !matches!(result, Some(cte::Value::Bool(false)));
+            false
+        }
+        _ => true,
+    });
+
+    include
 }
 
 #[derive(Debug)]

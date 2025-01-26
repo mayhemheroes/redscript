@@ -18,4 +18,7 @@ class ExcludedClass {
 @if(true)
 class IncludedClass {
   func IncludedMethod() {}
+
+  @if(false)
+  func ExcludedMethod() {}
 }
