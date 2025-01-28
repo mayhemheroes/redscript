@@ -255,7 +255,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 )?;
 
                 let array_t = Type::app(predef::ARRAY, [elem_typ.clone()]).into_poly();
-                let local = self.locals.add_var(array_t.clone(), None);
+                let local = self.locals.add_var(array_t.clone(), *span);
 
                 let mut top = self
                     .stmt_prefixes
@@ -531,7 +531,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                     let (mut value, value_t) = self.lower_expr_with(value, Some(&typ), env)?;
                     self.coerce(&mut value, value_t, typ.clone(), env, *value_span)?;
 
-                    let local = self.locals.add_var(typ, Some(name_span));
+                    let local = self.locals.add_var(typ, name_span);
                     let local = env.define_local(name, local.clone());
                     let assign = ir::Expr::Assign {
                         place: ir::Expr::Local(local, name_span).into(),
@@ -540,7 +540,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                     };
                     ir::Stmt::Expr(assign.into())
                 } else {
-                    let local = self.locals.add_var(typ.clone(), Some(name_span));
+                    let local = self.locals.add_var(typ.clone(), name_span);
                     let local = env.define_local(name, local.clone());
                     ir::Stmt::InitDefault {
                         local,
@@ -908,9 +908,9 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
 
         let mut env = env.introduce_scope();
         let counter_t = PolyType::nullary(predef::INT32);
-        let counter = self.locals.add_var(counter_t.clone(), None).id;
-        let array_local = self.locals.add_var(array_t.clone(), None).id;
-        let elem = env.define_local(name, self.locals.add_var(elem_t, Some(*name_span)).clone());
+        let counter = self.locals.add_var(counter_t.clone(), *iter_span).id;
+        let array_local = self.locals.add_var(array_t.clone(), *iter_span).id;
+        let elem = env.define_local(name, self.locals.add_var(elem_t, *name_span).clone());
 
         let loop_body = {
             let (increment, _) = self.free_function_call(
@@ -1508,8 +1508,8 @@ impl<'scope, 'ctx> Locals<'scope, 'ctx> {
     }
 
     #[inline]
-    pub fn add_var(&mut self, typ: PolyType<'ctx>, span: Option<Span>) -> &ir::LocalInfo<'ctx> {
-        self.add(ir::Local::Var(self.counter.get()), typ, span)
+    pub fn add_var(&mut self, typ: PolyType<'ctx>, span: Span) -> &ir::LocalInfo<'ctx> {
+        self.add(ir::Local::Var(self.counter.get()), typ, Some(span))
     }
 
     #[inline]
@@ -2303,11 +2303,6 @@ impl<'sym, 'ctx> Simplifier<'sym, 'ctx> {
 
                 let typ = match (var.lower(), var.upper()) {
                     (lower, Some(upper)) if lower == upper => self.simplify(&lower, variance)?,
-                    (bound, None) | (Type::Nothing, Some(bound))
-                        if bound.is_primitive(self.symbols) =>
-                    {
-                        self.simplify(&bound, variance)?
-                    }
                     (lower, _)
                         if variance == Variance::Covariant
                             && !self.contravariant.contains(&key) =>
@@ -2320,6 +2315,9 @@ impl<'sym, 'ctx> Simplifier<'sym, 'ctx> {
                     {
                         self.simplify(&upper, variance)?
                     }
+                    (bound, None) | (Type::Nothing, Some(bound)) => {
+                        self.simplify(&bound, variance)?
+                    }
                     (lower, Some(upper))
                         if upper
                             .constrain(&lower, self.symbols)
@@ -2328,7 +2326,6 @@ impl<'sym, 'ctx> Simplifier<'sym, 'ctx> {
                     {
                         self.simplify(&lower, variance)?
                     }
-                    (Type::Nothing, None) => Type::Nothing,
                     (lower, upper) => return Err(CoalesceError::CannotCoalesce(lower, upper)),
                 };
 
