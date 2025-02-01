@@ -190,14 +190,12 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 scrutinee_type,
                 branches,
                 default,
-                ..
+                span,
             } => {
                 let end = self.new_label();
                 let mut next_label = self.new_label();
 
-                let typ = scrutinee_type
-                    .coalesced(self.symbols)?
-                    .assume_mono(self.type_env);
+                let typ = self.mono_type(scrutinee_type, *span)?;
                 let typ = self.monomorph.type_(&typ, self.symbols, self.bundle);
 
                 self.emit(Instr::Switch(Switch::new(typ, next_label)));
@@ -233,7 +231,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 local,
                 elements,
                 element_type,
-                ..
+                span,
             } => {
                 if elements.is_empty() {
                     return Ok(());
@@ -242,9 +240,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 let local = self
                     .resolve_local(*local)
                     .expect("every local should be defined");
-                let element_t = element_type
-                    .coalesced(self.symbols)?
-                    .assume_mono(self.type_env);
+                let element_t = self.mono_type(element_type, *span)?;
                 let array_t = MonoType::new(predef::ARRAY, [element_t]);
                 let array_t = self.monomorph.type_(&array_t, self.symbols, self.bundle);
 
@@ -261,11 +257,11 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                     self.assemble_expr(element)?;
                 }
             }
-            ir::Stmt::InitDefault { local, typ, .. } => {
+            ir::Stmt::InitDefault { local, typ, span } => {
                 let local = self
                     .resolve_local(*local)
                     .expect("every local should be defined");
-                let typ = typ.coalesced(self.symbols)?.assume_mono(self.type_env);
+                let typ = self.mono_type(typ, *span)?;
 
                 if typ.id() == predef::ARRAY {
                     let array_t = self.monomorph.type_(&typ, self.symbols, self.bundle);
@@ -277,17 +273,17 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                     self.emit_default_instr(typ)?;
                 }
             }
-            ir::Stmt::Break(_) => match block_span {
+            ir::Stmt::Break(span) => match block_span {
                 Some(BlockSpan::Loop { end, .. } | BlockSpan::Switch { end }) => {
                     self.emit(Instr::Jump(Jump::new(end)));
                 }
-                _ => return Err(AssembleError::InvalidControlFlow),
+                _ => return Err(AssembleError::InvalidControlFlow(*span)),
             },
-            ir::Stmt::Continue(_) => {
+            ir::Stmt::Continue(span) => {
                 if let Some(BlockSpan::Loop { start, .. }) = block_span {
                     self.emit(Instr::Jump(Jump::new(start)));
                 } else {
-                    return Err(AssembleError::InvalidControlFlow);
+                    return Err(AssembleError::InvalidControlFlow(*span));
                 }
             }
             ir::Stmt::Return(expr, _) if self.has_return_value => {
@@ -312,25 +308,21 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
             ir::Expr::Call { call, span } => self.assemble_call(call, *span)?,
             ir::Expr::Const(const_, _) => self.assemble_const(const_)?,
             ir::Expr::Null(_) => self.emit(Instr::Null),
-            ir::Expr::NewClass { class_type, .. } => {
-                let class_t = class_type
-                    .coalesced(self.symbols)?
-                    .assume_mono(self.type_env);
+            ir::Expr::NewClass { class_type, span } => {
+                let class_t = self.mono_type_app(class_type, *span)?;
                 let class_t = self.monomorph.class(&class_t, self.symbols, self.bundle);
                 self.emit(Instr::New(class_t));
             }
             ir::Expr::NewStruct {
                 values,
                 struct_type,
-                ..
+                span,
             } => {
-                let struct_t = struct_type
-                    .coalesced(self.symbols)?
-                    .assume_mono(self.type_env);
+                let struct_t = self.mono_type_app(struct_type, *span)?;
                 let struct_t = self.monomorph.class(&struct_t, self.symbols, self.bundle);
                 self.emit(Instr::Construct {
                     arg_count: u8::try_from(values.len())
-                        .map_err(|_| AssembleError::TooManyArguments)?,
+                        .map_err(|_| AssembleError::TooManyArguments(*span))?,
                     class: struct_t,
                 });
                 for value in values {
@@ -350,11 +342,9 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 receiver_type,
                 receiver_ref,
                 field,
-                ..
+                span,
             } => {
-                let receiver_t = receiver_type
-                    .coalesced(self.symbols)?
-                    .assume_mono(self.type_env);
+                let receiver_t = self.mono_type_app(receiver_type, *span)?;
                 let id = receiver_t.id();
                 let class = self.monomorph.class(&receiver_t, self.symbols, self.bundle);
                 let field = self.bundle[class].fields()[usize::from(field.index())];
@@ -379,11 +369,9 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 array,
                 array_type,
                 index,
-                ..
+                span,
             } => {
-                let array_t = array_type
-                    .coalesced(self.symbols)?
-                    .assume_mono(self.type_env);
+                let array_t = self.mono_type(array_type, *span)?;
                 let array_t = self.monomorph.type_(&array_t, self.symbols, self.bundle);
                 self.emit(Instr::ArrayElement(array_t));
                 self.assemble_expr(array)?;
@@ -408,14 +396,10 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 expr,
                 expr_type,
                 target_type,
-                ..
+                span,
             } => {
-                let expr_t = expr_type
-                    .coalesced(self.symbols)?
-                    .assume_mono(self.type_env);
-                let target_t = target_type
-                    .coalesced(self.symbols)?
-                    .assume_mono(self.type_env);
+                let expr_t = self.mono_type(expr_type, *span)?;
+                let target_t = self.mono_type_app(target_type, *span)?;
                 let class = self.monomorph.class(&target_t, self.symbols, self.bundle);
                 self.emit(Instr::DynamicCast {
                     class,
@@ -453,11 +437,11 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 let free_function = &self.symbols[*function];
                 let type_args = type_args
                     .iter()
-                    .map(|t| Ok(t.coalesced(self.symbols)?.assume_mono(self.type_env)))
+                    .map(|typ| self.mono_type(typ, span))
                     .collect::<Result<Box<_>, AssembleError<'ctx>>>()?;
 
                 if let Some(intrinsic) = free_function.intrinsic() {
-                    self.emit_intrinsic(intrinsic, &type_args)?;
+                    self.emit_intrinsic(intrinsic, &type_args, span)?;
                     args.iter().try_for_each(|arg| self.assemble_expr(arg))?;
                     return Ok(());
                 }
@@ -482,8 +466,8 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
             } => {
                 let parent_t_args = parent_type_args
                     .iter()
-                    .map(|typ| Ok(typ.coalesced(self.symbols)?.assume_mono(self.type_env)))
-                    .collect::<Result<Box<_>, CoalesceError<'ctx>>>()?;
+                    .map(|typ| self.mono_type(typ, span))
+                    .collect::<Result<Box<_>, AssembleError<'ctx>>>()?;
                 let parent_t = MonoType::new(*parent_id, parent_t_args);
 
                 let function = if parent_t.args().is_empty() && type_args.is_empty() {
@@ -494,8 +478,8 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                     let id = MethodWithReceiver::new(parent_t, method.index());
                     let types = type_args
                         .iter()
-                        .map(|typ| Ok(typ.coalesced(self.symbols)?.assume_mono(self.type_env)))
-                        .collect::<Result<Box<_>, CoalesceError<'ctx>>>()?;
+                        .map(|typ| self.mono_type(typ, span))
+                        .collect::<Result<Box<_>, AssembleError<'ctx>>>()?;
                     let sig = Signature::new(id, types);
                     self.monomorph.method(sig, self.symbols, self.bundle)
                 };
@@ -514,9 +498,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 mode,
             } => {
                 let exit = self.new_label();
-                let receiver_t = receiver_type
-                    .coalesced(self.symbols)?
-                    .assume_mono(self.type_env);
+                let receiver_t = self.mono_type_app(receiver_type, span)?;
                 let parent_t = receiver_t
                     .instantiate_as(method.parent(), self.symbols)
                     .expect("should instantiate as parent");
@@ -536,8 +518,8 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                     let id = MethodWithReceiver::new(parent_t.into_owned(), method.index());
                     let types = type_args
                         .iter()
-                        .map(|t| Ok(t.coalesced(self.symbols)?.assume_mono(self.type_env)))
-                        .collect::<Result<Box<_>, CoalesceError<'ctx>>>()?;
+                        .map(|typ| self.mono_type(typ, span))
+                        .collect::<Result<Box<_>, AssembleError<'ctx>>>()?;
                     let sig = Signature::new(id, types);
                     self.monomorph.method(sig, self.symbols, self.bundle)
                 };
@@ -550,17 +532,15 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 closure_type,
                 args,
             } => {
-                let closure_t = closure_type
-                    .coalesced(self.symbols)?
-                    .assume_mono(self.type_env);
+                let closure_t = self.mono_type_app(closure_type, span)?;
                 let call = self.symbols[closure_t.id()]
                     .schema()
                     .as_aggregate()
-                    .ok_or(AssembleError::InvalidFunctionClass)?
+                    .ok_or(AssembleError::InvalidFunctionClass(span))?
                     .methods()
                     .by_name(CALL_METHOD)
                     .next()
-                    .ok_or(AssembleError::InvalidFunctionClass)?;
+                    .ok_or(AssembleError::InvalidFunctionClass(span))?;
                 let call = call.key();
                 let call = self
                     .monomorph
@@ -697,6 +677,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
         &mut self,
         intrinsic: ir::Intrinsic,
         type_args: &[MonoType<'ctx>],
+        span: Span,
     ) -> Result<(), AssembleError<'ctx>> {
         fn emit_typed<'ctx>(
             assembler: &mut Assembler<'_, 'ctx>,
@@ -780,7 +761,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 };
                 emit_typed(self, &array_t, instr);
             }
-            (i, _) => return Err(AssembleError::InvalidIntrinsic(i)),
+            (i, _) => return Err(AssembleError::InvalidIntrinsic(i, span)),
         };
         Ok(())
     }
@@ -890,6 +871,28 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
         let i = self.captures.binary_search_by_key(&loc, |&(l, _)| l).ok()?;
         Some(self.captures.get(i)?.1)
     }
+
+    fn mono_type(
+        &self,
+        typ: &ir::Type<'ctx>,
+        span: Span,
+    ) -> Result<MonoType<'ctx>, AssembleError<'ctx>> {
+        Ok(typ
+            .coalesced(self.symbols)
+            .map_err(|e| AssembleError::Coalesce(e.into(), span))?
+            .assume_mono(self.type_env))
+    }
+
+    fn mono_type_app(
+        &self,
+        typ: &ir::TypeApp<'ctx>,
+        span: Span,
+    ) -> Result<MonoType<'ctx>, AssembleError<'ctx>> {
+        Ok(typ
+            .coalesced(self.symbols)
+            .map_err(|e| AssembleError::Coalesce(e.into(), span))?
+            .assume_mono(self.type_env))
+    }
 }
 
 #[derive(Debug, Error)]
@@ -897,22 +900,29 @@ pub enum AssembleError<'ctx> {
     #[error("label too distant")]
     LabelTooDistant,
     #[error("invalid control flow")]
-    InvalidControlFlow,
+    InvalidControlFlow(Span),
     #[error("too many arguments")]
-    TooManyArguments,
+    TooManyArguments(Span),
     #[error("invalid intrinsic")]
-    InvalidIntrinsic(ir::Intrinsic),
+    InvalidIntrinsic(ir::Intrinsic, Span),
     #[error("the base function class is not defined correctly")]
-    InvalidFunctionClass,
+    InvalidFunctionClass(Span),
     #[error("{0}")]
-    Coalesce(Box<CoalesceError<'ctx>>),
+    Coalesce(Box<CoalesceError<'ctx>>, Span),
     #[error("decoding error: {0}")]
     Decoding(#[from] byte::Error),
 }
 
-impl<'ctx> From<CoalesceError<'ctx>> for AssembleError<'ctx> {
-    fn from(err: CoalesceError<'ctx>) -> Self {
-        AssembleError::Coalesce(Box::new(err))
+impl AssembleError<'_> {
+    pub fn span(&self) -> Option<Span> {
+        match self {
+            Self::InvalidControlFlow(span)
+            | Self::TooManyArguments(span)
+            | Self::InvalidIntrinsic(_, span)
+            | Self::InvalidFunctionClass(span)
+            | Self::Coalesce(_, span) => Some(*span),
+            _ => None,
+        }
     }
 }
 

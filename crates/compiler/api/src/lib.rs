@@ -49,9 +49,15 @@ impl<'ctx> Compilation<'ctx> {
             return Err(FlushError::CompilationErrors(self.diagnostics));
         }
 
-        self.mappings
-            .into_monomorphizer(self.sources)
-            .monomorphize(&self.unit, &self.symbols, &mut self.bundle)?;
+        let mut monomorph = self.mappings.into_monomorphizer(self.sources);
+        if let Err(err) = monomorph.monomorphize(&self.unit, &self.symbols, &mut self.bundle) {
+            if let Some(span) = err.span() {
+                self.diagnostics
+                    .push(Diagnostic::Other(Box::new(err), span));
+                return Err(FlushError::CompilationErrors(self.diagnostics));
+            }
+        }
+
         self.bundle.into_writeable().save(path)?;
         Ok((self.symbols, self.diagnostics))
     }
@@ -104,6 +110,10 @@ impl<'ctx> Diagnostics<'ctx> {
         }
         log::info!("{} warnings, {} errors", warnings, errors);
         Ok(())
+    }
+
+    fn push(&mut self, diagnostic: Diagnostic<'ctx>) {
+        self.0.push(diagnostic);
     }
 }
 

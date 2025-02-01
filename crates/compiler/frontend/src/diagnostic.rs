@@ -87,6 +87,8 @@ pub enum Diagnostic<'ctx> {
     InvalidImplType(Span),
     #[error("this implementation is a duplicate of a previous one")]
     DuplicateImpl(Span),
+    #[error("{0}")]
+    Other(Box<dyn std::error::Error + 'ctx>, Span),
 }
 
 impl<'ctx> Diagnostic<'ctx> {
@@ -138,7 +140,8 @@ impl<'ctx> Diagnostic<'ctx> {
             | Self::StructFieldAddition(span)
             | Self::InvalidImplName(span)
             | Self::InvalidImplType(span)
-            | Self::DuplicateImpl(span) => *span,
+            | Self::DuplicateImpl(span)
+            | Self::Other(_, span) => *span,
         }
     }
 

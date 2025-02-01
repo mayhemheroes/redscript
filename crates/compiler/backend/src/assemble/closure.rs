@@ -30,7 +30,7 @@ pub fn emit_closure<'ctx>(
         .bundle
         .cnames_mut()
         .add(format!("lambda${cname_idx}"));
-    let func_t = closure.typ.coalesced(symbols)?.assume_mono(type_env);
+    let func_t = assembler.mono_type_app(&closure.typ, span)?;
     let func_t_idx = assembler
         .monomorph
         .type_(&func_t, symbols, assembler.bundle);
@@ -64,18 +64,18 @@ pub fn emit_closure<'ctx>(
     let instantiate = PoolFunction::new(instantiate_name, Visibility::Public, instantiate_flags);
     let instantiate = assembler
         .bundle
-        .define_and_try_init(instantiate, |bundle, idx, func| {
+        .define_and_init(instantiate, |bundle, idx, func| {
             create_instantiate_method(idx, func, class, func_t_idx, &fields, bundle)
-        })?;
+        });
 
     let call = symbols[func_t.id()]
         .schema()
         .as_aggregate()
-        .ok_or(AssembleError::InvalidFunctionClass)?
+        .ok_or(AssembleError::InvalidFunctionClass(span))?
         .methods()
         .by_name(CALL_METHOD)
         .next()
-        .ok_or(AssembleError::InvalidFunctionClass)?;
+        .ok_or(AssembleError::InvalidFunctionClass(span))?;
     let call = assembler
         .monomorph
         .mono_method(&func_t, *call.key(), symbols, assembler.bundle);
@@ -84,19 +84,22 @@ pub fn emit_closure<'ctx>(
     let source_ref = assembler.monomorph.source_ref(span, assembler.bundle);
     let call =
         PoolFunction::new(call_name, Visibility::Public, call_flags).with_source(Some(source_ref));
-    let call = assembler
-        .bundle
-        .define_and_try_init(call, |bundle, idx, func| {
-            let typ = closure.typ.coalesced(symbols)?.assume_mono(type_env);
-            let symbols = assembler.symbols;
-            let monomorph = &mut assembler.monomorph;
-            create_apply_method(idx, func, class, &typ, symbols, bundle, monomorph)
-        })?;
+    let call = assembler.bundle.define_and_init(call, |bundle, idx, func| {
+        let symbols = assembler.symbols;
+        let monomorph = &mut assembler.monomorph;
+        create_apply_method(idx, func, class, &func_t, symbols, bundle, monomorph)
+    });
 
     let locals = closure
         .locals
         .iter()
-        .map(|l| Ok((l.id, l.typ.coalesce(symbols)?)))
+        .map(|loc| {
+            let typ = loc
+                .typ
+                .coalesce(symbols)
+                .map_err(|e| AssembleError::Coalesce(e.into(), span))?;
+            Ok((loc.id, typ))
+        })
         .collect::<Result<Vec<_>, AssembleError<'ctx>>>()?;
     let captures = closure.captures.iter().copied().zip(fields.iter().copied());
     let code = assemble_block(
@@ -144,7 +147,7 @@ fn create_apply_method<'ctx>(
     symbols: &Symbols<'ctx>,
     bundle: &mut ScriptBundle<'ctx>,
     monomorph: &mut Monomorphizer<'ctx>,
-) -> Result<PoolFunction<'ctx>, AssembleError<'ctx>> {
+) -> PoolFunction<'ctx> {
     let (return_t, param_types) = typ
         .args()
         .split_last()
@@ -167,11 +170,9 @@ fn create_apply_method<'ctx>(
         _ => Some(monomorph.type_(return_t, symbols, bundle)),
     };
 
-    let func = func
-        .with_class(Some(class_index))
+    func.with_class(Some(class_index))
         .with_parameters(apply_params)
-        .with_return_type(return_t_idx);
-    Ok(func)
+        .with_return_type(return_t_idx)
 }
 
 fn create_instantiate_method<'ctx>(
@@ -181,7 +182,7 @@ fn create_instantiate_method<'ctx>(
     type_index: PoolTypeIndex,
     capture_fields: &[PoolFieldIndex],
     bundle: &mut ScriptBundle<'ctx>,
-) -> Result<PoolFunction<'ctx>, AssembleError<'ctx>> {
+) -> PoolFunction<'ctx> {
     let params = capture_fields
         .iter()
         .map(|&field| {
@@ -216,13 +217,11 @@ fn create_instantiate_method<'ctx>(
     body.push(Instr::Return);
     body.push(Instr::Local(self_local));
 
-    let func = func
-        .with_class(Some(class_index))
+    func.with_class(Some(class_index))
         .with_locals(vec![self_local])
         .with_parameters(params)
         .with_return_type(Some(type_index))
-        .with_code(body);
-    Ok::<_, AssembleError<'ctx>>(func)
+        .with_code(body)
 }
 
 fn resolve_local_type(assembler: &Assembler<'_, '_>, local: ir::Local) -> Option<PoolTypeIndex> {
