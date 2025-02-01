@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use chrono::SecondsFormat;
 use flexi_logger::{Age, Cleanup, Criterion, Duplicate, FileSpec, LogSpecBuilder, Logger, Naming};
 use log::LevelFilter;
 
@@ -17,13 +18,11 @@ pub fn setup(r6_dir: &Path) {
             Cleanup::KeepLogFiles(4),
         )
         .format(|out, time, msg| {
-            write!(
-                out,
-                "[{} - {}] {}",
-                msg.level(),
-                time.now().to_rfc2822(),
-                msg.args()
-            )
+            let time = time
+                .now()
+                .with_timezone(&chrono::Utc)
+                .to_rfc3339_opts(SecondsFormat::Secs, true);
+            write!(out, "[{} - {time}] {}", msg.level(), msg.args())
         })
         .start()
         .ok();
