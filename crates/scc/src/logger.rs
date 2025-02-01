@@ -4,9 +4,9 @@ use chrono::SecondsFormat;
 use flexi_logger::{Age, Cleanup, Criterion, Duplicate, FileSpec, LogSpecBuilder, Logger, Naming};
 use log::LevelFilter;
 
-pub fn setup(r6_dir: &Path) {
+pub fn setup(root_dir: &Path) {
     let file = FileSpec::default()
-        .directory(r6_dir.join("logs"))
+        .directory(root_dir.join("r6").join("logs"))
         .basename("redscript");
 
     Logger::with(LogSpecBuilder::new().default(LevelFilter::Info).build())

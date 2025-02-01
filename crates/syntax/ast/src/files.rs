@@ -64,15 +64,26 @@ impl SourceMap {
     pub fn is_empty(&self) -> bool {
         self.files.len() == 0
     }
+
+    pub fn display_at<'a>(&'a self, root: &'a Path) -> DisplaySourceMap<'a> {
+        DisplaySourceMap { map: self, root }
+    }
 }
 
-impl fmt::Display for SourceMap {
+#[derive(Debug)]
+pub struct DisplaySourceMap<'a> {
+    map: &'a SourceMap,
+    root: &'a Path,
+}
+
+impl fmt::Display for DisplaySourceMap<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.files().enumerate().try_for_each(|(i, (_, file))| {
+        self.map.files().enumerate().try_for_each(|(i, (_, file))| {
             if i > 0 {
                 writeln!(f)?;
             }
-            write!(f, "{}", file.path.display())
+            let path = file.path.strip_prefix(self.root).unwrap_or(&file.path);
+            write!(f, "{}", path.display())
         })
     }
 }

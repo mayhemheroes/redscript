@@ -10,7 +10,10 @@ use crate::arguments::Arguments;
 
 const BUNDLE_FILE: &str = "final.redscripts";
 const BACKUP_BUNDLE_FILE: &str = "final.redscripts.bk";
+
+const R6_DIR: &str = "r6";
 const CACHE_DIR: &str = "cache";
+const SCRIPTS_DIR: &str = "scripts";
 
 pub(crate) const CACHE_FILE_EXT: &str = "redscripts";
 pub(crate) const BACKUP_FILE_EXT: &str = "redscripts.bk";
@@ -18,14 +21,17 @@ pub(crate) const TIMESTAMP_FILE_EXT: &str = "redscripts.ts";
 
 #[derive(Debug)]
 pub struct SccSettings {
-    r6_dir: PathBuf,
+    root_dir: PathBuf,
     custom_cache_file: Option<PathBuf>,
     output_cache_file: Option<PathBuf>,
     additional_script_paths: Vec<PathBuf>,
 }
 
 impl SccSettings {
-    pub fn from_r6_dir_and_args(r6_dir: impl Into<PathBuf>, args: Arguments) -> io::Result<Self> {
+    pub fn from_root_dir_and_args(
+        root_dir: impl Into<PathBuf>,
+        args: Arguments,
+    ) -> io::Result<Self> {
         let additional_script_paths = args
             .script_paths_file
             .as_deref()
@@ -39,19 +45,23 @@ impl SccSettings {
             .unwrap_or_default();
 
         Ok(Self {
-            r6_dir: r6_dir.into(),
+            root_dir: root_dir.into(),
             custom_cache_file: args.cache_file.map(Into::into),
             output_cache_file: None,
             additional_script_paths,
         })
     }
 
+    pub fn root_dir(&self) -> &Path {
+        &self.root_dir
+    }
+
     fn default_cache_file_path(&self) -> PathBuf {
-        self.r6_dir.join(CACHE_DIR).join(BUNDLE_FILE)
+        self.root_dir.join(R6_DIR).join(CACHE_DIR).join(BUNDLE_FILE)
     }
 
     fn default_scripts_dir_path(&self) -> PathBuf {
-        self.r6_dir.join("scripts")
+        self.root_dir.join(R6_DIR).join(SCRIPTS_DIR)
     }
 
     pub fn script_paths(&self) -> impl Iterator<Item = Cow<'_, Path>> {
@@ -72,7 +82,10 @@ impl SccSettings {
     }
 
     pub fn default_backup_cache_file_path(&self) -> PathBuf {
-        self.r6_dir.join(CACHE_DIR).join(BACKUP_BUNDLE_FILE)
+        self.root_dir
+            .join(R6_DIR)
+            .join(CACHE_DIR)
+            .join(BACKUP_BUNDLE_FILE)
     }
 
     pub fn unmodified_cache_file_path(&self) -> PathBuf {

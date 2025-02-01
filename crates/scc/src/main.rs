@@ -23,13 +23,14 @@ static GLOBAL: MiMalloc = MiMalloc;
 fn main() -> anyhow::Result<()> {
     match Arguments::from_env_args(std::env::args()) {
         Ok(args) => {
-            let r6 = args
+            let root = args
                 .scripts_dir
                 .parent()
+                .and_then(Path::parent)
                 .context("provided scripts directory has no parent directory")?;
-            logger::setup(r6);
+            logger::setup(root);
 
-            let settings = SccSettings::from_r6_dir_and_args(r6.to_path_buf(), args)
+            let settings = SccSettings::from_root_dir_and_args(root.to_path_buf(), args)
                 .context("failed to create the settings")?;
             if let Err(err) = compile(&settings) {
                 log::error!("An unexpected error ocurred: {err}");
@@ -54,7 +55,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn compile(settings: &SccSettings) -> anyhow::Result<()> {
-    log::info!("REDscript 1.0.0 preview");
+    log::info!("running REDscript {}", env!("CARGO_PKG_VERSION"));
 
     let cache_file = settings.cache_file_path();
 
@@ -76,7 +77,11 @@ fn compile(settings: &SccSettings) -> anyhow::Result<()> {
     let output_file = settings.output_cache_file_path();
 
     let mut sources = SourceMap::from_paths_recursively(settings.script_paths())?;
-    log::info!("Compiling {} files:\n{}", sources.len(), &sources);
+    log::info!(
+        "Compiling {} files:\n{}",
+        sources.len(),
+        sources.display_at(settings.root_dir())
+    );
     sources.populate_boot_lib();
 
     let interner = TypeInterner::default();
