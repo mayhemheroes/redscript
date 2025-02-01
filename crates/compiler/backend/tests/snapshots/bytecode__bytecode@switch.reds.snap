@@ -5,8 +5,8 @@ input_file: crates/compiler/backend/tests/data/switch.reds
 snapshot_kind: text
 ---
 // Test;Int32 (f0)
-switch 4
-invoke.static j30 l0 f1 0000000000000000
+switch 5
+invoke.static j30 l5 f1 0000000000000000
 param 0
 i32.const 4
 param.end

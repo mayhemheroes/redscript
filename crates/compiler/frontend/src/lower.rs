@@ -160,7 +160,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         lower.coerce(&mut expr, typ, return_t, env, *span)?;
 
         let mut stmts = lower.stmt_prefixes.pop().unwrap_or_default();
-        stmts.push(ir::Stmt::Return(Some(expr.into())));
+        stmts.push(ir::Stmt::Return(Some(expr.into()), *span));
         Ok((ir::Block::new(stmts), lower.into_output()))
     }
 
@@ -545,6 +545,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                     ir::Stmt::InitDefault {
                         local,
                         typ: typ.into(),
+                        span,
                     }
                 }
             }
@@ -601,16 +602,16 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 let rt = self.return_type.clone();
                 let (mut val, val_t) = self.lower_expr_with(val, Some(&rt), env)?;
                 self.coerce(&mut val, val_t, rt, env, *val_span)?;
-                ir::Stmt::Return(Some(val.into()))
+                ir::Stmt::Return(Some(val.into()), span)
             }
             ast::Stmt::Return(None) => {
                 self.return_type
                     .constrain(&PolyType::nullary(predef::VOID), self.symbols)
                     .with_span(span)?;
-                ir::Stmt::Return(None)
+                ir::Stmt::Return(None, span)
             }
-            ast::Stmt::Break => ir::Stmt::Break,
-            ast::Stmt::Continue => ir::Stmt::Continue,
+            ast::Stmt::Break => ir::Stmt::Break(span),
+            ast::Stmt::Continue => ir::Stmt::Continue(span),
             ast::Stmt::Expr(expr) => {
                 let (expr, _) = self.lower_expr(expr, env)?;
                 ir::Stmt::Expr(expr.into())

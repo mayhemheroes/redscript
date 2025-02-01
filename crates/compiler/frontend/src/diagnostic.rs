@@ -150,7 +150,7 @@ impl<'ctx> Diagnostic<'ctx> {
         let file = sources.get(span.file).ok_or(UnknownSource(span))?;
         let start = file.lookup(span.start);
         let end = file.lookup(span.end);
-        let line = file.line(start.line).ok_or(UnknownSource(span))?;
+        let line = file.line_contents(start.line).ok_or(UnknownSource(span))?;
 
         Ok(DisplayFn::new(move |f: &mut fmt::Formatter<'_>| {
             writeln!(

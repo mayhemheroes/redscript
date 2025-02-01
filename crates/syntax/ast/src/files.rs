@@ -109,16 +109,7 @@ impl File {
     }
 
     pub fn lookup(&self, offset: u32) -> SourceLoc {
-        let (line, line_offset) = if self.lines.first().is_some_and(|&p| p > offset) {
-            (0, 0)
-        } else {
-            let line = self
-                .lines
-                .binary_search(&offset)
-                .map(|i| i + 1)
-                .unwrap_or_else(|i| i);
-            (line, self.lines[line - 1])
-        };
+        let (line, line_offset) = self.line_and_offset(offset);
         SourceLoc {
             line,
             col: self.source[line_offset as usize..offset as usize]
@@ -127,16 +118,29 @@ impl File {
         }
     }
 
-    pub fn line(&self, idx: usize) -> Option<&str> {
-        let start = if idx == 0 {
+    pub fn line_contents(&self, line: usize) -> Option<&str> {
+        let start = if line == 0 {
             0
         } else {
-            self.lines.get(idx - 1).copied()?
+            self.lines.get(line - 1).copied()?
         };
-        let end = self.lines.get(idx).copied().unwrap_or_else(|| {
+        let end = self.lines.get(line).copied().unwrap_or_else(|| {
             u32::try_from(self.source.len()).expect("source size should fit in u32")
         });
         Some(&self.source[start as usize..end as usize])
+    }
+
+    pub fn line_and_offset(&self, offset: u32) -> (usize, u32) {
+        if self.lines.first().is_some_and(|&p| p > offset) {
+            (0, 0)
+        } else {
+            let line = self
+                .lines
+                .binary_search(&offset)
+                .map(|i| i + 1)
+                .unwrap_or_else(|i| i);
+            (line, self.lines[line - 1])
+        }
     }
 }
 

@@ -7,8 +7,8 @@ snapshot_kind: text
 // Test;Int32 (f0)
 return
 cond 50 49
-invoke.static j47 l0 f1 0000000000000000
-invoke.static j30 l0 f2 0000000000000000
+invoke.static j47 l2 f1 0000000000000000
+invoke.static j30 l2 f2 0000000000000000
 param 0
 i32.const 2
 param.end

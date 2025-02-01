@@ -1,4 +1,5 @@
 use closure::{emit_closure, CALL_METHOD};
+use redscript_compiler_frontend::ast::Span;
 use redscript_compiler_frontend::utils::ScopedMap;
 use redscript_compiler_frontend::{
     ir, predef, CoalesceError, MonoType, RefType, Symbols, Type, TypeSchema,
@@ -26,16 +27,10 @@ pub fn assemble_block<'ctx>(
     symbols: &Symbols<'ctx>,
     type_env: &ScopedMap<'_, &'ctx str, MonoType<'ctx>>,
     bundle: &mut ScriptBundle<'ctx>,
-    monomorphizer: &mut Monomorphizer<'ctx>,
+    monomorph: &mut Monomorphizer<'ctx>,
 ) -> Result<Vec<Instr>, AssembleError<'ctx>> {
     let mut assembler = Assembler::new(
-        index,
-        locals,
-        captures,
-        symbols,
-        type_env,
-        bundle,
-        monomorphizer,
+        index, locals, captures, symbols, type_env, bundle, monomorph,
     );
     assembler.assemble_block(block, None)?;
     assembler.into_code()
@@ -55,7 +50,7 @@ struct Assembler<'scope, 'ctx> {
     symbols: &'scope Symbols<'ctx>,
     type_env: &'scope ScopedMap<'scope, &'ctx str, MonoType<'ctx>>,
     bundle: &'scope mut ScriptBundle<'ctx>,
-    monomorphizer: &'scope mut Monomorphizer<'ctx>,
+    monomorph: &'scope mut Monomorphizer<'ctx>,
 }
 
 impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
@@ -66,7 +61,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
         symbols: &'scope Symbols<'ctx>,
         type_env: &'scope ScopedMap<'scope, &'ctx str, MonoType<'ctx>>,
         bundle: &'scope mut ScriptBundle<'ctx>,
-        monomorphizer: &'scope mut Monomorphizer<'ctx>,
+        monomorph: &'scope mut Monomorphizer<'ctx>,
     ) -> Self {
         let mut local_indices = vec![];
         let mut param_indices = vec![];
@@ -75,7 +70,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
             match local {
                 ir::Local::Var(i) => {
                     let name = bundle.cnames_mut().add(format!("var{i}"));
-                    let typ = monomorphizer.type_(&typ.assume_mono(type_env), symbols, bundle);
+                    let typ = monomorph.type_(&typ.assume_mono(type_env), symbols, bundle);
                     let flags = PoolLocalFlags::default();
                     let idx = bundle.define(PoolLocal::new(name, index, typ, flags));
                     local_indices.push((local, idx));
@@ -111,7 +106,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
 
             symbols,
             bundle,
-            monomorphizer,
+            monomorph,
             type_env,
         }
     }
@@ -203,7 +198,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 let typ = scrutinee_type
                     .coalesced(self.symbols)?
                     .assume_mono(self.type_env);
-                let typ = self.monomorphizer.type_(&typ, self.symbols, self.bundle);
+                let typ = self.monomorph.type_(&typ, self.symbols, self.bundle);
 
                 self.emit(Instr::Switch(Switch::new(typ, next_label)));
                 self.assemble_expr(scrutinee)?;
@@ -251,9 +246,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                     .coalesced(self.symbols)?
                     .assume_mono(self.type_env);
                 let array_t = MonoType::new(predef::ARRAY, [element_t]);
-                let array_t = self
-                    .monomorphizer
-                    .type_(&array_t, self.symbols, self.bundle);
+                let array_t = self.monomorph.type_(&array_t, self.symbols, self.bundle);
 
                 self.emit(Instr::ArrayResize(array_t));
                 self.emit(Instr::Local(local));
@@ -268,14 +261,14 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                     self.assemble_expr(element)?;
                 }
             }
-            ir::Stmt::InitDefault { local, typ } => {
+            ir::Stmt::InitDefault { local, typ, .. } => {
                 let local = self
                     .resolve_local(*local)
                     .expect("every local should be defined");
                 let typ = typ.coalesced(self.symbols)?.assume_mono(self.type_env);
 
                 if typ.id() == predef::ARRAY {
-                    let array_t = self.monomorphizer.type_(&typ, self.symbols, self.bundle);
+                    let array_t = self.monomorph.type_(&typ, self.symbols, self.bundle);
                     self.emit(Instr::ArrayClear(array_t));
                     self.emit(Instr::Local(local));
                 } else {
@@ -284,20 +277,20 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                     self.emit_default_instr(typ)?;
                 }
             }
-            ir::Stmt::Break => match block_span {
+            ir::Stmt::Break(_) => match block_span {
                 Some(BlockSpan::Loop { end, .. } | BlockSpan::Switch { end }) => {
                     self.emit(Instr::Jump(Jump::new(end)));
                 }
                 _ => return Err(AssembleError::InvalidControlFlow),
             },
-            ir::Stmt::Continue => {
+            ir::Stmt::Continue(_) => {
                 if let Some(BlockSpan::Loop { start, .. }) = block_span {
                     self.emit(Instr::Jump(Jump::new(start)));
                 } else {
                     return Err(AssembleError::InvalidControlFlow);
                 }
             }
-            ir::Stmt::Return(expr) if self.has_return_value => {
+            ir::Stmt::Return(expr, _) if self.has_return_value => {
                 self.emit(Instr::Return);
                 if let Some(expr) = expr {
                     self.assemble_expr(expr)?;
@@ -305,7 +298,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                     self.emit(Instr::Nop);
                 }
             }
-            ir::Stmt::Return(expr) => {
+            ir::Stmt::Return(expr, _) => {
                 if let Some(expr) = expr {
                     self.assemble_expr(expr)?;
                 }
@@ -316,16 +309,14 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
 
     fn assemble_expr(&mut self, expr: &ir::Expr<'ctx>) -> Result<(), AssembleError<'ctx>> {
         match expr {
-            ir::Expr::Call { call, .. } => self.assemble_call(call)?,
+            ir::Expr::Call { call, span } => self.assemble_call(call, *span)?,
             ir::Expr::Const(const_, _) => self.assemble_const(const_)?,
             ir::Expr::Null(_) => self.emit(Instr::Null),
             ir::Expr::NewClass { class_type, .. } => {
                 let class_t = class_type
                     .coalesced(self.symbols)?
                     .assume_mono(self.type_env);
-                let class_t = self
-                    .monomorphizer
-                    .class(&class_t, self.symbols, self.bundle);
+                let class_t = self.monomorph.class(&class_t, self.symbols, self.bundle);
                 self.emit(Instr::New(class_t));
             }
             ir::Expr::NewStruct {
@@ -336,9 +327,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 let struct_t = struct_type
                     .coalesced(self.symbols)?
                     .assume_mono(self.type_env);
-                let struct_t = self
-                    .monomorphizer
-                    .class(&struct_t, self.symbols, self.bundle);
+                let struct_t = self.monomorph.class(&struct_t, self.symbols, self.bundle);
                 self.emit(Instr::Construct {
                     arg_count: u8::try_from(values.len())
                         .map_err(|_| AssembleError::TooManyArguments)?,
@@ -348,8 +337,8 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                     self.assemble_expr(value)?;
                 }
             }
-            ir::Expr::NewClosure { closure, .. } => {
-                emit_closure(self, closure)?;
+            ir::Expr::NewClosure { closure, span } => {
+                emit_closure(self, closure, *span)?;
             }
             ir::Expr::Assign { place, expr, .. } => {
                 self.emit(Instr::Assign);
@@ -367,9 +356,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                     .coalesced(self.symbols)?
                     .assume_mono(self.type_env);
                 let id = receiver_t.id();
-                let class = self
-                    .monomorphizer
-                    .class(&receiver_t, self.symbols, self.bundle);
+                let class = self.monomorph.class(&receiver_t, self.symbols, self.bundle);
                 let field = self.bundle[class].fields()[usize::from(field.index())];
                 match self.symbols[id].schema() {
                     TypeSchema::Aggregate(agg) if agg.flags().is_struct() => {
@@ -397,9 +384,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 let array_t = array_type
                     .coalesced(self.symbols)?
                     .assume_mono(self.type_env);
-                let array_t = self
-                    .monomorphizer
-                    .type_(&array_t, self.symbols, self.bundle);
+                let array_t = self.monomorph.type_(&array_t, self.symbols, self.bundle);
                 self.emit(Instr::ArrayElement(array_t));
                 self.assemble_expr(array)?;
                 self.assemble_expr(index)?;
@@ -431,9 +416,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 let target_t = target_type
                     .coalesced(self.symbols)?
                     .assume_mono(self.type_env);
-                let class = self
-                    .monomorphizer
-                    .class(&target_t, self.symbols, self.bundle);
+                let class = self.monomorph.class(&target_t, self.symbols, self.bundle);
                 self.emit(Instr::DynamicCast {
                     class,
                     is_weak: matches!(expr_t.ref_type(), Some(RefType::Weak)),
@@ -456,7 +439,11 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
         Ok(())
     }
 
-    fn assemble_call(&mut self, call: &ir::Call<'ctx>) -> Result<(), AssembleError<'ctx>> {
+    fn assemble_call(
+        &mut self,
+        call: &ir::Call<'ctx>,
+        span: Span,
+    ) -> Result<(), AssembleError<'ctx>> {
         match call {
             ir::Call::FreeFunction {
                 function,
@@ -476,15 +463,15 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 }
 
                 let idx = if let Some(method) = free_function.method_alias() {
-                    self.monomorphizer
+                    self.monomorph
                         .existing_alias(method)
                         .expect("method alias should be defined")
                 } else {
                     let sig = Signature::new(*function, type_args);
-                    self.monomorphizer.function(sig, self.symbols, self.bundle)
+                    self.monomorph.function(sig, self.symbols, self.bundle)
                 };
 
-                self.emit_call(idx, args, ir::CallMode::default())?;
+                self.emit_call(idx, args, ir::CallMode::default(), span)?;
             }
             ir::Call::Static {
                 parent_id,
@@ -501,7 +488,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
 
                 let function = if parent_t.args().is_empty() && type_args.is_empty() {
                     let index = method.index();
-                    self.monomorphizer
+                    self.monomorph
                         .mono_method(&parent_t, index, self.symbols, self.bundle)
                 } else {
                     let id = MethodWithReceiver::new(parent_t, method.index());
@@ -510,11 +497,11 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                         .map(|typ| Ok(typ.coalesced(self.symbols)?.assume_mono(self.type_env)))
                         .collect::<Result<Box<_>, CoalesceError<'ctx>>>()?;
                     let sig = Signature::new(id, types);
-                    self.monomorphizer.method(sig, self.symbols, self.bundle)
+                    self.monomorph.method(sig, self.symbols, self.bundle)
                 };
 
                 let exit = self.new_label();
-                self.emit_call(function, args, ir::CallMode::default())?;
+                self.emit_call(function, args, ir::CallMode::default(), span)?;
                 self.mark_label(exit);
             }
             ir::Call::Instance {
@@ -543,7 +530,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
 
                 let function = if type_args.is_empty() {
                     let idx = method.index();
-                    self.monomorphizer
+                    self.monomorph
                         .mono_method(&parent_t, idx, self.symbols, self.bundle)
                 } else {
                     let id = MethodWithReceiver::new(parent_t.into_owned(), method.index());
@@ -552,10 +539,10 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                         .map(|t| Ok(t.coalesced(self.symbols)?.assume_mono(self.type_env)))
                         .collect::<Result<Box<_>, CoalesceError<'ctx>>>()?;
                     let sig = Signature::new(id, types);
-                    self.monomorphizer.method(sig, self.symbols, self.bundle)
+                    self.monomorph.method(sig, self.symbols, self.bundle)
                 };
 
-                self.emit_call(function, args, *mode)?;
+                self.emit_call(function, args, *mode, span)?;
                 self.mark_label(exit);
             }
             ir::Call::Closure {
@@ -575,9 +562,9 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                     .next()
                     .ok_or(AssembleError::InvalidFunctionClass)?;
                 let call = call.key();
-                let call =
-                    self.monomorphizer
-                        .mono_method(&closure_t, *call, self.symbols, self.bundle);
+                let call = self
+                    .monomorph
+                    .mono_method(&closure_t, *call, self.symbols, self.bundle);
 
                 let context = self.new_label();
                 let function = self.bundle[call].name();
@@ -589,7 +576,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 let exit = self.new_label();
                 self.emit(Instr::InvokeVirtual {
                     exit: Jump::new(exit),
-                    line: 0,
+                    line: self.monomorph.source_line(closure.span()),
                     function,
                     flags: InvokeFlags::default(),
                 });
@@ -621,7 +608,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
             }
             &ir::Const::EnumVariant(variant) => {
                 let enum_ = self
-                    .monomorphizer
+                    .monomorph
                     .existing_enum(variant.parent())
                     .expect("every enum should be defined");
                 let value = self.bundle[enum_].values()[usize::from(variant.index())];
@@ -650,9 +637,13 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
         index: PoolFunctionIndex,
         args: &[ir::Expr<'ctx>],
         mode: ir::CallMode,
+        span: Span,
     ) -> Result<(), AssembleError<'ctx>> {
         let exit = self.new_label();
         let func = &self.bundle[index];
+
+        let jump = Jump::new(exit);
+        let line = self.monomorph.source_line(span);
 
         let mut flags = InvokeFlags::default();
         for (arg, i) in args.iter().zip(0u8..) {
@@ -667,15 +658,15 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
             || matches!(mode, ir::CallMode::ForceStatic)
         {
             self.emit(Instr::InvokeStatic {
-                exit: Jump::new(exit),
-                line: 0,
+                exit: jump,
+                line,
                 function: index,
                 flags,
             });
         } else {
             self.emit(Instr::InvokeVirtual {
-                exit: Jump::new(exit),
-                line: 0,
+                exit: jump,
+                line,
                 function: func.name(),
                 flags,
             });
@@ -713,7 +704,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
             instr: fn(PoolTypeIndex) -> Instr<Label>,
         ) {
             let typ = assembler
-                .monomorphizer
+                .monomorph
                 .type_(typ, assembler.symbols, assembler.bundle);
             assembler.emit(instr(typ));
         }
@@ -830,7 +821,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
     fn emit_default_instr(&mut self, typ: MonoType<'ctx>) -> Result<(), AssembleError<'ctx>> {
         match self.symbols[typ.id()].schema() {
             TypeSchema::Aggregate(aggregate) if aggregate.flags().is_struct() => {
-                let class = self.monomorphizer.class(&typ, self.symbols, self.bundle);
+                let class = self.monomorph.class(&typ, self.symbols, self.bundle);
                 self.emit(Instr::Construct {
                     arg_count: 0,
                     class,
@@ -840,7 +831,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 self.emit(Instr::Null);
             }
             TypeSchema::Enum(_) => {
-                let enum_type = self.monomorphizer.type_(&typ, self.symbols, self.bundle);
+                let enum_type = self.monomorph.type_(&typ, self.symbols, self.bundle);
                 self.emit(Instr::I32ToEnum { enum_type, size: 1 });
                 self.emit(Instr::I8Const(0));
             }

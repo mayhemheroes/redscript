@@ -10,6 +10,8 @@ pub mod utils;
 
 pub use diagnostic::{Diagnostic, Reporter, UnknownSource};
 pub use lower::{CoalesceError, Error as LowerError, PolyType, TypeRef};
+pub use redscript_ast as ast;
+use redscript_parser as parser;
 pub use stages::{LoweredClass, LoweredCompilationUnit, LoweredFunction};
 use stages::{NameResolution, Scope};
 pub use symbols::{
@@ -22,7 +24,6 @@ pub use types::{
     predef, CtxVar, Immutable, Mono, MonoType, RefType, Type, TypeApp, TypeId, TypeInterner,
     TypeKind, Variance,
 };
-use {redscript_ast as ast, redscript_parser as parser};
 
 type IndexMap<K, V, S = hashbrown::DefaultHashBuilder> = indexmap::IndexMap<K, V, S>;
 type IndexSet<K, S = hashbrown::DefaultHashBuilder> = indexmap::IndexSet<K, S>;

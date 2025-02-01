@@ -85,8 +85,7 @@ impl Definition<'_> {
             Definition::Parameter(p) => p.name,
             Definition::Local(l) => l.name,
             Definition::Field(f) => f.name,
-            Definition::SourceFile(f) => f.name,
-            Definition::Bitfield => CNameIndex::UNDEFINED,
+            Definition::SourceFile(_) | Definition::Bitfield => CNameIndex::UNDEFINED,
         }
     }
 
@@ -692,7 +691,7 @@ impl<'i> Function<'i> {
     #[inline]
     pub fn with_source(mut self, source: Option<SourceReference>) -> Self {
         assert!(
-            !self.flags.is_native(),
+            !self.flags.is_native() || source.is_none(),
             "should not set source for a native function"
         );
         self.source = source;
@@ -1129,8 +1128,6 @@ util::impl_bitfield_read_write!(FieldFlags);
 
 #[derive(Debug, Clone, PartialEq, Eq, TryRead, TryWrite, Measure)]
 pub struct SourceFile<'i> {
-    #[byte(skip)]
-    name: CNameIndex,
     index: u32,
     path_hash: u32,
     code_crc: u32,
@@ -1140,25 +1137,13 @@ pub struct SourceFile<'i> {
 
 impl<'i> SourceFile<'i> {
     #[inline]
-    pub fn new(
-        name: CNameIndex,
-        index: u32,
-        path_hash: u32,
-        code_crc: u32,
-        path: impl Into<Str<'i>>,
-    ) -> Self {
+    pub fn new(index: u32, path_hash: u32, code_crc: u32, path: impl Into<Str<'i>>) -> Self {
         Self {
-            name,
             index,
             path_hash,
             code_crc,
             path: path.into(),
         }
-    }
-
-    #[inline]
-    pub fn name(&self) -> CNameIndex {
-        self.name
     }
 
     #[inline]
@@ -1183,7 +1168,6 @@ impl<'i> SourceFile<'i> {
 
     pub fn into_owned(self) -> SourceFile<'static> {
         SourceFile {
-            name: self.name,
             index: self.index,
             path_hash: self.path_hash,
             code_crc: self.code_crc,

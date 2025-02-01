@@ -25,7 +25,7 @@ assign
 local 2
 i32.zero
 jump.if_not 143
-invoke.static j43 l0 f1 0000000000000000
+invoke.static j43 l7 f1 0000000000000000
 local 2
 array.size 0
 local 1
@@ -35,11 +35,11 @@ local 3
 array.element 0
 local 1
 local 2
-invoke.static j26 l0 f2 0000000000000000
+invoke.static j26 l7 f2 0000000000000000
 local 2
 i32.one
 param.end
-invoke.static j34 l0 f3 0000000000000000
+invoke.static j34 l8 f3 0000000000000000
 to_string 1
 local 3
 param.end

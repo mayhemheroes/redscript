@@ -1,5 +1,6 @@
 use std::mem;
 
+use redscript_compiler_frontend::ast::Span;
 use redscript_compiler_frontend::{ir, predef, MonoType, Symbols};
 use redscript_io::{
     Class as PoolClass, ClassFlags as PoolClassFlags, ClassIndex as PoolClassIndex,
@@ -19,6 +20,7 @@ pub(super) const CALL_METHOD: &str = "Call";
 pub fn emit_closure<'ctx>(
     assembler: &mut Assembler<'_, 'ctx>,
     closure: &ir::Closure<'ctx>,
+    span: Span,
 ) -> Result<(), AssembleError<'ctx>> {
     let symbols = assembler.symbols;
     let type_env = assembler.type_env;
@@ -30,10 +32,10 @@ pub fn emit_closure<'ctx>(
         .add(format!("lambda${cname_idx}"));
     let func_t = closure.typ.coalesced(symbols)?.assume_mono(type_env);
     let func_t_idx = assembler
-        .monomorphizer
+        .monomorph
         .type_(&func_t, symbols, assembler.bundle);
     let func_class = assembler
-        .monomorphizer
+        .monomorph
         .class(&func_t, symbols, assembler.bundle);
     let flags = PoolClassFlags::default().with_is_final(true);
     let class = PoolClass::new(class, Visibility::Public, flags).with_base(Some(func_class));
@@ -75,18 +77,20 @@ pub fn emit_closure<'ctx>(
         .next()
         .ok_or(AssembleError::InvalidFunctionClass)?;
     let call = assembler
-        .monomorphizer
+        .monomorph
         .mono_method(&func_t, *call.key(), symbols, assembler.bundle);
     let call_name = assembler.bundle[call].name();
     let call_flags = PoolFunctionFlags::default().with_is_final(true);
-    let call = PoolFunction::new(call_name, Visibility::Public, call_flags);
+    let source_ref = assembler.monomorph.source_ref(span, assembler.bundle);
+    let call =
+        PoolFunction::new(call_name, Visibility::Public, call_flags).with_source(Some(source_ref));
     let call = assembler
         .bundle
         .define_and_try_init(call, |bundle, idx, func| {
             let typ = closure.typ.coalesced(symbols)?.assume_mono(type_env);
             let symbols = assembler.symbols;
-            let monomorphizer = &mut assembler.monomorphizer;
-            create_apply_method(idx, func, class, &typ, symbols, bundle, monomorphizer)
+            let monomorph = &mut assembler.monomorph;
+            create_apply_method(idx, func, class, &typ, symbols, bundle, monomorph)
         })?;
 
     let locals = closure
@@ -103,7 +107,7 @@ pub fn emit_closure<'ctx>(
         symbols,
         type_env,
         assembler.bundle,
-        assembler.monomorphizer,
+        assembler.monomorph,
     )?;
 
     assembler.bundle[call].set_code(code);
@@ -139,7 +143,7 @@ fn create_apply_method<'ctx>(
     typ: &MonoType<'ctx>,
     symbols: &Symbols<'ctx>,
     bundle: &mut ScriptBundle<'ctx>,
-    monomorphizer: &mut Monomorphizer<'ctx>,
+    monomorph: &mut Monomorphizer<'ctx>,
 ) -> Result<PoolFunction<'ctx>, AssembleError<'ctx>> {
     let (return_t, param_types) = typ
         .args()
@@ -150,7 +154,7 @@ fn create_apply_method<'ctx>(
         .iter()
         .enumerate()
         .map(|(i, typ)| {
-            let typ = monomorphizer.type_(typ, symbols, bundle);
+            let typ = monomorph.type_(typ, symbols, bundle);
             let name = bundle.cnames_mut().add(format!("arg${i}"));
             let flags = PoolParameterFlags::default();
             let param = PoolParameter::new(name, index, typ, flags);
@@ -160,7 +164,7 @@ fn create_apply_method<'ctx>(
 
     let return_t_idx = match return_t.id() {
         id if id == predef::VOID || id == predef::NOTHING => None,
-        _ => Some(monomorphizer.type_(return_t, symbols, bundle)),
+        _ => Some(monomorph.type_(return_t, symbols, bundle)),
     };
 
     let func = func
@@ -227,7 +231,7 @@ fn resolve_local_type(assembler: &Assembler<'_, '_>, local: ir::Local) -> Option
     };
     if matches!(local, ir::Local::This) {
         return assembler
-            .monomorphizer
+            .monomorph
             .existing_type(&MonoType::nullary(predef::ISCRIPTABLE));
     }
     if let Some(idx) = assembler.resolve_local(local) {

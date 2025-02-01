@@ -1,11 +1,12 @@
 use std::borrow::Cow;
 use std::cell::Cell;
-use std::hash::Hash;
+use std::hash::{BuildHasher, Hash};
 use std::{fmt, mem, ops};
 
 use hashbrown::HashMap;
 use identity_hash::BuildIdentityHasher;
 use indexmap::Equivalent;
+use redscript_compiler_frontend::ast::{FileId, SourceMap, Span};
 use redscript_compiler_frontend::utils::ScopedMap;
 use redscript_compiler_frontend::{
     ir, predef, Field, FreeFunction, FreeFunctionIndex, FunctionIndex, FunctionKind,
@@ -18,7 +19,8 @@ use redscript_io::{
     FieldFlags as PoolFieldFlags, FieldIndex as PoolFieldIndex, Function as PoolFunction,
     FunctionFlags as PoolFunctionFlags, FunctionIndex as PoolFunctionIndex, Instr,
     LocalIndex as PoolLocalIndex, Parameter as PoolParameter, ParameterFlags as PoolParameterFlags,
-    ParameterIndex as PoolParameterIndex, Property, ScriptBundle, Type as PoolType,
+    ParameterIndex as PoolParameterIndex, Property, ScriptBundle, SourceFile,
+    SourceFileIndex as PoolSourceFileIndex, SourceReference, Type as PoolType,
     TypeIndex as PoolTypeIndex, TypeKind as PoolTypeKind, Visibility,
 };
 use smallvec::{smallvec, SmallVec};
@@ -27,8 +29,11 @@ use crate::assemble::{assemble_block, AssembleError};
 use crate::inputs::{ClassMappings, Signature};
 use crate::IndexMap;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Monomorphizer<'ctx> {
+    sources: &'ctx SourceMap,
+    files: HashMap<FileId, PoolSourceFileIndex, BuildIdentityHasher<i32>>,
+
     classes: IncrementalMap<MonoType<'ctx>, ClassMappings>,
     enums: IndexMap<TypeId<'ctx>, PoolEnumIndex>,
     methods: IncrementalMap<Signature<'ctx, MethodWithReceiver<'ctx>>, PoolFunctionIndex>,
@@ -38,12 +43,16 @@ pub struct Monomorphizer<'ctx> {
 
 impl<'ctx> Monomorphizer<'ctx> {
     pub fn new(
+        sources: &'ctx SourceMap,
         classes: IndexMap<MonoType<'ctx>, ClassMappings>,
         enums: IndexMap<TypeId<'ctx>, PoolEnumIndex>,
         functions: IndexMap<Signature<'ctx, FreeFunctionIndex>, PoolFunctionIndex>,
         types: IndexMap<MonoType<'ctx>, PoolTypeIndex>,
     ) -> Self {
         Self {
+            sources,
+            files: HashMap::default(),
+
             classes: IncrementalMap::from_predefined(classes),
             enums,
             methods: IncrementalMap::default(),
@@ -184,7 +193,13 @@ impl<'ctx> Monomorphizer<'ctx> {
             .with_is_exec(func.flags().is_exec())
             .with_is_final(true)
             .with_is_native(func.flags().is_native());
-        let def = PoolFunction::new(cname, Visibility::Public, flags).with_return_type(return_t);
+        let source = func
+            .span()
+            .filter(|_| !flags.is_native())
+            .map(|span| self.source_ref(span, bundle));
+        let def = PoolFunction::new(cname, Visibility::Public, flags)
+            .with_return_type(return_t)
+            .with_source(source);
 
         let idx = bundle.define_and_init(def, |bundle, idx, f| {
             let params = func
@@ -366,6 +381,42 @@ impl<'ctx> Monomorphizer<'ctx> {
         Ok(())
     }
 
+    pub(super) fn source_ref(
+        &mut self,
+        span: Span,
+        bundle: &mut ScriptBundle<'ctx>,
+    ) -> SourceReference {
+        let file = self
+            .sources
+            .get(span.file)
+            .expect("source file should exist");
+        let (line, _) = file.line_and_offset(span.start);
+        let line = line as u32 + 1; // lines are 1-indexed
+        let idx = if let Some(&idx) = self.files.get(&span.file) {
+            idx
+        } else {
+            let index = 0xCAFE_BABE + self.files.len() as u32;
+            let path_hash = self.functions.map.hasher().hash_one(file.path());
+            let lower_hash = path_hash as u32;
+            let upper_hash = (path_hash >> 32) as u32;
+
+            let file =
+                SourceFile::new(index, lower_hash, upper_hash, file.path().to_string_lossy());
+            let idx = bundle.define(file);
+            self.files.insert(span.file, idx);
+            idx
+        };
+        SourceReference::new(idx, line)
+    }
+
+    pub(super) fn source_line(&self, span: Span) -> u16 {
+        let file = self
+            .sources
+            .get(span.file)
+            .expect("source file should exist");
+        file.line_and_offset(span.start).0 as u16 + 1 // lines are 1-indexed
+    }
+
     fn process_added_fields(
         &mut self,
         unit: &LoweredCompilationUnit<'ctx>,
@@ -463,10 +514,12 @@ impl<'ctx> Monomorphizer<'ctx> {
                     .with_is_quest(wrapped.flags().is_quest())
                     .with_is_callback(wrapped.flags().is_callback() && i == 0);
 
+                let source = func.block.span().map(|span| self.source_ref(span, bundle));
                 let def = PoolFunction::new(cname, wrapped.visibility(), flags)
                     .with_class(wrapped.class())
                     .with_base_method(wrapped.base_method().filter(|_| i == 0))
-                    .with_return_type(wrapped.return_type());
+                    .with_return_type(wrapped.return_type())
+                    .with_source(source);
                 let next = bundle.define_and_init(def, |bundle, next, def| {
                     let parameters = wrapped
                         .parameters()
@@ -656,9 +709,14 @@ impl<'ctx> Monomorphizer<'ctx> {
             .with_is_native(method.flags().is_native())
             .with_is_callback(method.flags().is_callback());
 
+        let source = method
+            .span()
+            .filter(|_| !flags.is_native())
+            .map(|span| self.source_ref(span, bundle));
         let def = PoolFunction::new(cname, Visibility::Public, flags)
             .with_class(Some(parent))
-            .with_return_type(return_t);
+            .with_return_type(return_t)
+            .with_source(source);
 
         bundle.define_and_init(def, |bundle, idx, func| {
             let params = method

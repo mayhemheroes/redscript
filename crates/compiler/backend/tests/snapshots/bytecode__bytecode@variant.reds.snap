@@ -17,7 +17,7 @@ assign
 local 2
 variant.type_name
 local 0
-invoke.static j30 l0 f1 0000000000000000
+invoke.static j30 l9 f1 0000000000000000
 variant.new 0
 i32.const 2
 param.end

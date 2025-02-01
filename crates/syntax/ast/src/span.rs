@@ -92,7 +92,7 @@ impl chumsky::span::Span for Span {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FileId(pub(super) i32);
 
 impl FileId {

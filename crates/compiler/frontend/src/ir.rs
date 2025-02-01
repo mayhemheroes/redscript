@@ -34,22 +34,26 @@ pub enum Stmt<'ctx> {
     InitDefault {
         local: Local,
         typ: Type<'ctx>,
+        span: Span,
     },
-    Break,
-    Continue,
-    Return(Option<Box<Expr<'ctx>>>),
+    Break(Span),
+    Continue(Span),
+    Return(Option<Box<Expr<'ctx>>>, Span),
 }
 
 impl Stmt<'_> {
-    pub fn span(&self) -> Option<Span> {
+    pub fn span(&self) -> Span {
         match self {
-            Self::Expr(expr) | Self::Return(Some(expr)) => Some(expr.span()),
+            Self::Expr(expr) => expr.span(),
             Self::Block(_, span)
             | Self::While(_, span)
             | Self::Branches { span, .. }
             | Self::Switch { span, .. }
-            | Self::InitArray { span, .. } => Some(*span),
-            Self::InitDefault { .. } | Self::Break | Self::Continue | Self::Return(_) => None,
+            | Self::InitArray { span, .. }
+            | Self::InitDefault { span, .. }
+            | Self::Break(span)
+            | Self::Continue(span)
+            | Self::Return(_, span) => *span,
         }
     }
 }
@@ -81,6 +85,12 @@ impl<'ctx> Block<'ctx> {
         Self {
             stmts: stmts.into(),
         }
+    }
+
+    pub fn span(&self) -> Option<Span> {
+        let fst = self.stmts.first()?;
+        let lst = self.stmts.last()?;
+        Some(fst.span().merge(&lst.span()))
     }
 }
 

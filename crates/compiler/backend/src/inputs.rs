@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 use hashbrown::HashMap;
 use identity_hash::BuildIdentityHasher;
+use redscript_compiler_frontend::ast::SourceMap;
 use redscript_compiler_frontend::utils::fmt::{sep_by, DisplayFn};
 use redscript_compiler_frontend::{
     predef, Aggregate, AggregateFlags, Enum, Field, FieldFlags, FieldMap, FreeFunction,
@@ -222,13 +223,14 @@ pub struct PoolMappings<'ctx> {
     types: IndexMap<MonoType<'ctx>, PoolTypeIndex>,
 }
 
-impl<'ctx> From<PoolMappings<'ctx>> for Monomorphizer<'ctx> {
-    fn from(mappings: PoolMappings<'ctx>) -> Self {
+impl<'ctx> PoolMappings<'ctx> {
+    pub fn into_monomorphizer(self, sources: &'ctx SourceMap) -> Monomorphizer<'ctx> {
         Monomorphizer::new(
-            mappings.classes,
-            mappings.enums,
-            mappings.functions,
-            mappings.types,
+            sources,
+            self.classes,
+            self.enums,
+            self.functions,
+            self.types,
         )
     }
 }

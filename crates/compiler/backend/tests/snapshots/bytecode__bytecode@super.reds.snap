@@ -12,5 +12,5 @@ i32.zero
 return
 ctx 17
 this
-invoke.static j16 l0 f0 0000000000000000
+invoke.static j16 l7 f0 0000000000000000
 param.end

@@ -7,12 +7,12 @@ snapshot_kind: text
 // Test; (f0)
 assign
 local 0
-invoke.static j17 l0 f1 0000000000000000
+invoke.static j17 l6 f1 0000000000000000
 i32.one
 param.end
 assign
 local 1
-invoke.static j21 l0 f2 0000000000000000
+invoke.static j21 l7 f2 0000000000000000
 i32.const 2
 param.end
 

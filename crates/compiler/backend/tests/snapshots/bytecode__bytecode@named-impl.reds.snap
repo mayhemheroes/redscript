@@ -7,7 +7,7 @@ snapshot_kind: text
 // CurveData.Test; (f0)
 assign
 local 0
-invoke.static j16 l0 f1 0000000000000000
+invoke.static j16 l9 f1 0000000000000000
 param.end
 
 // CurveData.CurveDataFloat::Create (f1)

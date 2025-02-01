@@ -3,7 +3,7 @@ use std::fmt;
 
 use indexmap::IndexSet;
 use redscript_compiler_api::{Diagnostics, SourceMap, SourceMapExt, TypeInterner};
-use redscript_compiler_backend::{CompilationInputs, Monomorphizer};
+use redscript_compiler_backend::CompilationInputs;
 use redscript_compiler_frontend::infer_from_sources;
 use redscript_io::{
     CNameIndex, Class, ClassFlags, ClassIndex, EnumIndex, EnumValueIndex, FieldIndex,
@@ -31,7 +31,8 @@ fn bytecode() {
 
         let bundle_len = bundle.definitions().len();
 
-        Monomorphizer::from(mappings)
+        mappings
+            .into_monomorphizer(&sources)
             .monomorphize(&unit, &symbols, &mut bundle)
             .unwrap();
         insta::assert_snapshot!(BytecodePrinter::new(&bundle, bundle_len));

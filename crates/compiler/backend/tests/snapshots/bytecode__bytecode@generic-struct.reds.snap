@@ -17,7 +17,7 @@ string.const 1
 i32.const 2
 assign
 local 0
-invoke.static j25 l0 f1 0000000000000000
+invoke.static j25 l13 f1 0000000000000000
 local 1
 param.end
 

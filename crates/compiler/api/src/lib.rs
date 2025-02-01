@@ -2,9 +2,7 @@ use std::fmt;
 use std::path::Path;
 
 pub use redscript_ast::{SourceMap, Span};
-use redscript_compiler_backend::{
-    AssembleError, CompilationInputs, Monomorphizer, PoolError, PoolMappings,
-};
+use redscript_compiler_backend::{AssembleError, CompilationInputs, PoolError, PoolMappings};
 use redscript_compiler_frontend::{infer_from_sources, UnknownSource};
 pub use redscript_compiler_frontend::{Diagnostic, LoweredCompilationUnit, Symbols, TypeInterner};
 use redscript_io::byte;
@@ -13,6 +11,7 @@ use thiserror::Error;
 
 #[derive(Debug)]
 pub struct Compilation<'ctx> {
+    sources: &'ctx SourceMap,
     symbols: Symbols<'ctx>,
     mappings: PoolMappings<'ctx>,
     unit: LoweredCompilationUnit<'ctx>,
@@ -33,6 +32,7 @@ impl<'ctx> Compilation<'ctx> {
         diagnostics.sort_by_key(Diagnostic::is_fatal);
 
         Ok(Self {
+            sources,
             symbols,
             mappings,
             unit,
@@ -49,11 +49,9 @@ impl<'ctx> Compilation<'ctx> {
             return Err(FlushError::CompilationErrors(self.diagnostics));
         }
 
-        Monomorphizer::from(self.mappings).monomorphize(
-            &self.unit,
-            &self.symbols,
-            &mut self.bundle,
-        )?;
+        self.mappings
+            .into_monomorphizer(self.sources)
+            .monomorphize(&self.unit, &self.symbols, &mut self.bundle)?;
         self.bundle.into_writeable().save(path)?;
         Ok((self.symbols, self.diagnostics))
     }

@@ -131,7 +131,7 @@ impl Error {
         let file = sources.get(span.file)?;
         let start = file.lookup(span.start);
         let end = file.lookup(span.end);
-        let line = file.line(start.line)?;
+        let line = file.line_contents(start.line)?;
         Some(ErrorDisplay {
             file,
             start,
