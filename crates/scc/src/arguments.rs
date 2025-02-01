@@ -108,7 +108,7 @@ fn fixed_args(args: impl IntoIterator<Item = String>) -> Vec<String> {
                 processed.push(arg);
                 continue;
             };
-            *prev = format!("{} {}", prev.trim_start(), first);
+            *prev = format!("{} {first}", prev.trim_start());
             for part in parts {
                 processed.push(part.to_owned());
             }

@@ -74,7 +74,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
         for (local, typ) in locals {
             match local {
                 ir::Local::Var(i) => {
-                    let name = bundle.cnames_mut().add(format!("var{}", i));
+                    let name = bundle.cnames_mut().add(format!("var{i}"));
                     let typ = monomorphizer.type_(&typ.assume_mono(type_env), symbols, bundle);
                     let flags = PoolLocalFlags::default();
                     let idx = bundle.define(PoolLocal::new(name, index, typ, flags));

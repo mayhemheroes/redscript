@@ -123,7 +123,7 @@ impl Error {
         T: fmt::Display,
     {
         let span = *error.span();
-        Error::Parse(format!("{}", FormattedError(error)), span)
+        Error::Parse(FormattedError(error).to_string(), span)
     }
 
     pub fn display<'a>(&'a self, sources: &'a SourceMap) -> Option<impl fmt::Display + use<'a>> {

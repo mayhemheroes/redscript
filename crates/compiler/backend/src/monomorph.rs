@@ -454,7 +454,7 @@ impl<'ctx> Monomorphizer<'ctx> {
             let wrapped_name = wrapped.name();
 
             for (i, func) in funcs.iter().rev().enumerate() {
-                let name = format!("wrapper{}${}", i, bundle[wrapped_name]);
+                let name = format!("wrapper{i}${}", bundle[wrapped_name]);
                 let cname = bundle.cnames_mut().add(name);
                 let flags = PoolFunctionFlags::default()
                     .with_is_static(wrapped.flags().is_static())
