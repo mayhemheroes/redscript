@@ -8,12 +8,14 @@ use mimalloc::MiMalloc;
 use redscript_compiler_api::{
     Compilation, FlushError, SaveError, SourceMap, SourceMapExt, TypeInterner,
 };
+use report::{CompilationFailed, ErrorReport};
 use settings::{SccSettings, BACKUP_FILE_EXT, TIMESTAMP_FILE_EXT};
 use timestamp::CompileTimestamp;
 use vmap::Map;
 
 mod arguments;
 mod logger;
+mod report;
 mod settings;
 mod timestamp;
 
@@ -33,8 +35,13 @@ fn main() -> anyhow::Result<()> {
             let settings = SccSettings::from_root_dir_and_args(root.to_path_buf(), args)
                 .context("failed to create the settings")?;
             if let Err(err) = compile(&settings) {
-                log::error!("An unexpected error ocurred: {err}");
-                return Err(err);
+                log::error!("Compilation failed: {err}");
+                if settings.should_show_error_report() {
+                    let report = ErrorReport::new(err, settings.root_dir()).to_string();
+                    msgbox::create("REDscript error", &report, msgbox::IconType::Error).ok();
+                }
+            } else {
+                log::info!("Compilation successful");
             }
             Ok(())
         }
@@ -55,7 +62,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 fn compile(settings: &SccSettings) -> anyhow::Result<()> {
-    log::info!("running REDscript {}", env!("CARGO_PKG_VERSION"));
+    log::info!("Running REDscript {}", env!("CARGO_PKG_VERSION"));
 
     let cache_file = settings.cache_file_path();
 
@@ -99,14 +106,11 @@ fn compile(settings: &SccSettings) -> anyhow::Result<()> {
             }
             Err(FlushError::CompilationErrors(diagnostics)) => {
                 diagnostics.dump(&sources)?;
-                log::error!("Compilation failed");
-
-                return Ok(());
+                return Err(CompilationFailed::new(&diagnostics, &sources).into());
             }
             Err(err) => anyhow::bail!("{err}"),
             Ok((_, diagnostics)) => {
                 diagnostics.dump(&sources)?;
-                log::info!("Compilation successful");
             }
         };
     };

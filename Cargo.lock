@@ -1291,6 +1291,7 @@ dependencies = [
  "redscript-compiler-api",
  "serde",
  "similar-asserts",
+ "thiserror 2.0.11",
  "toml",
  "vmap",
  "walkdir",

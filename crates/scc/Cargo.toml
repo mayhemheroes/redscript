@@ -8,6 +8,7 @@ edition.workspace = true
 redscript-compiler-api = { workspace = true, features = ["walkdir"] }
 
 log.workspace = true
+thiserror.workspace = true
 anyhow.workspace = true
 chrono.workspace = true
 hashbrown = { workspace = true, features = ["serde"] }

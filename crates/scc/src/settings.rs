@@ -25,6 +25,7 @@ pub struct SccSettings {
     custom_cache_file: Option<PathBuf>,
     output_cache_file: Option<PathBuf>,
     additional_script_paths: Vec<PathBuf>,
+    show_error_report: bool,
 }
 
 impl SccSettings {
@@ -49,6 +50,7 @@ impl SccSettings {
             custom_cache_file: args.cache_file.map(Into::into),
             output_cache_file: None,
             additional_script_paths,
+            show_error_report: true,
         })
     }
 
@@ -106,5 +108,9 @@ impl SccSettings {
             (Err(err), Ok(_)) if err.kind() == io::ErrorKind::NotFound => Ok(true),
             (Err(err), _) | (_, Err(err)) => Err(err),
         }
+    }
+
+    pub fn should_show_error_report(&self) -> bool {
+        self.show_error_report
     }
 }
