@@ -52,8 +52,7 @@ pub struct CompilationFailed {
 impl CompilationFailed {
     pub fn new(diagnostics: &Diagnostics<'_>, sources: &SourceMap) -> Self {
         let sources = diagnostics
-            .as_slice()
-            .iter()
+            .into_iter()
             .filter(|d| d.is_fatal())
             .map(|d| d.span().file)
             .collect::<HashSet<_>>()

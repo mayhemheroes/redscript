@@ -83,14 +83,6 @@ impl<'ctx> Compilation<'ctx> {
 pub struct Diagnostics<'ctx>(Vec<Diagnostic<'ctx>>);
 
 impl<'ctx> Diagnostics<'ctx> {
-    pub fn into_vec(self) -> Vec<Diagnostic<'ctx>> {
-        self.0
-    }
-
-    pub fn as_slice(&self) -> &[Diagnostic<'ctx>] {
-        &self.0
-    }
-
     pub fn has_fatal_errors(&self) -> bool {
         self.0.iter().any(Diagnostic::is_fatal)
     }
@@ -99,7 +91,7 @@ impl<'ctx> Diagnostics<'ctx> {
         let mut warnings = 0;
         let mut errors = 0;
 
-        for diagnostic in self.as_slice() {
+        for diagnostic in self {
             if diagnostic.is_fatal() {
                 log::error!("{}", diagnostic.display(sources)?);
                 errors += 1;
@@ -117,6 +109,24 @@ impl<'ctx> Diagnostics<'ctx> {
     }
 }
 
+impl<'ctx> IntoIterator for Diagnostics<'ctx> {
+    type IntoIter = std::vec::IntoIter<Diagnostic<'ctx>>;
+    type Item = Diagnostic<'ctx>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<'a, 'ctx> IntoIterator for &'a Diagnostics<'ctx> {
+    type IntoIter = std::slice::Iter<'a, Diagnostic<'ctx>>;
+    type Item = &'a Diagnostic<'ctx>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
 impl<'ctx> From<Vec<Diagnostic<'ctx>>> for Diagnostics<'ctx> {
     fn from(diagnostics: Vec<Diagnostic<'ctx>>) -> Self {
         Self(diagnostics)
@@ -125,9 +135,7 @@ impl<'ctx> From<Vec<Diagnostic<'ctx>>> for Diagnostics<'ctx> {
 
 impl fmt::Display for Diagnostics<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.as_slice()
-            .iter()
-            .try_for_each(|d| writeln!(f, "{}", d))
+        self.into_iter().try_for_each(|d| writeln!(f, "{}", d))
     }
 }
 
