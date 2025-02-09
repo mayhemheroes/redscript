@@ -1,0 +1,17 @@
+[package]
+name = "scc-lib"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+scc-shared.workspace = true
+anyhow.workspace = true
+
+mimalloc.workspace = true
+
+[lints]
+workspace = true

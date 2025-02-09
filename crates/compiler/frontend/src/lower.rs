@@ -1721,7 +1721,7 @@ impl<'ctx> InferredType<'ctx> {
                         Variance::Contravariant => r.constrain(l, symbols),
                         Variance::Invariant => l.constrain_invariant(r, symbols),
                     };
-                    res.map_err(|err| TypeError::Nested(err.into(), self.clone(), other.clone()))?
+                    res.map_err(|err| TypeError::Nested(err.into(), self.clone(), other.clone()))?;
                 }
             }
             (Self::Ctx(lhs), Self::Ctx(rhs)) if lhs.name() == rhs.name() => {}

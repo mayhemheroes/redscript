@@ -1,12 +1,8 @@
 use std::borrow::Cow;
-use std::fs::File;
-use std::io::BufRead;
 use std::path::{Path, PathBuf};
 use std::{io, iter};
 
 use file_id::get_file_id;
-
-use crate::arguments::Arguments;
 
 const BUNDLE_FILE: &str = "final.redscripts";
 const BACKUP_BUNDLE_FILE: &str = "final.redscripts.bk";
@@ -20,6 +16,7 @@ pub(crate) const BACKUP_FILE_EXT: &str = "redscripts.bk";
 pub(crate) const TIMESTAMP_FILE_EXT: &str = "redscripts.ts";
 
 #[derive(Debug)]
+#[repr(C)]
 pub struct SccSettings {
     root_dir: PathBuf,
     custom_cache_file: Option<PathBuf>,
@@ -29,29 +26,20 @@ pub struct SccSettings {
 }
 
 impl SccSettings {
-    pub fn from_root_dir_and_args(
-        root_dir: impl Into<PathBuf>,
-        args: Arguments,
-    ) -> io::Result<Self> {
-        let additional_script_paths = args
-            .script_paths_file
-            .as_deref()
-            .map(|path| {
-                io::BufReader::new(File::open(path)?)
-                    .lines()
-                    .map(|line| Ok(PathBuf::from(line?)))
-                    .collect::<io::Result<Vec<_>>>()
-            })
-            .transpose()?
-            .unwrap_or_default();
-
-        Ok(Self {
-            root_dir: root_dir.into(),
-            custom_cache_file: args.cache_file.map(Into::into),
-            output_cache_file: None,
+    pub fn new(
+        root_dir: PathBuf,
+        custom_cache_file: Option<PathBuf>,
+        output_cache_file: Option<PathBuf>,
+        additional_script_paths: Vec<PathBuf>,
+        show_error_report: bool,
+    ) -> Self {
+        Self {
+            root_dir,
+            custom_cache_file,
+            output_cache_file,
             additional_script_paths,
-            show_error_report: true,
-        })
+            show_error_report,
+        }
     }
 
     pub fn root_dir(&self) -> &Path {
@@ -112,5 +100,21 @@ impl SccSettings {
 
     pub fn should_show_error_report(&self) -> bool {
         self.show_error_report
+    }
+
+    pub fn set_custom_cache_file(&mut self, path: PathBuf) {
+        self.custom_cache_file = Some(path);
+    }
+
+    pub fn set_output_cache_file(&mut self, path: PathBuf) {
+        self.output_cache_file = Some(path);
+    }
+
+    pub fn set_show_error_report(&mut self, show: bool) {
+        self.show_error_report = show;
+    }
+
+    pub fn add_script_path(&mut self, path: PathBuf) {
+        self.additional_script_paths.push(path);
     }
 }

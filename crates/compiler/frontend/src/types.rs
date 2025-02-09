@@ -555,6 +555,16 @@ impl TypeInterner {
             None => TypeId(self.names.insert(Cow::Owned(name.into()))),
         }
     }
+
+    #[inline]
+    pub fn get_index_of(&self, name: impl AsRef<str>) -> Option<TypeIndex> {
+        self.names.get_index_of(name.as_ref()).map(TypeIndex)
+    }
+
+    #[inline]
+    pub fn get_index(&self, index: TypeIndex) -> Option<&str> {
+        self.names.get_index(index.0)
+    }
 }
 
 impl Default for TypeInterner {
@@ -567,6 +577,9 @@ impl Default for TypeInterner {
         }
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TypeIndex(usize);
 
 #[derive(Debug)]
 pub struct UnresolvedVar<'ctx>(&'ctx str);

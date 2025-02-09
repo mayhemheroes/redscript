@@ -1,5 +1,5 @@
 [package]
-name = "scc"
+name = "scc-shared"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -15,13 +15,11 @@ hashbrown = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
 toml = { workspace = true, features = ["parse"] }
 flexi_logger.workspace = true
-chumsky.workspace = true
 vmap.workspace = true
 walkdir.workspace = true
 file-id.workspace = true
 fd-lock.workspace = true
 msgbox.workspace = true
-mimalloc.workspace = true
 
 [dev-dependencies]
 similar-asserts.workspace = true

@@ -1,0 +1,19 @@
+[package]
+name = "scc"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+chumsky.workspace = true
+minidl.workspace = true
+
+[dev-dependencies]
+similar-asserts.workspace = true
+
+[build-dependencies]
+bindgen.workspace = true
+
+[lints]
+workspace = true

@@ -87,6 +87,28 @@ impl Arguments {
             }
         }
     }
+
+    // pub fn into_settings(self, root_dir: PathBuf) -> io::Result<SccSettings> {
+    //     let additional_script_paths = self
+    //         .script_paths_file
+    //         .as_deref()
+    //         .map(|path| {
+    //             io::BufReader::new(File::open(path)?)
+    //                 .lines()
+    //                 .map(|line| Ok(PathBuf::from(line?)))
+    //                 .collect::<io::Result<Vec<_>>>()
+    //         })
+    //         .transpose()?
+    //         .unwrap_or_default();
+
+    //     Ok(SccSettings::new(
+    //         root_dir,
+    //         self.cache_file.map(Into::into),
+    //         None,
+    //         additional_script_paths,
+    //         true,
+    //     ))
+    // }
 }
 
 fn fixed_args(args: impl IntoIterator<Item = String>) -> Vec<String> {

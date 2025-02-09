@@ -1,67 +1,44 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::{env, fs, io};
 
-use anyhow::{anyhow, Context};
-use arguments::Arguments;
+use anyhow::Context;
 use fd_lock::RwLock;
-use mimalloc::MiMalloc;
-use redscript_compiler_api::{
-    Compilation, FlushError, SaveError, SourceMap, SourceMapExt, TypeInterner,
-};
+use output::extract_refs;
+pub use output::{SccOutput, SourceRef, SourceRefType};
+use redscript_compiler_api::ast::SourceMap;
+use redscript_compiler_api::{Compilation, FlushError, SaveError, SourceMapExt, TypeInterner};
 use report::{CompilationFailed, ErrorReport};
-use settings::{SccSettings, BACKUP_FILE_EXT, TIMESTAMP_FILE_EXT};
+pub use settings::SccSettings;
+use settings::{BACKUP_FILE_EXT, TIMESTAMP_FILE_EXT};
 use timestamp::CompileTimestamp;
 use vmap::Map;
 
-mod arguments;
 mod logger;
+mod output;
 mod report;
 mod settings;
 mod timestamp;
 
-#[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;
+pub fn compile(settings: &SccSettings) -> anyhow::Result<SccOutput> {
+    logger::setup(settings.root_dir());
 
-fn main() -> anyhow::Result<()> {
-    match Arguments::from_env_args(std::env::args()) {
-        Ok(args) => {
-            let root = args
-                .scripts_dir
-                .parent()
-                .and_then(Path::parent)
-                .context("provided scripts directory has no parent directory")?;
-            logger::setup(root);
-
-            let settings = SccSettings::from_root_dir_and_args(root.to_path_buf(), args)
-                .context("failed to create the settings")?;
-            if let Err(err) = compile(&settings) {
-                log::error!("Compilation failed: {err}");
-                if settings.should_show_error_report() {
-                    let report = ErrorReport::new(err, settings.root_dir()).to_string();
-                    msgbox::create("REDscript error", &report, msgbox::IconType::Error).ok();
-                }
-            } else {
-                log::info!("Compilation successful");
-            }
-            Ok(())
+    match compile_inner(settings) {
+        Ok(output) => {
+            log::info!("Compilation successful");
+            Ok(output)
         }
         Err(err) => {
-            let r6 = env::current_dir()?
-                .parent()
-                .and_then(Path::parent)
-                .map(|path| path.join("r6"))
-                .filter(|path| path.exists())
-                .ok_or_else(|| anyhow!("could not run scc: {err}"))?;
-            logger::setup(&r6);
-
-            log::error!("{err}");
-
-            Err(err.into())
+            log::error!("Compilation failed: {err}");
+            if settings.should_show_error_report() {
+                let report = ErrorReport::new(&err, settings.root_dir()).to_string();
+                msgbox::create("REDscript error", &report, msgbox::IconType::Error).ok();
+            }
+            Err(err)
         }
     }
 }
 
-fn compile(settings: &SccSettings) -> anyhow::Result<()> {
+fn compile_inner(settings: &SccSettings) -> anyhow::Result<SccOutput> {
     log::info!("Running REDscript {}", env!("CARGO_PKG_VERSION"));
 
     let cache_file = settings.cache_file_path();
@@ -80,7 +57,7 @@ fn compile(settings: &SccSettings) -> anyhow::Result<()> {
         .write()
         .context("failed to acquire a write lock on the timestamp file")?;
 
-    let cache_file = prepare_cache(settings, &mut ts_file)?;
+    let input_file = prepare_input_cache(settings, &mut ts_file)?;
     let output_file = settings.output_cache_file_path();
 
     let mut sources = SourceMap::from_paths_recursively(settings.script_paths())?;
@@ -92,9 +69,8 @@ fn compile(settings: &SccSettings) -> anyhow::Result<()> {
     sources.populate_boot_lib();
 
     let interner = TypeInterner::default();
-    {
-        let (mmap, _f) = Map::with_options().open(&cache_file)?;
-
+    let (mmap, _f) = Map::with_options().open(&input_file)?;
+    let refs = {
         match Compilation::new(&mmap, &sources, &interner)?.flush(&output_file) {
             Err(FlushError::Write(SaveError::Mmap(err)))
                 if err.kind() == io::ErrorKind::PermissionDenied =>
@@ -109,18 +85,21 @@ fn compile(settings: &SccSettings) -> anyhow::Result<()> {
                 return Err(CompilationFailed::new(&diagnostics, &sources).into());
             }
             Err(err) => anyhow::bail!("{err}"),
-            Ok((_, diagnostics)) => {
+            Ok((syms, diagnostics)) => {
                 diagnostics.dump(&sources)?;
+
+                log::info!("Succesfully written '{}'", output_file.display());
+                extract_refs(&syms, &interner)
             }
-        };
+        }
     };
 
     CompileTimestamp::try_from(&output_file.metadata()?)?.write(&mut *ts_file)?;
 
-    Ok(())
+    Ok(SccOutput::new(sources, interner, refs))
 }
 
-fn prepare_cache(settings: &SccSettings, ts_file: &mut fs::File) -> anyhow::Result<PathBuf> {
+fn prepare_input_cache(settings: &SccSettings, ts_file: &mut fs::File) -> anyhow::Result<PathBuf> {
     let cache_file = settings.cache_file_path();
     if !cache_file.exists() {
         let cache_dir = cache_file
@@ -163,12 +142,12 @@ fn prepare_cache(settings: &SccSettings, ts_file: &mut fs::File) -> anyhow::Resu
             _ if backup_file.exists() => {
                 log::info!("Restoring the backup file to {}", cache_file.display());
 
-                fs::rename(&backup_file, cache_file)
+                fs::rename(&backup_file, &cache_file)
                     .context("failed to restore the backup file")?;
             }
             _ => {}
         }
-        Ok(settings.output_cache_file_path().into_owned())
+        Ok(cache_file.into_owned())
     } else {
         match saved_ts {
             None if backup_file.exists() => {

@@ -2,17 +2,18 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 use hashbrown::HashSet;
-use redscript_compiler_api::{Diagnostics, SourceMap};
+use redscript_compiler_api::ast::SourceMap;
+use redscript_compiler_api::Diagnostics;
 use thiserror::Error;
 
 #[derive(Debug)]
 pub struct ErrorReport<'ctx> {
-    cause: anyhow::Error,
+    cause: &'ctx anyhow::Error,
     root: &'ctx Path,
 }
 
 impl<'ctx> ErrorReport<'ctx> {
-    pub fn new(cause: anyhow::Error, root: &'ctx Path) -> Self {
+    pub fn new(cause: &'ctx anyhow::Error, root: &'ctx Path) -> Self {
         Self { cause, root }
     }
 }

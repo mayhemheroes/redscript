@@ -2,7 +2,8 @@ use std::path::PathBuf;
 
 use argh::FromArgs;
 use mimalloc::MiMalloc;
-use redscript_compiler_api::{Compilation, FlushError, SourceMap, SourceMapExt, TypeInterner};
+use redscript_compiler_api::ast::SourceMap;
+use redscript_compiler_api::{Compilation, FlushError, SourceMapExt, TypeInterner};
 use vmap::Map;
 
 #[global_allocator]

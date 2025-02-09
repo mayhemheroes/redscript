@@ -10,7 +10,9 @@ members = [
   "crates/compiler/backend",
   "crates/compiler/api",
   "crates/cli",
-  "crates/scc"
+  "crates/scc/shared",
+  "crates/scc/capi",
+  "crates/scc/cli",
 ]
 
 [workspace.package]
@@ -26,6 +28,7 @@ redscript-io.path = "crates/io"
 redscript-compiler-frontend.path = "crates/compiler/frontend"
 redscript-compiler-backend.path = "crates/compiler/backend"
 redscript-compiler-api.path = "crates/compiler/api"
+scc-shared.path = "crates/scc/shared"
 
 log = "0.4"
 thiserror = "2"
@@ -54,6 +57,8 @@ file-id = "0.2"
 fd-lock = "4"
 msgbox = "0.7"
 pretty_dtoa = "0.3"
+minidl = "0.1"
+bindgen = "0.71"
 mimalloc = "0.1"
 
 similar-asserts = "1"

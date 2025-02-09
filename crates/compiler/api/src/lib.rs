@@ -1,10 +1,13 @@
 use std::fmt;
 use std::path::Path;
 
-pub use redscript_ast::{SourceMap, Span};
+pub use redscript_ast as ast;
+use redscript_ast::SourceMap;
 use redscript_compiler_backend::{AssembleError, CompilationInputs, PoolError, PoolMappings};
 use redscript_compiler_frontend::{infer_from_sources, UnknownSource};
-pub use redscript_compiler_frontend::{Diagnostic, LoweredCompilationUnit, Symbols, TypeInterner};
+pub use redscript_compiler_frontend::{
+    Diagnostic, LoweredCompilationUnit, Symbols, TypeId, TypeIndex, TypeInterner,
+};
 use redscript_io::byte;
 pub use redscript_io::{SaveError, ScriptBundle};
 use thiserror::Error;

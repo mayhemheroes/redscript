@@ -28,6 +28,7 @@ New-Item -ItemType Directory -Path $stagingDir
 Copy-Item -Path "assets/archive/*" -Destination $stagingDir -Recurse
 New-Item -ItemType Directory -Path (Join-Path $stagingDir "engine/tools")
 Copy-Item -Path "target/release/scc.exe" -Destination (Join-Path $stagingDir "engine/tools/scc.exe")
+Copy-Item -Path "target/release/scc_lib.dll" -Destination (Join-Path $stagingDir "engine/tools/scc_lib.dll")
 
 Compress-Archive -Path (Join-Path $stagingDir '*') -DestinationPath $zipPath
 
