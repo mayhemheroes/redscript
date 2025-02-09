@@ -429,13 +429,13 @@ impl<'ctx> NameResolution<'ctx> {
 
         for (item, item_span) in aggregate.items {
             match item.item {
-                ast::Item::Function(function) => {
-                    let (name, name_span) = function.name;
+                ast::Item::Function(func) => {
+                    let (name, name_span) = func.name;
                     let qs = item.qualifiers;
-                    let flags = self.process_method_flags(qs, &function, class_flags, name_span);
+                    let flags = self.process_method_flags(qs, &func, class_flags, name_span);
 
-                    let (func_t, type_scope) = self.create_function_env(&function, &types);
-                    if function.body.is_none()
+                    let (func_t, type_scope) = self.create_function_env(&func, &types);
+                    if func.body.is_none()
                         && !flags.is_native()
                         && (!class_flags.is_abstract()
                             || !func_t.type_params().is_empty()
@@ -448,10 +448,10 @@ impl<'ctx> NameResolution<'ctx> {
 
                     let method = Method::new(flags, func_t, None, item.doc, Some(name_span));
                     let id = methods.add(name, method);
-                    let Some(body) = function.body else {
+                    let Some(body) = func.body else {
                         continue;
                     };
-                    method_items.push(FuncItem::new(id, name_span, body, type_scope));
+                    method_items.push(FuncItem::new(id, name_span, func.params, body, type_scope));
                 }
                 ast::Item::Let(let_) => {
                     let (name, name_span) = let_.name;
@@ -620,7 +620,13 @@ impl<'ctx> NameResolution<'ctx> {
                     .methods_mut()
                     .add(name, member);
 
-                let item = FuncItem::new(MethodId::new(id, idx), name_span, func.body, type_scope);
+                let item = FuncItem::new(
+                    MethodId::new(id, idx),
+                    name_span,
+                    func.params,
+                    func.body,
+                    type_scope,
+                );
                 return Some(FuncItemKind::AddMethod(item));
             }
             Some(ann @ FunctionAnnotation::Wrap(class)) => {
@@ -651,11 +657,11 @@ impl<'ctx> NameResolution<'ctx> {
                 (func, body)
             }
             (Some(body), None, Some(replaced), None) => {
-                let func = FuncItem::new(replaced, name_span, body, type_scope);
+                let func = FuncItem::new(replaced, name_span, func.params, body, type_scope);
                 return Some(FuncItemKind::ReplaceMethod(func));
             }
             (Some(body), None, None, Some(wrapped)) => {
-                let func = FuncItem::new(wrapped, name_span, body, type_scope);
+                let func = FuncItem::new(wrapped, name_span, func.params, body, type_scope);
                 return Some(FuncItemKind::WrapMethod(func));
             }
             (Some(_), _, _, _) => {
@@ -677,7 +683,13 @@ impl<'ctx> NameResolution<'ctx> {
 
         self.symbols.set_free_function(entry.index, free_func);
         body.map(|body| {
-            FuncItemKind::FreeFunction(FuncItem::new(entry.index, name_span, body, type_scope))
+            FuncItemKind::FreeFunction(FuncItem::new(
+                entry.index,
+                name_span,
+                func.params,
+                body,
+                type_scope,
+            ))
         })
     }
 

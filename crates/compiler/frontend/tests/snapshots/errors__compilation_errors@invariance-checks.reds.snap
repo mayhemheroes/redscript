@@ -1,0 +1,11 @@
+---
+source: crates/compiler/frontend/tests/errors.rs
+expression: "DisplayDiagnostics(diagnostics, &sources)"
+input_file: crates/compiler/frontend/tests/data/invariance-checks.reds
+snapshot_kind: text
+---
+At tests\data\invariance-checks.reds:9:21
+  AcceptsClassArray(arr);
+                    ^^^
+type mismatch: found Class when expected Subclass
+  when comparing array<Subclass> and array<Class>

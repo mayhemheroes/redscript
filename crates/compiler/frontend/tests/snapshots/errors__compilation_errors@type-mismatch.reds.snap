@@ -48,8 +48,10 @@ At tests\data\type-mismatch.reds:21:22
   let c: List<Pet> = new List<Animal>();
                      ^^^^^^^^^^^^^^^^^^
 type mismatch: found Animal when expected Pet
+  when comparing List<Animal> and List<Pet>
 
 At tests\data\type-mismatch.reds:25:30
   let _: Predicate<Animal> = new Predicate<Pet>();
                              ^^^^^^^^^^^^^^^^^^^^
 type mismatch: found Animal when expected Pet
+  when comparing Predicate<Pet> and Predicate<Animal>

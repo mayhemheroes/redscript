@@ -524,14 +524,17 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 let typ = typ
                     .as_deref()
                     .map(|(typ, span)| self.resolve_type(typ, env, *span))
-                    .transpose()?
-                    .unwrap_or_else(PolyType::fresh);
-
+                    .transpose()?;
                 if let Some(value @ (_, value_span)) = value.as_deref() {
-                    let (mut value, value_t) = self.lower_expr_with(value, Some(&typ), env)?;
-                    self.coerce(&mut value, value_t, typ.clone(), env, *value_span)?;
-
+                    let (mut value, value_t) = self.lower_expr_with(value, typ.as_ref(), env)?;
+                    let typ = if let Some(typ) = typ {
+                        self.coerce(&mut value, value_t, typ.clone(), env, *value_span)?;
+                        typ
+                    } else {
+                        value_t
+                    };
                     let local = self.locals.add_var(typ, name_span);
+
                     let local = env.define_local(name, local.clone());
                     let assign = ir::Expr::Assign {
                         place: ir::Expr::Local(local, name_span).into(),
@@ -540,6 +543,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                     };
                     ir::Stmt::Expr(assign.into())
                 } else {
+                    let typ = typ.unwrap_or_else(PolyType::fresh);
                     let local = self.locals.add_var(typ.clone(), name_span);
                     let local = env.define_local(name, local.clone());
                     ir::Stmt::InitDefault {
@@ -903,8 +907,8 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         let (array, array_t) = self.lower_expr(iter, env)?;
         let elem_t = PolyType::fresh();
         let expected_t = Type::app(predef::ARRAY, [elem_t.clone()]).into_poly();
-        array_t
-            .constrain(&expected_t, self.symbols)
+        let array_t = array_t
+            .lub(&expected_t, self.symbols)
             .with_span(*iter_span)?;
 
         let mut env = env.introduce_scope();
@@ -1662,6 +1666,8 @@ pub enum TypeError<'ctx> {
     Incompatible(InferredTypeApp<'ctx>, InferredTypeApp<'ctx>),
     #[error("type error: cannot unify {0} and {1}")]
     CannotUnify(InferredType<'ctx>, InferredType<'ctx>),
+    #[error("{0}\n  when comparing {1} and {2}")]
+    Nested(Box<Self>, InferredType<'ctx>, InferredType<'ctx>),
 }
 
 impl<'ctx> InferredType<'ctx> {
@@ -1710,17 +1716,23 @@ impl<'ctx> InferredType<'ctx> {
                     .iter()
                     .zip(l0.args().iter().zip(r0.args()))
                 {
-                    match v.variance() {
-                        Variance::Covariant => l.constrain(r, symbols)?,
-                        Variance::Contravariant => r.constrain(l, symbols)?,
-                        Variance::Invariant => l.constrain_invariant(r, symbols)?,
-                    }
+                    let res = match v.variance() {
+                        Variance::Covariant => l.constrain(r, symbols),
+                        Variance::Contravariant => r.constrain(l, symbols),
+                        Variance::Invariant => l.constrain_invariant(r, symbols),
+                    };
+                    res.map_err(|err| TypeError::Nested(err.into(), self.clone(), other.clone()))?
                 }
             }
             (Self::Ctx(lhs), Self::Ctx(rhs)) if lhs.name() == rhs.name() => {}
             _ => return Err(TypeError::Mismatch(self.clone(), other.clone())),
         };
         Ok(())
+    }
+
+    fn constrain_invariant(&self, other: &Self, symbols: &Symbols<'ctx>) -> InferResult<'ctx, ()> {
+        self.constrain(other, symbols)?;
+        other.constrain(self, symbols)
     }
 
     fn is_subtype_compatible(&self, other: &Type<'ctx>, symbols: &Symbols<'ctx>) -> bool {
@@ -1891,13 +1903,15 @@ impl<'ctx> PolyType<'ctx> {
                 self.constrain(&pointee, symbols)?;
                 Ok(Some(Coercion::IntoRef(to)))
             }
-            _ => match self.constrain(other, symbols) {
-                Err(_) if matches!(other, PolyType::Mono(Type::Data(to)) if to.id() == predef::VARIANT) => {
-                    Ok(Some(Coercion::IntoVariant))
-                }
-                Err(err) => Err(err),
-                Ok(()) => Ok(None),
-            },
+            _ if matches!(other.upper_bound(symbols), Some(app) if app.id() == predef::VARIANT)
+                && matches!(self.upper_bound(symbols), Some(app) if app.id() != predef::VARIANT) =>
+            {
+                Ok(Some(Coercion::IntoVariant))
+            }
+            _ => {
+                self.constrain(other, symbols)?;
+                Ok(None)
+            }
         }
     }
 
@@ -1922,11 +1936,9 @@ impl<'ctx> PolyType<'ctx> {
     fn is_subtype_compatible(&self, other: &Type<'ctx>, symbols: &Symbols<'ctx>) -> bool {
         match self {
             Self::Mono(typ) => typ.is_subtype_compatible(other, symbols),
-            Self::Var(var) => {
-                var.upper()
-                    .is_some_and(|typ| typ.is_subtype_compatible(other, symbols))
-                    || var.upper().is_none()
-            }
+            Self::Var(var) => var
+                .upper()
+                .is_none_or(|typ| typ.is_subtype_compatible(other, symbols)),
         }
     }
 }
@@ -2320,10 +2332,7 @@ impl<'sym, 'ctx> Simplifier<'sym, 'ctx> {
                         self.simplify(&bound, variance)?
                     }
                     (lower, Some(upper))
-                        if upper
-                            .constrain(&lower, self.symbols)
-                            .and_then(|_| lower.constrain(&upper, self.symbols))
-                            .is_ok() =>
+                        if upper.constrain_invariant(&lower, self.symbols).is_ok() =>
                     {
                         self.simplify(&lower, variance)?
                     }

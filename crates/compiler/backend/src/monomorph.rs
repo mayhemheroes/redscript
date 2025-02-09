@@ -67,6 +67,8 @@ impl<'ctx> Monomorphizer<'ctx> {
         symbols: &Symbols<'ctx>,
         bundle: &mut ScriptBundle<'ctx>,
     ) -> Result<(), AssembleError<'ctx>> {
+        define_predefs(bundle);
+
         for &id in &unit.enums {
             self.add_enum_to_pool(id, symbols, bundle);
         }
@@ -789,6 +791,26 @@ impl<'ctx> Monomorphizer<'ctx> {
     fn has_backlog(&self) -> bool {
         self.classes.has_backlog() || self.methods.has_backlog() || self.functions.has_backlog()
     }
+}
+
+fn define_predefs(bundle: &mut ScriptBundle<'_>) {
+    let nothing_name = bundle.cnames_mut().add("Nothing");
+    bundle.define(PoolClass::new(
+        nothing_name,
+        Visibility::Public,
+        PoolClassFlags::default()
+            .with_is_abstract(true)
+            .with_is_struct(true),
+    ));
+
+    let nothing_name = bundle.cnames_mut().add("Void");
+    bundle.define(PoolClass::new(
+        nothing_name,
+        Visibility::Public,
+        PoolClassFlags::default()
+            .with_is_abstract(true)
+            .with_is_struct(true),
+    ));
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]

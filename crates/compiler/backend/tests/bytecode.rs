@@ -27,7 +27,13 @@ fn bytecode() {
             .unwrap()
             .into_inner();
         let (unit, symbols, diagnostics) = infer_from_sources(&sources, &interner, symbols);
-        assert_eq!(diagnostics.len(), 0, "{}", Diagnostics::from(diagnostics));
+        assert_eq!(
+            diagnostics.len(),
+            0,
+            "{}: {}",
+            Diagnostics::from(diagnostics),
+            path.display()
+        );
 
         let bundle_len = bundle.definitions().len();
 

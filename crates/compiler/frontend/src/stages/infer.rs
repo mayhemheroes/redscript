@@ -71,6 +71,7 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
 
                     let func = lower_func(
                         method.type_(),
+                        &item.params,
                         &item.body,
                         env,
                         &self.symbols,
@@ -105,23 +106,42 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                         let types = scope.types.push_scope(func.scope);
                         let env = Env::new(&types, &scope.funcs);
                         let func_t = &self.symbols[func.id].type_();
-                        let value =
-                            lower_func(func_t, &func.body, env, &self.symbols, &mut self.reporter);
+                        let value = lower_func(
+                            func_t,
+                            &func.params,
+                            &func.body,
+                            env,
+                            &self.symbols,
+                            &mut self.reporter,
+                        );
                         compiled.functions.insert(func.id, value);
                     }
                     FuncItemKind::ReplaceMethod(func) => {
                         let types = scope.types.push_scope(func.scope);
                         let env = Env::new(&types, &scope.funcs);
                         let body = &func.body;
-                        let lowered =
-                            lower_method(func.id, body, env, &self.symbols, &mut self.reporter);
+                        let lowered = lower_method(
+                            func.id,
+                            &func.params,
+                            body,
+                            env,
+                            &self.symbols,
+                            &mut self.reporter,
+                        );
                         compiled.method_replacements.insert(func.id, lowered);
                     }
                     FuncItemKind::AddMethod(func) => {
                         let types = scope.types.push_scope(func.scope);
                         let env = Env::new(&types, &scope.funcs);
                         let lowered = func.body.as_ref().map(|body| {
-                            lower_method(func.id, body, env, &self.symbols, &mut self.reporter)
+                            lower_method(
+                                func.id,
+                                &func.params,
+                                body,
+                                env,
+                                &self.symbols,
+                                &mut self.reporter,
+                            )
                         });
                         compiled.added_methods.insert(func.id, lowered);
                     }
@@ -138,8 +158,14 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
 
                         let env = Env::new(&types, &funcs);
                         let body = &func.body;
-                        let lowered =
-                            lower_method(func.id, body, env, &self.symbols, &mut self.reporter);
+                        let lowered = lower_method(
+                            func.id,
+                            &func.params,
+                            body,
+                            env,
+                            &self.symbols,
+                            &mut self.reporter,
+                        );
                         compiled
                             .method_wrappers
                             .entry(func.id)
@@ -168,6 +194,7 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
 
 fn lower_method<'ctx>(
     id: MethodId<'ctx>,
+    params: &[Spanned<ast::SourceParam<'ctx>>],
     body: &ast::SourceFunctionBody<'ctx>,
     mut env: Env<'_, 'ctx>,
     symbols: &Symbols<'ctx>,
@@ -180,11 +207,12 @@ fn lower_method<'ctx>(
         env.define_local(THIS_IDENT, this.clone());
     }
 
-    lower_func(func_sym.type_(), body, env, symbols, reporter)
+    lower_func(func_sym.type_(), params, body, env, symbols, reporter)
 }
 
 fn lower_func<'ctx>(
     func_type: &FunctionType<'ctx>,
+    params: &[Spanned<ast::SourceParam<'ctx>>],
     body: &ast::SourceFunctionBody<'ctx>,
     env: Env<'_, 'ctx>,
     symbols: &Symbols<'ctx>,
@@ -193,7 +221,8 @@ fn lower_func<'ctx>(
     let params = func_type
         .params()
         .iter()
-        .map(|param| (param.name(), PolyType::from_type(param.type_())));
+        .zip(params)
+        .map(|(param, (sp, _))| (sp.name, PolyType::from_type(param.type_())));
     let return_t = PolyType::from_type(func_type.return_type());
 
     let (block, output, errors) = Lower::function(body, params, env, return_t, symbols);
@@ -295,16 +324,24 @@ impl<'ctx, K> FieldItem<'ctx, K> {
 pub struct FuncItem<'scope, 'ctx, K, B = ast::SourceFunctionBody<'ctx>> {
     id: K,
     name_span: Span,
+    params: Box<[Spanned<ast::SourceParam<'ctx>>]>,
     body: B,
     scope: TypeScope<'scope, 'ctx>,
 }
 
 impl<'scope, 'ctx, K, B> FuncItem<'scope, 'ctx, K, B> {
     #[inline]
-    pub fn new(id: K, name_span: Span, body: B, scope: TypeScope<'scope, 'ctx>) -> Self {
+    pub fn new(
+        id: K,
+        name_span: Span,
+        params: Box<[Spanned<ast::SourceParam<'ctx>>]>,
+        body: B,
+        scope: TypeScope<'scope, 'ctx>,
+    ) -> Self {
         Self {
             id,
             name_span,
+            params,
             body,
             scope,
         }
