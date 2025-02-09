@@ -35,71 +35,72 @@ mod tests {
 
     use super::*;
 
+    // this test just ensures that the API types haven't changed
+    // existing function signatures are not allowed to change due to backwards compatibility
     #[test]
     fn api_functions_are_stable() {
-        // this test just ensures that the API types haven't changed
-        // existing function signatures are not allowed to change due to backwards compatibility
+        let api = SccApi {
+            settings_new: None,
+            settings_set_custom_cache_file: None,
+            settings_set_output_cache_file: None,
+            settings_add_script_path: None,
+            settings_disable_error_popup: None,
+            compile: None,
+            free_result: None,
+            get_success: None,
+            copy_error: None,
+            output_get_source_ref: None,
+            output_source_ref_count: None,
+            source_ref_type: None,
+            source_ref_is_native: None,
+            source_ref_name: None,
+            source_ref_parent_name: None,
+            source_ref_path: None,
+            source_ref_line: None,
+        };
 
-        let SccApi {
-            settings_new,
-            settings_set_custom_cache_file,
-            settings_set_output_cache_file,
-            settings_add_script_path,
-            settings_disable_error_popup,
-            compile,
-            free_result,
-            get_success,
-            copy_error,
-            output_get_source_ref,
-            output_source_ref_count,
-            source_ref_type,
-            source_ref_is_native,
-            source_ref_name,
-            source_ref_parent_name,
-            source_ref_path,
-            source_ref_line,
-        } = load().unwrap();
-
-        let _settings_new: unsafe extern "C" fn(*const i8) -> *mut SccSettings =
-            settings_new.unwrap();
-        let _settings_set_custom_cache_file: unsafe extern "C" fn(*mut SccSettings, *const i8) =
-            settings_set_custom_cache_file.unwrap();
-        let _settings_set_output_cache_file: unsafe extern "C" fn(*mut SccSettings, *const i8) =
-            settings_set_output_cache_file.unwrap();
-        let _settings_add_script_path: unsafe extern "C" fn(*mut SccSettings, *const i8) =
-            settings_add_script_path.unwrap();
-        let _settings_disable_error_popup: unsafe extern "C" fn(*mut SccSettings) =
-            settings_disable_error_popup.unwrap();
-        let _compile: unsafe extern "C" fn(*mut SccSettings) -> *mut SccResult = compile.unwrap();
-        let _free_result: unsafe extern "C" fn(*mut SccResult) = free_result.unwrap();
-        let _get_success: unsafe extern "C" fn(*mut SccResult) -> *mut SccOutput =
-            get_success.unwrap();
-        let _copy_error: unsafe extern "C" fn(*mut SccResult, *mut i8, usize) -> usize =
-            copy_error.unwrap();
-        let _output_get_source_ref: unsafe extern "C" fn(
-            *mut SccOutput,
-            usize,
-        ) -> *mut SccSourceRef = output_get_source_ref.unwrap();
-        let _output_source_ref_count: unsafe extern "C" fn(*mut SccOutput) -> usize =
-            output_source_ref_count.unwrap();
-        let _source_ref_type: unsafe extern "C" fn(*mut SccOutput, *mut SccSourceRef) -> u8 =
-            source_ref_type.unwrap();
-        let _source_ref_is_native: unsafe extern "C" fn(*mut SccOutput, *mut SccSourceRef) -> bool =
-            source_ref_is_native.unwrap();
-        let _source_ref_name: unsafe extern "C" fn(
-            *mut SccOutput,
-            *mut SccSourceRef,
-        ) -> StrWithLen = source_ref_name.unwrap();
-        let _source_ref_parent_name: unsafe extern "C" fn(
-            *mut SccOutput,
-            *mut SccSourceRef,
-        ) -> StrWithLen = source_ref_parent_name.unwrap();
-        let _source_ref_path: unsafe extern "C" fn(
-            *mut SccOutput,
-            *mut SccSourceRef,
-        ) -> StrWithLen = source_ref_path.unwrap();
-        let _source_ref_line: unsafe extern "C" fn(*mut SccOutput, *mut SccSourceRef) -> usize =
-            source_ref_line.unwrap();
+        let _settings_new: Option<unsafe extern "C" fn(*const i8) -> *mut SccSettings> =
+            api.settings_new;
+        let _settings_set_custom_cache_file: Option<
+            unsafe extern "C" fn(*mut SccSettings, *const i8),
+        > = api.settings_set_custom_cache_file;
+        let _settings_set_output_cache_file: Option<
+            unsafe extern "C" fn(*mut SccSettings, *const i8),
+        > = api.settings_set_output_cache_file;
+        let _settings_add_script_path: Option<unsafe extern "C" fn(*mut SccSettings, *const i8)> =
+            api.settings_add_script_path;
+        let _settings_disable_error_popup: Option<unsafe extern "C" fn(*mut SccSettings)> =
+            api.settings_disable_error_popup;
+        let _compile: Option<unsafe extern "C" fn(*mut SccSettings) -> *mut SccResult> =
+            api.compile;
+        let _free_result: Option<unsafe extern "C" fn(*mut SccResult)> = api.free_result;
+        let _get_success: Option<unsafe extern "C" fn(*mut SccResult) -> *mut SccOutput> =
+            api.get_success;
+        let _copy_error: Option<unsafe extern "C" fn(*mut SccResult, *mut i8, usize) -> usize> =
+            api.copy_error;
+        let _output_get_source_ref: Option<
+            unsafe extern "C" fn(*mut SccOutput, usize) -> *mut SccSourceRef,
+        > = api.output_get_source_ref;
+        let _output_source_ref_count: Option<unsafe extern "C" fn(*mut SccOutput) -> usize> =
+            api.output_source_ref_count;
+        let _source_ref_type: Option<
+            unsafe extern "C" fn(*mut SccOutput, *mut SccSourceRef) -> u8,
+        > = api.source_ref_type;
+        let _source_ref_is_native: Option<
+            unsafe extern "C" fn(*mut SccOutput, *mut SccSourceRef) -> bool,
+        > = api.source_ref_is_native;
+        let _source_ref_name: Option<
+            unsafe extern "C" fn(*mut SccOutput, *mut SccSourceRef) -> StrWithLen,
+        > = api.source_ref_name;
+        let _source_ref_parent_name: Option<
+            unsafe extern "C" fn(*mut SccOutput, *mut SccSourceRef) -> StrWithLen,
+        > = api.source_ref_parent_name;
+        let _source_ref_path: Option<
+            unsafe extern "C" fn(*mut SccOutput, *mut SccSourceRef) -> StrWithLen,
+        > = api.source_ref_path;
+        let _source_ref_line: Option<
+            unsafe extern "C" fn(*mut SccOutput, *mut SccSourceRef) -> usize,
+        > = api.source_ref_line;
     }
 
     #[test]
