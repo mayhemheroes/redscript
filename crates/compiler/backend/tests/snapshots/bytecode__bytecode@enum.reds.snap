@@ -5,7 +5,7 @@ input_file: crates/compiler/backend/tests/data/enum.reds
 snapshot_kind: text
 ---
 // Testing;Direction (f0)
-switch 8
+switch 10
 param 0
 switch.label 39 17
 enum.const 0 0

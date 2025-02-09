@@ -18,7 +18,7 @@ param.end
 
 // Function1<Int32,Function1<Int32,Int32>>::Call;Int32 (f3)
 
-// lambda$11::Instantiate (f1)
+// lambda$13::Instantiate (f1)
 assign
 local 2
 object.new 0
@@ -30,14 +30,14 @@ param 0
 return
 local 2
 
-// lambda$11::Call;Int32 (f4)
+// lambda$13::Call;Int32 (f4)
 return
 invoke.static j34 l0 f5 0000000000000000
 object.field 0
 param 1
 param.end
 
-// lambda$16::Instantiate (f5)
+// lambda$18::Instantiate (f5)
 assign
 local 3
 object.new 1
@@ -54,7 +54,7 @@ param 3
 return
 local 3
 
-// lambda$16::Call;Int32 (f6)
+// lambda$18::Call;Int32 (f6)
 return
 invoke.static j59 l4 f7 0000000000000000
 invoke.static j34 l4 f7 0000000000000000
