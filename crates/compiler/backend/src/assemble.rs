@@ -298,6 +298,8 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 if let Some(expr) = expr {
                     self.assemble_expr(expr)?;
                 }
+                self.emit(Instr::Return);
+                self.emit(Instr::Nop);
             }
         };
         Ok(())

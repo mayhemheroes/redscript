@@ -1,0 +1,4 @@
+
+func ReturnVoid() {
+  return;
+}
