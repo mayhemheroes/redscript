@@ -37,7 +37,7 @@ pub struct Lower<'scope, 'ctx> {
     locals: Locals<'scope, 'ctx>,
     return_type: PolyType<'ctx>,
     captures: IndexSet<Capture>,
-    stmt_prefixes: Vec<Vec<ir::Stmt<'ctx>>>,
+    stmt_prefix: Vec<Vec<ir::Stmt<'ctx>>>,
     symbols: &'scope Symbols<'ctx>,
     reporter: &'scope mut LowerReporter<'ctx>,
 }
@@ -54,7 +54,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             locals,
             return_type,
             captures: IndexSet::default(),
-            stmt_prefixes: Vec::new(),
+            stmt_prefix: Vec::new(),
             symbols,
             reporter,
         }
@@ -159,7 +159,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         let (mut expr, typ) = lower.lower_expr_with(expr, Some(&return_t), env)?;
         lower.coerce(&mut expr, typ, return_t, env, *span)?;
 
-        let mut stmts = lower.stmt_prefixes.pop().unwrap_or_default();
+        let mut stmts = lower.stmt_prefix.pop().unwrap_or_default();
         stmts.push(ir::Stmt::Return(Some(expr.into()), *span));
         Ok((ir::Block::new(stmts), lower.into_output()))
     }
@@ -170,19 +170,19 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         env: &mut Env<'_, 'ctx>,
     ) -> ir::Block<'ctx> {
         let mut accumulator = Vec::with_capacity(stmts.len());
-        self.stmt_prefixes.push(vec![]);
+        self.stmt_prefix.push(vec![]);
 
         for (stmt, span) in stmts {
             let res = self.lower_stmt(stmt, env, *span);
+            if let Some(prefix) = self.stmt_prefix.last_mut() {
+                accumulator.append(prefix);
+            }
             if let Some(stmt) = self.reporter.unwrap_err(res) {
-                if let Some(prefix) = self.stmt_prefixes.last_mut() {
-                    accumulator.append(prefix);
-                }
                 accumulator.push(stmt);
             }
         }
 
-        self.stmt_prefixes.pop();
+        self.stmt_prefix.pop();
         ir::Block::new(accumulator)
     }
 
@@ -257,18 +257,14 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 let array_t = Type::app(predef::ARRAY, [elem_typ.clone()]).into_poly();
                 let local = self.locals.add_var(array_t.clone(), *span);
 
-                let mut top = self
-                    .stmt_prefixes
-                    .last_mut()
-                    .map(mem::take)
-                    .unwrap_or_default();
+                let mut top = self.stmt_prefix.pop().unwrap_or_default();
                 top.push(ir::Stmt::InitArray {
                     local: local.id,
                     elements: elems.into(),
                     element_type: elem_typ.into(),
                     span: *span,
                 });
-                self.stmt_prefixes.push(top);
+                self.stmt_prefix.push(top);
 
                 (ir::Expr::Local(local.id, *span), array_t)
             }
@@ -951,13 +947,11 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 ),
             ];
 
-            let mut stmts = Vec::with_capacity(prologue.len() + body.stmts.len());
-            stmts.extend(prologue);
-            for (stmt, span) in &body.stmts {
-                stmts.push(self.lower_stmt(stmt, &mut env, *span)?);
+            let mut body = self.lower_block(&body.stmts, &mut env);
+            for stmt in prologue.into_iter().rev() {
+                body.stmts.push_front(stmt);
             }
-
-            stmts
+            body
         };
 
         let (array_size, array_size_t) = self.free_function_call(
@@ -1005,7 +999,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                         call: check.into(),
                         span,
                     },
-                    ir::Block::new(loop_body),
+                    loop_body,
                 ),
                 span,
             ),

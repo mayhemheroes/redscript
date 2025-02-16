@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::cell::RefCell;
+use std::collections::VecDeque;
 
 use redscript_ast::{self as ast, Span};
 
@@ -76,20 +77,20 @@ impl<'ctx> CondBlock<'ctx> {
 
 #[derive(Debug, Default)]
 pub struct Block<'ctx> {
-    pub stmts: Box<[Stmt<'ctx>]>,
+    pub stmts: VecDeque<Stmt<'ctx>>,
 }
 
 impl<'ctx> Block<'ctx> {
     #[inline]
-    pub fn new(stmts: impl Into<Box<[Stmt<'ctx>]>>) -> Self {
+    pub fn new(stmts: impl Into<VecDeque<Stmt<'ctx>>>) -> Self {
         Self {
             stmts: stmts.into(),
         }
     }
 
     pub fn span(&self) -> Option<Span> {
-        let fst = self.stmts.first()?;
-        let lst = self.stmts.last()?;
+        let fst = self.stmts.front()?;
+        let lst = self.stmts.back()?;
         Some(fst.span().merge(&lst.span()))
     }
 }
