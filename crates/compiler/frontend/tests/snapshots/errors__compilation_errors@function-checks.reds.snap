@@ -4,22 +4,22 @@ expression: "DisplayDiagnostics(diagnostics, &sources)"
 input_file: crates/compiler/frontend/tests/data/function-checks.reds
 snapshot_kind: text
 ---
-At tests\data\function-checks.reds:4:13
+[UNEXPECTED_BODY] At tests\data\function-checks.reds:4:13
 native func NativeFuncWithUnexpectedBody(x: Int32) -> Int32 {
             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 this function cannot have a body
 
-At tests\data\function-checks.reds:8:6
+[MISSING_BODY] At tests\data\function-checks.reds:8:6
 func FreeFunctionWithMissingBody(x: Int32) -> Int32
      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 this function must have a body
 
-At tests\data\function-checks.reds:10:19
+[UNUSED_ITEM_QUALIFIERS] At tests\data\function-checks.reds:10:19
 final static func UnusedFinalStaticQualifiers(s: String) -> String {
                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 final, static qualifiers have no effect on this item
 
-At tests\data\function-checks.reds:14:28
+[NON_DATA_VARIANCE] At tests\data\function-checks.reds:14:28
 func FunctionWithVariance<+A>() -> A {}
                            ^
 non-data types cannot have variance

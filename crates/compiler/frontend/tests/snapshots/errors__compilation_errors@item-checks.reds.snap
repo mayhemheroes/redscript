@@ -4,12 +4,12 @@ expression: "DisplayDiagnostics(diagnostics, &sources)"
 input_file: crates/compiler/frontend/tests/data/item-checks.reds
 snapshot_kind: text
 ---
-At tests\data\item-checks.reds:1:1
+[UNRESOLVED_IMPORT] At tests\data\item-checks.reds:1:1
 import NonExisting
 ^^^
 'NonExisting' could not be found
 
-At tests\data\item-checks.reds:3:5
+[UNEXPECTED_ITEM] At tests\data\item-checks.reds:3:5
 let badTopLevelField: CName;
     ^^^^^^^^^^^^^^^^
 items of this type are not allowed here

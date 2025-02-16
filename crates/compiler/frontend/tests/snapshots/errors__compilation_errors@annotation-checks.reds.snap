@@ -4,22 +4,22 @@ expression: "DisplayDiagnostics(diagnostics, &sources)"
 input_file: crates/compiler/frontend/tests/data/annotation-checks.reds
 snapshot_kind: text
 ---
-At tests\data\annotation-checks.reds:6:13
+[INVALID_ANN_USE] At tests\data\annotation-checks.reds:6:13
 @wrapMethod(UserClass)
             ^^^^^^^^^
 this annotation attempts to modify a user-defined symbol, which is not allowed
 
-At tests\data\annotation-checks.reds:10:13
+[UNRESOLVED_TYPE] At tests\data\annotation-checks.reds:10:13
 @wrapMethod(NonExistingClass)
             ^^^^^^^^^^^^^^^^
 'NonExistingClass' is not a known type
 
-At tests\data\annotation-checks.reds:11:6
+[INVALID_ANN_USE] At tests\data\annotation-checks.reds:11:6
 func HelloWorld(x: String) {
      ^^^^^^^^^^
 could not find a method with a matching signature for the @wrapMethod(NonExistingClass) annotation
 
-At tests\data\annotation-checks.reds:15:6
+[INVALID_ANN_USE] At tests\data\annotation-checks.reds:15:6
 func ForbiddenGenericAnnotatedMethod<A>(a: A) {
      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 annotated methods cannot be generic

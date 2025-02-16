@@ -7,12 +7,13 @@ use output::extract_refs;
 pub use output::{SccOutput, SourceRef, SourceRefType};
 use redscript_compiler_api::ast::SourceMap;
 use redscript_compiler_api::{Compilation, FlushError, SaveError, SourceMapExt, TypeInterner};
-use report::{CompilationFailed, ErrorReport};
+use report::{CompilationFailure, ErrorReport};
 pub use settings::SccSettings;
 use settings::{BACKUP_FILE_EXT, TIMESTAMP_FILE_EXT};
 use timestamp::CompileTimestamp;
 use vmap::Map;
 
+mod hints;
 mod logger;
 mod output;
 mod report;
@@ -30,7 +31,7 @@ pub fn compile(settings: &SccSettings) -> anyhow::Result<SccOutput> {
         Err(err) => {
             log::error!("Compilation failed: {err}");
             if settings.should_show_error_report() {
-                let report = ErrorReport::new(&err, settings.root_dir()).to_string();
+                let report = ErrorReport::new(&err).to_string();
                 msgbox::create("REDscript error", &report, msgbox::IconType::Error).ok();
             }
             Err(err)
@@ -82,7 +83,8 @@ fn compile_inner(settings: &SccSettings) -> anyhow::Result<SccOutput> {
             }
             Err(FlushError::CompilationErrors(diagnostics)) => {
                 diagnostics.dump(&sources)?;
-                return Err(CompilationFailed::new(&diagnostics, &sources).into());
+
+                return Err(CompilationFailure::new(diagnostics, &sources, settings)?.into());
             }
             Err(err) => anyhow::bail!("{err}"),
             Ok((syms, diagnostics)) => {

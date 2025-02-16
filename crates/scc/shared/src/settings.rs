@@ -10,6 +10,8 @@ const BACKUP_BUNDLE_FILE: &str = "final.redscripts.bk";
 const R6_DIR: &str = "r6";
 const CACHE_DIR: &str = "cache";
 const SCRIPTS_DIR: &str = "scripts";
+const CONFIG_DIR: &str = "config";
+const USER_HINTS_DIR: &str = "redsUserHints";
 
 pub(crate) const CACHE_FILE_EXT: &str = "redscripts";
 pub(crate) const BACKUP_FILE_EXT: &str = "redscripts.bk";
@@ -44,6 +46,13 @@ impl SccSettings {
 
     pub fn root_dir(&self) -> &Path {
         &self.root_dir
+    }
+
+    pub fn user_hints_dir(&self) -> PathBuf {
+        self.root_dir
+            .join(R6_DIR)
+            .join(CONFIG_DIR)
+            .join(USER_HINTS_DIR)
     }
 
     fn default_cache_file_path(&self) -> PathBuf {

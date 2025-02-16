@@ -145,6 +145,50 @@ impl<'ctx> Diagnostic<'ctx> {
         }
     }
 
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::SyntaxError(_) => "SYNTAX_ERR",
+            Self::TypeError(err) => err.code(),
+            Self::CoalesceError(_, _) => "COALESCE_ERR",
+            Self::DuplicateVariantName(_) => "DUP_VARIANT_NAME",
+            Self::DuplicateVariantValue(_) => "DUP_VARIANT_VAL",
+            Self::ValueOverflow(_) => "VAL_OVERFLOW",
+            Self::MissingFunctionBody(_) => "MISSING_BODY",
+            Self::UnexpectedFunctionBody(_) => "UNEXPECTED_BODY",
+            Self::UnusedItemQualifiers(_, _) => "UNUSED_ITEM_QUALIFIERS",
+            Self::UnknownIntrinsic(_, _) => "INVALID_INTRINSIC",
+            Self::UnexpectedItem(_) => "UNEXPECTED_ITEM",
+            Self::InvalidBaseType(_)
+            | Self::CircularInheritance(_)
+            | Self::IncompatibleBaseType(_, _) => "INVALID_BASE",
+            Self::UnknownAnnotation(_, _)
+            | Self::InvalidAnnotationType(_, _)
+            | Self::AnnotatedMethodNotFound(_, _)
+            | Self::IncompatibleAnnotations(_)
+            | Self::UserSymbolAnnotation(_)
+            | Self::GenericMethodAnnotation(_) => "INVALID_ANN_USE",
+            Self::ImportNotFound(_, _) => "UNRESOLVED_IMPORT",
+            Self::NameRedefinition(_) => "SYM_REDEFINITION",
+            Self::MissingMethodImpls(_, _) => "MISSING_IMPL",
+            Self::DuplicateMethod(_, _) => "DUP_METHOD",
+            Self::FinalMethodOverride(_, _) => "FINAL_FN_OVERRIDE",
+            Self::InvalidTypeArgCount(_, _, _) => "INVALID_TYPE_ARG_COUNT",
+            Self::UnsastisfiedBound(_, _, _) => "UNSASTISFIED_BOUND",
+            Self::InvalidVariance(_, _, _) => "INVALID_VARIANCE",
+            Self::DuplicateMethodAnnotation(_) => "DUP_FN_ANN",
+            Self::NonDataVariance(_) => "NON_DATA_VARIANCE",
+            Self::NonStaticStructMethod(_) => "NON_STATIC_STRUCT_FN",
+            Self::NativeMemberOfScriptedType(_) => "UNEXPECTED_NATIVE",
+            Self::InvalidPersistentField(_) => "INVALID_PERSISTENT",
+            Self::StructFieldAddition(_) => "STRUCT_FIELD_ADDITION",
+            Self::EvalFailed(_) => "CTE_ERR",
+            Self::InvalidImplName(_) => "INVALID_IMPL_NAME",
+            Self::InvalidImplType(_) => "INVALID_IMPL_TYPE",
+            Self::DuplicateImpl(_) => "DUP_IMPL",
+            Self::Other(_, _) => "OTHER",
+        }
+    }
+
     pub fn display<'a>(
         &'a self,
         sources: &'a ast::SourceMap,
@@ -158,7 +202,8 @@ impl<'ctx> Diagnostic<'ctx> {
         Ok(DisplayFn::new(move |f: &mut fmt::Formatter<'_>| {
             writeln!(
                 f,
-                "At {}:{}:{}",
+                "[{}] At {}:{}:{}",
+                self.code(),
                 file.path().display(),
                 start.line + 1,
                 start.col + 1

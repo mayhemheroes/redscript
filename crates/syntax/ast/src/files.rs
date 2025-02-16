@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::{fmt, fs, io};
 
 use crate::span::FileId;
+use crate::Span;
 
 #[derive(Debug, Default)]
 pub struct SourceMap {
@@ -127,6 +128,10 @@ impl File {
                 .chars()
                 .count(),
         }
+    }
+
+    pub fn span_contents(&self, span: Span) -> &str {
+        &self.source[span.start as usize..span.end as usize]
     }
 
     pub fn line_contents(&self, line: usize) -> Option<&str> {

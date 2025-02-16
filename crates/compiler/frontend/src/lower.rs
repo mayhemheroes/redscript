@@ -2634,6 +2634,35 @@ impl Error<'_> {
             | Self::UnexpectedNonConstant(span) => *span,
         }
     }
+
+    pub fn code(&self) -> &'static str {
+        match self {
+            Self::Type(_, _) => "TYPE_ERR",
+            Self::UnresolvedVar(_, _) => "UNRESOLVED_REF",
+            Self::UnresolvedType(_, _) => "UNRESOLVED_TYPE",
+            Self::UnresolvedMember(_, _, _) => "UNRESOLVED_MEMBER",
+            Self::MultipleMatchingOverloads(_, _, _) => "MULTIPLE_MATCHING_OVERLOADS",
+            Self::UnresolvedFunction(_, _) => "UNRESOLVED_FN",
+            Self::InvalidArgCount(_, _) => "INVALID_ARG_COUNT",
+            Self::CannotLookupMember(_) => "CANNOT_LOOKUP_MEMBER",
+            Self::InvalidNewType(_)
+            | Self::ClassConstructorHasArguments(_)
+            | Self::InstantiatingAbstract(_, _) => "INVALID_NEW_USE",
+            Self::InvalidDynCastType(_) => "INVALID_DYN_CAST",
+            Self::UnknownStaticCastType(_) => "INVALID_STATIC_CAST",
+            Self::InvalidTypeArgCount(_, _) => "INVALID_TYPE_ARG_COUNT",
+            Self::UnsupportedArity(_) => "UNSUPPORTED_ARITY",
+            Self::UnsupportedStaticArraySize(_) => "UNSUPPORTED_ARRAY_SIZE",
+            Self::InvalidCaseLabel(_) => "INVALID_CASE_LABEL",
+            Self::CyclicType(_) => "CYCLIC_TYPE",
+            Self::LiteralOutOfRange(_, _) => "LIT_OUT_OF_RANGE",
+            Self::WrongStringLiteral(_, _, _) => "WRONG_STRING_LIT",
+            Self::NonExistentSuperType(_) => "INVALID_BASE",
+            Self::InvalidPlaceExpr(_) => "INVALID_PLACE",
+            Self::InvalidTemporary(_) => "INVALID_TEMP",
+            Self::UnexpectedNonConstant(_) => "INVALID_CONSTANT",
+        }
+    }
 }
 
 struct NumberTypeRangeHint<'ctx>(TypeId<'ctx>);
