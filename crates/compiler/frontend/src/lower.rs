@@ -1458,7 +1458,8 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         }
 
         for ((_, var), (arg, span)) in map.top().iter().zip(type_args) {
-            var.constrain_invariant(&self.resolve_type(arg, env, *span)?, self.symbols)
+            self.resolve_type(arg, env, *span)?
+                .constrain(var, self.symbols)
                 .with_span(*span)?;
         }
 
@@ -1883,8 +1884,18 @@ impl<'ctx> PolyType<'ctx> {
 
     #[inline]
     fn constrain_invariant(&self, other: &Self, symbols: &Symbols<'ctx>) -> InferResult<'ctx, ()> {
-        self.constrain(other, symbols)?;
-        other.constrain(self, symbols)
+        match (self, other) {
+            (Self::Mono(l), Self::Mono(r)) => l.constrain_invariant(r, symbols),
+            (Self::Mono(l), Self::Var(r)) => {
+                r.add_lower(l, symbols)?;
+                r.constrain_lower(l, symbols)
+            }
+            (Self::Var(l), Self::Mono(r)) => {
+                l.add_upper(r, symbols)?;
+                l.constrain_by_upper(r, symbols)
+            }
+            (Self::Var(l), Self::Var(r)) => l.unify(r, symbols),
+        }
     }
 
     fn coerce(&self, other: &Self, symbols: &Symbols<'ctx>) -> InferResult<'ctx, Option<Coercion>> {
@@ -2008,6 +2019,14 @@ impl<'ctx> Var<'ctx> {
         repr.lower.constrain(ub, symbols)
     }
 
+    fn constrain_lower(
+        &self,
+        ub: &InferredType<'ctx>,
+        symbols: &Symbols<'ctx>,
+    ) -> InferResult<'ctx, ()> {
+        self.repr().0.borrow().lower.constrain(ub, symbols)
+    }
+
     fn add_lower(&self, lb: &InferredType<'ctx>, symbols: &Symbols<'ctx>) -> InferResult<'ctx, ()> {
         // TODO: occurs check
         let repr = self.repr();
@@ -2017,6 +2036,19 @@ impl<'ctx> Var<'ctx> {
             lb.constrain(ub, symbols)?;
         }
         Ok(())
+    }
+
+    fn constrain_by_upper(
+        &self,
+        lb: &InferredType<'ctx>,
+        symbols: &Symbols<'ctx>,
+    ) -> InferResult<'ctx, ()> {
+        self.repr()
+            .0
+            .borrow()
+            .upper
+            .iter()
+            .try_for_each(|ub| lb.constrain(ub, symbols))
     }
 
     fn unify(&self, other: &Var<'ctx>, symbols: &Symbols<'ctx>) -> InferResult<'ctx, ()> {
@@ -2310,6 +2342,11 @@ impl<'sym, 'ctx> Simplifier<'sym, 'ctx> {
 
                 let typ = match (var.lower(), var.upper()) {
                     (lower, Some(upper)) if lower == upper => self.simplify(&lower, variance)?,
+                    (bound, None) | (Type::Nothing, Some(bound))
+                        if bound.is_primitive(self.symbols) =>
+                    {
+                        self.simplify(&bound, variance)?
+                    }
                     (lower, _)
                         if variance == Variance::Covariant
                             && !self.contravariant.contains(&key) =>
