@@ -31,8 +31,19 @@ pub struct CompilationInputs<'ctx> {
 }
 
 impl<'ctx> CompilationInputs<'ctx> {
-    pub fn load<'a>(
-        bundle: &'a ScriptBundle<'ctx>,
+    pub fn load(bundle: &ScriptBundle<'ctx>, interner: &'ctx TypeInterner) -> Result<Self, Error> {
+        Self::load_with::<true>(bundle, interner)
+    }
+
+    pub fn load_without_mapping(
+        bundle: &ScriptBundle<'ctx>,
+        interner: &'ctx TypeInterner,
+    ) -> Result<Symbols<'ctx>, Error> {
+        Ok(Self::load_with::<false>(bundle, interner)?.symbols)
+    }
+
+    fn load_with<const LOAD_MAPPING: bool>(
+        bundle: &ScriptBundle<'ctx>,
         interner: &'ctx TypeInterner,
     ) -> Result<Self, Error> {
         let mut inputs = CompilationInputs::default();
@@ -54,7 +65,10 @@ impl<'ctx> CompilationInputs<'ctx> {
                         inputs.symbols.add_type(id, def);
                     }
                     let typ = load_type::<Mono>(typ, bundle, interner)?;
-                    inputs.mapping.types.insert(typ, index);
+
+                    if LOAD_MAPPING {
+                        inputs.mapping.types.insert(typ, index);
+                    }
                 }
                 IndexedDefinition::Class(index, cls) => {
                     let class_name = bundle
@@ -148,11 +162,13 @@ impl<'ctx> CompilationInputs<'ctx> {
                     let def = TypeDef::new([], TypeSchema::Aggregate(agg.into()), []);
                     inputs.symbols.add_type(class_id, def);
 
-                    let mappings = ClassMappings::new(index, mappings.methods);
-                    inputs
-                        .mapping
-                        .classes
-                        .insert(TypeApp::nullary(class_id), mappings);
+                    if LOAD_MAPPING {
+                        let mappings = ClassMappings::new(index, mappings.methods);
+                        inputs
+                            .mapping
+                            .classes
+                            .insert(TypeApp::nullary(class_id), mappings);
+                    }
 
                     virtual_map.insert(class_id, virtuals);
                 }
@@ -175,7 +191,10 @@ impl<'ctx> CompilationInputs<'ctx> {
                     inputs
                         .symbols
                         .add_type(id, TypeDef::new([], TypeSchema::Enum(enum_.into()), []));
-                    inputs.mapping.enums.insert(id, idx);
+
+                    if LOAD_MAPPING {
+                        inputs.mapping.enums.insert(id, idx);
+                    }
                 }
                 IndexedDefinition::Function(idx, func) => {
                     if func.class().is_some() {
@@ -192,7 +211,10 @@ impl<'ctx> CompilationInputs<'ctx> {
                     let typ = load_function_type(func, bundle, interner)?;
                     let func = FreeFunction::new(flags, typ, [], None);
                     let id = inputs.symbols.add_free_function(name, func);
-                    inputs.mapping.functions.insert(Signature::new(id, []), idx);
+
+                    if LOAD_MAPPING {
+                        inputs.mapping.functions.insert(Signature::new(id, []), idx);
+                    }
                 }
                 _ => {}
             }

@@ -6,8 +6,8 @@ mod visitor;
 pub use ast::{
     Aggregate, Annotation, Assoc, AstKind, BinOp, Block, Case, ConditionalBlock, Constant, Enum,
     EnumVariant, Expr, Field, Function, FunctionBody, Import, Item, ItemDecl, ItemQualifiers,
-    Module, Param, ParamQualifiers, Path, Stmt, StrPart, Type, TypeParam, UnOp, Variance,
-    Visibility, WithSpan, Wrapper,
+    Module, Param, ParamQualifiers, Path, QueryResult, Stmt, StrPart, Type, TypeParam, UnOp,
+    Variance, Visibility, WithSpan, Wrapper,
 };
 pub use files::{File, SourceLoc, SourceMap};
 pub use span::{FileId, Span};

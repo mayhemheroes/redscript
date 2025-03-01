@@ -3,10 +3,13 @@ use std::path::Path;
 
 pub use redscript_ast as ast;
 use redscript_ast::SourceMap;
-use redscript_compiler_backend::{AssembleError, CompilationInputs, PoolError, PoolMappings};
-use redscript_compiler_frontend::{infer_from_sources, UnknownSource};
+pub use redscript_compiler_backend::CompilationInputs;
+use redscript_compiler_backend::{AssembleError, PoolError, PoolMappings};
+use redscript_compiler_frontend::UnknownSource;
 pub use redscript_compiler_frontend::{
-    Diagnostic, LoweredCompilationUnit, Symbols, TypeId, TypeIndex, TypeInterner,
+    infer_from_sources, ir, parse_sources, process_sources, types, CompileErrorReporter,
+    Diagnostic, FunctionType, LoweredCompilationUnit, LoweredFunction, PolyType, Symbols, TypeId,
+    TypeIndex, TypeInterner, TypeScope,
 };
 use redscript_io::byte;
 pub use redscript_io::{SaveError, ScriptBundle};

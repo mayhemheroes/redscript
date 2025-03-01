@@ -562,8 +562,8 @@ impl TypeInterner {
     }
 
     #[inline]
-    pub fn get_index(&self, index: TypeIndex) -> Option<&str> {
-        self.names.get_index(index.0)
+    pub fn get_index(&self, index: TypeIndex) -> Option<TypeId<'_>> {
+        self.names.get_index(index.0).map(TypeId)
     }
 }
 

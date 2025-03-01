@@ -45,10 +45,16 @@ impl<'src> Module<'src, WithSpan> {
     pub fn find_at(&self, pos: u32) -> Option<QueryResult<'_, 'src>> {
         let idx = self
             .items
-            .binary_search_by(|(_, sp)| sp.compare_pos(pos))
+            .binary_search_by(|(_, sp)| sp.cmp_pos(pos))
             .ok()?;
         let (item, _) = &self.items[idx];
         Some(item.find_at(pos))
+    }
+
+    pub fn span(&self) -> Option<Span> {
+        let (_, fst) = self.items.first()?;
+        let (_, lst) = self.items.last()?;
+        Some(fst.merge(lst))
     }
 }
 
@@ -105,19 +111,29 @@ impl<'src> ItemDecl<'src, WithSpan> {
     pub fn find_at(&self, pos: u32) -> QueryResult<'_, 'src> {
         match &self.item {
             Item::Import(_) | Item::Enum(_) => return QueryResult::ItemDecl(self),
-            Item::Class(c) => c.find_at(pos),
-            Item::Struct(s) => s.find_at(pos),
-            Item::Function(f) => {
-                f.params
-                    .iter()
-                    .filter_map(|(p, _)| p.typ.as_ref())
-                    .find_map(|(typ, span)| span.contains(pos).then_some(typ.find_at(pos)));
-                f.body.as_ref().and_then(|b| b.find_at(pos))
+            Item::Class(c) | Item::Struct(c) => c.find_at(pos),
+            Item::Function(f) => f
+                .params
+                .iter()
+                .filter_map(|(p, _)| p.typ.as_ref())
+                .find_map(|(typ, span)| span.contains(pos).then_some(typ.find_at(pos)))
+                .or_else(|| {
+                    f.return_type
+                        .as_deref()
+                        .filter(|(_, span)| span.contains(pos))
+                        .map(|(typ, _)| typ.find_at(pos))
+                })
+                .or_else(|| f.body.as_ref().and_then(|b| b.find_at(pos))),
+            Item::Let(l) => {
+                let (typ, type_span) = l.typ.as_ref();
+                if type_span.contains(pos) {
+                    return typ.find_at(pos);
+                }
+                l.default.as_ref().and_then(|d| {
+                    let (def, span) = &**d;
+                    span.contains(pos).then_some(def.find_at(pos))
+                })
             }
-            Item::Let(l) => l.default.as_ref().and_then(|d| {
-                let (d, span) = &**d;
-                span.contains(pos).then_some(d.find_at(pos))
-            }),
         }
         .unwrap_or(QueryResult::ItemDecl(self))
     }
@@ -193,9 +209,14 @@ impl<'src, K: AstKind> Aggregate<'src, K> {
 
 impl<'src> Aggregate<'src, WithSpan> {
     pub fn find_at(&self, pos: u32) -> Option<QueryResult<'_, 'src>> {
+        if let Some((extends, span)) = self.extends.as_deref() {
+            if span.contains(pos) {
+                return Some(extends.find_at(pos));
+            }
+        }
         let idx = self
             .items
-            .binary_search_by(|(_, sp)| sp.compare_pos(pos))
+            .binary_search_by(|(_, sp)| sp.cmp_pos(pos))
             .ok()?;
         let (item, _) = &self.items[idx];
         Some(item.find_at(pos))
@@ -299,7 +320,7 @@ impl<'src> FunctionBody<'src, WithSpan> {
             FunctionBody::Block(b) => b.find_at(pos),
             FunctionBody::Inline(e) => {
                 let (e, span) = &**e;
-                span.contains(pos).then_some(e.find_at(pos))
+                span.contains(pos).then(|| e.find_at(pos))
             }
         }
     }
@@ -585,7 +606,7 @@ impl<'src> Block<'src, WithSpan> {
     pub fn find_at(&self, pos: u32) -> Option<QueryResult<'_, 'src>> {
         let idx = self
             .stmts
-            .binary_search_by(|(_, sp)| sp.compare_pos(pos))
+            .binary_search_by(|(_, sp)| sp.cmp_pos(pos))
             .ok()?;
         let (stmt, _) = &self.stmts[idx];
         Some(stmt.find_at(pos))
@@ -1258,6 +1279,7 @@ impl<A, B> Wrapper<A> for (A, B) {
     }
 }
 
+#[derive(Debug)]
 pub enum QueryResult<'a, 'src> {
     ItemDecl(&'a ItemDecl<'src, WithSpan>),
     Stmt(&'a Stmt<'src, WithSpan>),

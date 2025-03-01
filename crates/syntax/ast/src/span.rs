@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Span {
     pub start: u32,
     pub end: u32,
@@ -8,16 +8,20 @@ pub struct Span {
 }
 
 impl Span {
+    pub fn new(start: u32, end: u32, file: FileId) -> Self {
+        Span { start, end, file }
+    }
+
     #[inline]
     pub fn contains(&self, pos: u32) -> bool {
         self.start <= pos && pos < self.end
     }
 
-    pub fn compare_pos(&self, pos: u32) -> std::cmp::Ordering {
-        if pos < self.start {
-            std::cmp::Ordering::Less
-        } else if pos >= self.end {
+    pub fn cmp_pos(&self, pos: u32) -> std::cmp::Ordering {
+        if self.start > pos {
             std::cmp::Ordering::Greater
+        } else if self.end <= pos {
+            std::cmp::Ordering::Less
         } else {
             std::cmp::Ordering::Equal
         }
@@ -92,7 +96,7 @@ impl chumsky::span::Span for Span {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FileId(pub(super) i32);
 
 impl FileId {

@@ -72,6 +72,7 @@ impl<'ctx> NameResolution<'ctx> {
     }
 
     fn add_module(&mut self, module: ast::SourceModule<'ctx>, interner: &'ctx TypeInterner) {
+        let span = module.span();
         let path_root = module
             .path
             .as_ref()
@@ -105,6 +106,7 @@ impl<'ctx> NameResolution<'ctx> {
                 visibility,
                 qualifiers,
                 doc,
+                span: item_span,
             };
             match item {
                 ast::Item::Import(import) => {
@@ -236,6 +238,7 @@ impl<'ctx> NameResolution<'ctx> {
             functions,
             enums,
             lets,
+            span,
         });
     }
 
@@ -333,6 +336,7 @@ impl<'ctx> NameResolution<'ctx> {
                 enums,
                 functions,
                 fields,
+                module.span,
             ));
         }
 
@@ -353,6 +357,7 @@ impl<'ctx> NameResolution<'ctx> {
     ) -> ClassItem<'scope, 'ctx> {
         let aggregate = entry.aggregate;
         let (_, name_span) = aggregate.name;
+        let span = entry.meta.span;
 
         let mut qs = entry.meta.qualifiers;
         let is_import_only = qs.take_flag(ast::ItemQualifiers::IMPORT_ONLY);
@@ -451,7 +456,14 @@ impl<'ctx> NameResolution<'ctx> {
                     let Some(body) = func.body else {
                         continue;
                     };
-                    method_items.push(FuncItem::new(id, name_span, func.params, body, type_scope));
+                    method_items.push(FuncItem::new(
+                        id,
+                        item_span,
+                        name_span,
+                        func.params,
+                        body,
+                        type_scope,
+                    ));
                 }
                 ast::Item::Let(let_) => {
                     let (name, name_span) = let_.name;
@@ -514,7 +526,14 @@ impl<'ctx> NameResolution<'ctx> {
             .into_iter()
             .filter_map(|(k, v)| Some((k, v.force()?)))
             .collect();
-        ClassItem::new(entry.id, name_span, type_scope, method_items, field_items)
+        ClassItem::new(
+            entry.id,
+            span,
+            name_span,
+            type_scope,
+            method_items,
+            field_items,
+        )
     }
 
     fn process_enum(&mut self, entry: ParsedEnum<'ctx>, types: &mut TypeEnv<'_, 'ctx>) {
@@ -567,6 +586,7 @@ impl<'ctx> NameResolution<'ctx> {
         let func = entry.function;
         let (name, name_span) = func.name;
         let (func_t, type_scope) = self.create_function_env(&func, types);
+        let span = entry.meta.span;
 
         let mut intrinsic: Option<ir::Intrinsic> = None;
         let mut replaced: Option<MethodId<'ctx>> = None;
@@ -622,6 +642,7 @@ impl<'ctx> NameResolution<'ctx> {
 
                 let item = FuncItem::new(
                     MethodId::new(id, idx),
+                    span,
                     name_span,
                     func.params,
                     func.body,
@@ -657,11 +678,11 @@ impl<'ctx> NameResolution<'ctx> {
                 (func, body)
             }
             (Some(body), None, Some(replaced), None) => {
-                let func = FuncItem::new(replaced, name_span, func.params, body, type_scope);
+                let func = FuncItem::new(replaced, span, name_span, func.params, body, type_scope);
                 return Some(FuncItemKind::ReplaceMethod(func));
             }
             (Some(body), None, None, Some(wrapped)) => {
-                let func = FuncItem::new(wrapped, name_span, func.params, body, type_scope);
+                let func = FuncItem::new(wrapped, span, name_span, func.params, body, type_scope);
                 return Some(FuncItemKind::WrapMethod(func));
             }
             (Some(_), _, _, _) => {
@@ -685,6 +706,7 @@ impl<'ctx> NameResolution<'ctx> {
         body.map(|body| {
             FuncItemKind::FreeFunction(FuncItem::new(
                 entry.index,
+                span,
                 name_span,
                 func.params,
                 body,
@@ -961,7 +983,7 @@ impl<'ctx> NameResolution<'ctx> {
 
                 let base = self
                     .symbols
-                    .query_methods(class_id, method.name())
+                    .query_methods_by_name(class_id, method.name())
                     .find(|entry| {
                         if entry.key() == &MethodId::new(class.id(), *method.key())
                             || !entry.func().type_().type_params().is_empty()
@@ -1324,6 +1346,7 @@ struct ResolutionStageModule<'ctx> {
     functions: Vec<ParsedFunction<'ctx>>,
     enums: Vec<ParsedEnum<'ctx>>,
     lets: Vec<ParsedLet<'ctx>>,
+    span: Option<Span>,
 }
 
 #[derive(Debug)]
@@ -1334,6 +1357,7 @@ struct ParsedMeta<'ctx> {
     visibility: Option<ast::Visibility>,
     qualifiers: ast::ItemQualifiers,
     doc: Box<[&'ctx str]>,
+    span: Span,
 }
 
 #[derive(Debug)]

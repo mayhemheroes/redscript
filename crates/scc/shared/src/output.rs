@@ -25,7 +25,7 @@ impl SccOutput {
 
     pub fn name<'a>(&'a self, ref_: &'a SourceRef) -> Option<&'a str> {
         match ref_ {
-            SourceRef::Type(id, _) => self.interner.get_index(*id),
+            SourceRef::Type(id, _) => Some(self.interner.get_index(*id)?.as_str()),
             SourceRef::Function(name, _)
             | SourceRef::Method(_, name, _)
             | SourceRef::Field(_, name, _) => Some(name),
@@ -35,7 +35,7 @@ impl SccOutput {
     pub fn parent_name<'a>(&'a self, ref_: &SourceRef) -> Option<&'a str> {
         match ref_ {
             SourceRef::Method(id, _, _) | SourceRef::Field(id, _, _) => {
-                self.interner.get_index(*id)
+                Some(self.interner.get_index(*id)?.as_str())
             }
             _ => None,
         }

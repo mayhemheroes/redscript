@@ -42,7 +42,7 @@ pub enum Stmt<'ctx> {
     Return(Option<Box<Expr<'ctx>>>, Span),
 }
 
-impl Stmt<'_> {
+impl<'ctx> Stmt<'ctx> {
     pub fn span(&self) -> Span {
         match self {
             Self::Expr(expr) => expr.span(),
@@ -55,6 +55,62 @@ impl Stmt<'_> {
             | Self::Break(span)
             | Self::Continue(span)
             | Self::Return(_, span) => *span,
+        }
+    }
+
+    pub fn find_at(&self, pos: u32) -> Option<&Expr<'ctx>> {
+        match self {
+            Stmt::Return(Some(expr), _) | Stmt::Expr(expr) if expr.span().contains(pos) => {
+                Some(expr.find_at(pos))
+            }
+            Stmt::Block(block, span) if span.contains(pos) => block.find_at(pos),
+            Stmt::While(cond_block, span) if span.contains(pos) => cond_block.find_at(pos),
+            Stmt::Branches {
+                branches,
+                default,
+                span,
+            } if span.contains(pos) => branches
+                .binary_search_by(|branch| {
+                    branch
+                        .block
+                        .span()
+                        .map_or(branch.condition.span(), |s| {
+                            branch.condition.span().merge(&s)
+                        })
+                        .cmp_pos(pos)
+                })
+                .ok()
+                .and_then(|idx| {
+                    let branch = &branches[idx];
+                    if branch.condition.span().contains(pos) {
+                        Some(branch.condition.find_at(pos))
+                    } else {
+                        branch.block.find_at(pos)
+                    }
+                })
+                .or_else(|| default.as_ref()?.find_at(pos)),
+            Stmt::Switch {
+                scrutinee,
+                branches,
+                default,
+                span,
+                ..
+            } if span.contains(pos) => {
+                if scrutinee.span().contains(pos) {
+                    Some(scrutinee.find_at(pos))
+                } else {
+                    branches
+                        .iter()
+                        .find(|branch| branch.block.span().is_some_and(|span| span.contains(pos)))
+                        .and_then(|branch| branch.block.find_at(pos))
+                        .or_else(|| default.as_ref()?.find_at(pos))
+                }
+            }
+            Stmt::InitArray { elements, span, .. } if span.contains(pos) => elements
+                .binary_search_by(|element| element.span().cmp_pos(pos))
+                .ok()
+                .map(|idx| elements[idx].find_at(pos)),
+            _ => None,
         }
     }
 }
@@ -71,6 +127,14 @@ impl<'ctx> CondBlock<'ctx> {
         Self {
             condition: condition.into(),
             block,
+        }
+    }
+
+    pub fn find_at(&self, pos: u32) -> Option<&Expr<'ctx>> {
+        if self.condition.span().contains(pos) {
+            Some(self.condition.find_at(pos))
+        } else {
+            self.block.find_at(pos)
         }
     }
 }
@@ -92,6 +156,14 @@ impl<'ctx> Block<'ctx> {
         let fst = self.stmts.front()?;
         let lst = self.stmts.back()?;
         Some(fst.span().merge(&lst.span()))
+    }
+
+    pub fn find_at(&self, pos: u32) -> Option<&Expr<'ctx>> {
+        let idx = self
+            .stmts
+            .binary_search_by(|stmt| stmt.span().cmp_pos(pos))
+            .ok()?;
+        self.stmts[idx].find_at(pos)
     }
 }
 
@@ -207,6 +279,76 @@ impl<'ctx> Expr<'ctx> {
             _ => false,
         }
     }
+
+    pub fn find_at(&self, pos: u32) -> &Expr<'ctx> {
+        match self {
+            Expr::NewStruct { values, .. } => values
+                .binary_search_by(|v| v.span().cmp_pos(pos))
+                .ok()
+                .map(|i| values[i].find_at(pos))
+                .unwrap_or(self),
+            Expr::NewClosure { closure, .. } => closure.block.find_at(pos).unwrap_or(self),
+            Expr::Call { call, .. } => {
+                if let Some(receiver) = call.receiver().filter(|r| r.span().contains(pos)) {
+                    return receiver.find_at(pos);
+                };
+                let args = call.args();
+                args.binary_search_by(|arg| arg.span().cmp_pos(pos))
+                    .ok()
+                    .map(|i| args[i].find_at(pos))
+                    .unwrap_or(self)
+            }
+            Expr::Assign { place, expr, .. } => {
+                if place.span().contains(pos) {
+                    place.find_at(pos)
+                } else if expr.span().contains(pos) {
+                    expr.find_at(pos)
+                } else {
+                    self
+                }
+            }
+            Expr::Field { receiver, .. } => {
+                if receiver.span().contains(pos) {
+                    receiver.find_at(pos)
+                } else {
+                    self
+                }
+            }
+            Expr::Index { array, index, .. } => {
+                if array.span().contains(pos) {
+                    array.find_at(pos)
+                } else if index.span().contains(pos) {
+                    index.find_at(pos)
+                } else {
+                    self
+                }
+            }
+            Expr::Conditional {
+                condition,
+                then,
+                else_,
+                ..
+            } => {
+                if condition.span().contains(pos) {
+                    condition.find_at(pos)
+                } else if then.span().contains(pos) {
+                    then.find_at(pos)
+                } else if else_.span().contains(pos) {
+                    else_.find_at(pos)
+                } else {
+                    self
+                }
+            }
+            Expr::DynCast { expr, .. } => {
+                if expr.span().contains(pos) {
+                    expr.find_at(pos)
+                } else {
+                    self
+                }
+            }
+            _ => self,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -237,6 +379,25 @@ pub enum Call<'ctx> {
         closure_type: TypeApp<'ctx>,
         args: Box<[Expr<'ctx>]>,
     },
+}
+
+impl<'ctx> Call<'ctx> {
+    pub fn args(&self) -> &[Expr<'ctx>] {
+        match self {
+            Self::FreeFunction { args, .. }
+            | Self::Static { args, .. }
+            | Self::Instance { args, .. }
+            | Self::Closure { args, .. } => args,
+        }
+    }
+
+    pub fn receiver(&self) -> Option<&Expr<'ctx>> {
+        match self {
+            Self::Instance { receiver, .. } => Some(receiver),
+            Self::Closure { closure, .. } => Some(closure),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -429,9 +590,9 @@ impl<'a> From<UnknownIntrinsic<'a>> for &'a str {
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum Local {
-    Var(u16),
-    Param(u16),
     This,
+    Param(u16),
+    Var(u16),
 }
 
 impl Local {

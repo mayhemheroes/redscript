@@ -1,8 +1,9 @@
 use std::mem;
+use std::ops::Not;
 use std::rc::Rc;
 
 use identity_hash::BuildIdentityHasher;
-use redscript_ast::{self as ast, Span, Spanned};
+use redscript_ast::{self as ast, FileId, Span, Spanned};
 use smallvec::smallvec;
 
 use super::resolution::{Scope, THIS_IDENT, WRAPPED_METHOD_IDENT};
@@ -56,26 +57,20 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                     .map(|param| Type::Ctx(param.clone()))
                     .collect::<Rc<_>>();
                 let this_t = PolyType::from_type(&Type::app(class.id, class_type_args));
-                let this = ir::LocalInfo::new(ir::Local::This, this_t, None);
 
                 let mut methods = IndexMap::default();
                 for item in class.methods {
                     let id = MethodId::new(class.id, item.id);
                     let method = &self.symbols[id];
-                    let types = types.push_scope(item.scope);
-
-                    let mut env = Env::new(&types, &scope.funcs);
-                    if !method.flags().is_static() {
-                        env.define_local(THIS_IDENT, this.clone());
-                    }
-
-                    let func = lower_func(
+                    let func = lower_function(
                         method.type_(),
                         &item.params,
                         &item.body,
-                        env,
+                        method.flags().is_static().not().then(|| this_t.clone()),
+                        Env::new(&types.push_scope(item.scope), &scope.funcs),
                         &self.symbols,
                         &mut self.reporter,
+                        item.span,
                     );
                     methods.insert(item.id, func);
                 }
@@ -91,9 +86,14 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                     }
                 }
 
-                compiled
-                    .classes
-                    .insert(class.id, LoweredClass { methods, fields });
+                compiled.classes.insert(
+                    class.id,
+                    LoweredClass {
+                        methods,
+                        fields,
+                        span: class.span,
+                    },
+                );
             }
 
             for enum_id in mod_.enums {
@@ -103,68 +103,77 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
             for func in mod_.functions {
                 match func {
                     FuncItemKind::FreeFunction(func) => {
-                        let types = scope.types.push_scope(func.scope);
-                        let env = Env::new(&types, &scope.funcs);
-                        let func_t = &self.symbols[func.id].type_();
-                        let value = lower_func(
-                            func_t,
+                        let value = lower_function(
+                            self.symbols[func.id].type_(),
                             &func.params,
                             &func.body,
-                            env,
+                            None,
+                            Env::new(&scope.types.push_scope(func.scope), &scope.funcs),
                             &self.symbols,
                             &mut self.reporter,
+                            func.span,
                         );
                         compiled.functions.insert(func.id, value);
                     }
                     FuncItemKind::ReplaceMethod(func) => {
-                        let types = scope.types.push_scope(func.scope);
-                        let env = Env::new(&types, &scope.funcs);
-                        let body = &func.body;
-                        let lowered = lower_method(
-                            func.id,
+                        let sym = &self.symbols[func.id];
+                        let lowered = lower_function(
+                            sym.type_(),
                             &func.params,
-                            body,
-                            env,
+                            &func.body,
+                            sym.flags()
+                                .is_static()
+                                .not()
+                                .then(|| PolyType::nullary(func.id.parent())),
+                            Env::new(&scope.types.push_scope(func.scope), &scope.funcs),
                             &self.symbols,
                             &mut self.reporter,
+                            func.span,
                         );
                         compiled.method_replacements.insert(func.id, lowered);
                     }
                     FuncItemKind::AddMethod(func) => {
-                        let types = scope.types.push_scope(func.scope);
-                        let env = Env::new(&types, &scope.funcs);
                         let lowered = func.body.as_ref().map(|body| {
-                            lower_method(
-                                func.id,
+                            let sym = &self.symbols[func.id];
+                            lower_function(
+                                sym.type_(),
                                 &func.params,
                                 body,
-                                env,
+                                sym.flags()
+                                    .is_static()
+                                    .not()
+                                    .then(|| PolyType::nullary(func.id.parent())),
+                                Env::new(&scope.types.push_scope(func.scope), &scope.funcs),
                                 &self.symbols,
                                 &mut self.reporter,
+                                func.span,
                             )
                         });
                         compiled.added_methods.insert(func.id, lowered);
                     }
                     FuncItemKind::WrapMethod(func) => {
-                        let typ = self.symbols[func.id].type_().clone();
-                        let free_func = FreeFunction::new_alias(typ, func.id, Some(func.name_span));
+                        let typ = self.symbols[func.id].type_();
+                        let free_func =
+                            FreeFunction::new_alias(typ.clone(), func.id, Some(func.name_span));
                         let free_func = self
                             .symbols
                             .add_free_function(WRAPPED_METHOD_IDENT, free_func);
-
-                        let types = scope.types.push_scope(func.scope);
                         let mut funcs = scope.funcs.introduce_scope();
                         funcs.insert(WRAPPED_METHOD_IDENT, smallvec![free_func]);
 
-                        let env = Env::new(&types, &funcs);
-                        let body = &func.body;
-                        let lowered = lower_method(
-                            func.id,
+                        let sym = &self.symbols[func.id];
+                        let lowered = lower_function(
+                            sym.type_(),
                             &func.params,
-                            body,
-                            env,
+                            &func.body,
+                            sym.flags()
+                                .is_static()
+                                .not()
+                                .then(|| PolyType::nullary(func.id.parent())),
+                            Env::new(&scope.types.push_scope(func.scope), &funcs),
                             &self.symbols,
                             &mut self.reporter,
+                            func.span,
                         );
                         compiled
                             .method_wrappers
@@ -186,38 +195,38 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
 
                 compiled.added_fields.insert(item.id, expr);
             }
+
+            if let Some(span) = mod_.span {
+                let scope = scope
+                    .types
+                    .pop_scope()
+                    .into_iter()
+                    .filter_map(|(k, v)| Some((k, v.force()?)))
+                    .collect();
+                compiled.scopes.insert(span.file, scope);
+            }
         }
 
         (compiled, self.symbols, self.reporter.into_reported())
     }
 }
 
-fn lower_method<'ctx>(
-    id: MethodId<'ctx>,
-    params: &[Spanned<ast::SourceParam<'ctx>>],
-    body: &ast::SourceFunctionBody<'ctx>,
-    mut env: Env<'_, 'ctx>,
-    symbols: &Symbols<'ctx>,
-    reporter: &mut CompileErrorReporter<'ctx>,
-) -> LoweredFunction<'ctx> {
-    let func_sym = &symbols[id];
-    if !func_sym.flags().is_static() {
-        let this_t = PolyType::nullary(id.parent());
-        let this = ir::LocalInfo::new(ir::Local::This, this_t, None);
-        env.define_local(THIS_IDENT, this.clone());
-    }
-
-    lower_func(func_sym.type_(), params, body, env, symbols, reporter)
-}
-
-fn lower_func<'ctx>(
+#[allow(clippy::too_many_arguments)]
+fn lower_function<'ctx>(
     func_type: &FunctionType<'ctx>,
     params: &[Spanned<ast::SourceParam<'ctx>>],
     body: &ast::SourceFunctionBody<'ctx>,
-    env: Env<'_, 'ctx>,
+    this: Option<PolyType<'ctx>>,
+    mut env: Env<'_, 'ctx>,
     symbols: &Symbols<'ctx>,
     reporter: &mut CompileErrorReporter<'ctx>,
+    span: Span,
 ) -> LoweredFunction<'ctx> {
+    let this = this.map(|lt| ir::LocalInfo::new(ir::Local::This, lt, None));
+    if let Some(this) = &this {
+        env.define_local(THIS_IDENT, this.clone());
+    }
+
     let params = func_type
         .params()
         .iter()
@@ -229,9 +238,10 @@ fn lower_func<'ctx>(
     reporter.report_many(errors);
 
     let mut locals = vec![];
-    for local in output.locals() {
+
+    for local in this.iter().chain(output.locals()) {
         match local.typ.coalesce(symbols) {
-            Ok(loc) => locals.push((local.id, loc)),
+            Ok(typ) => locals.push((local.id, typ)),
             Err(err) => {
                 let span = local.span.expect("local span should be present");
                 reporter.report(Diagnostic::CoalesceError(err.into(), span));
@@ -239,7 +249,11 @@ fn lower_func<'ctx>(
         }
     }
 
-    LoweredFunction { block, locals }
+    LoweredFunction {
+        block,
+        locals,
+        span,
+    }
 }
 
 fn lower_constant<'ctx>(
@@ -264,6 +278,7 @@ pub struct InferStageModule<'scope, 'ctx> {
     enums: Vec<TypeId<'ctx>>,
     functions: Vec<FuncItemKind<'scope, 'ctx>>,
     fields: Vec<FieldItem<'ctx, FieldId<'ctx>>>,
+    span: Option<Span>,
 }
 
 impl<'scope, 'ctx> InferStageModule<'scope, 'ctx> {
@@ -275,6 +290,7 @@ impl<'scope, 'ctx> InferStageModule<'scope, 'ctx> {
         enums: Vec<TypeId<'ctx>>,
         functions: Vec<FuncItemKind<'scope, 'ctx>>,
         fields: Vec<FieldItem<'ctx, FieldId<'ctx>>>,
+        span: Option<Span>,
     ) -> Self {
         Self {
             type_scope,
@@ -283,6 +299,7 @@ impl<'scope, 'ctx> InferStageModule<'scope, 'ctx> {
             classes,
             enums,
             fields,
+            span,
         }
     }
 
@@ -323,6 +340,7 @@ impl<'ctx, K> FieldItem<'ctx, K> {
 #[derive(Debug)]
 pub struct FuncItem<'scope, 'ctx, K, B = ast::SourceFunctionBody<'ctx>> {
     id: K,
+    span: Span,
     name_span: Span,
     params: Box<[Spanned<ast::SourceParam<'ctx>>]>,
     body: B,
@@ -333,6 +351,7 @@ impl<'scope, 'ctx, K, B> FuncItem<'scope, 'ctx, K, B> {
     #[inline]
     pub fn new(
         id: K,
+        span: Span,
         name_span: Span,
         params: Box<[Spanned<ast::SourceParam<'ctx>>]>,
         body: B,
@@ -340,6 +359,7 @@ impl<'scope, 'ctx, K, B> FuncItem<'scope, 'ctx, K, B> {
     ) -> Self {
         Self {
             id,
+            span,
             name_span,
             params,
             body,
@@ -356,6 +376,7 @@ impl<'scope, 'ctx, K, B> FuncItem<'scope, 'ctx, K, B> {
 #[derive(Debug)]
 pub struct ClassItem<'scope, 'ctx> {
     id: TypeId<'ctx>,
+    span: Span,
     name_span: Span,
     scope: TypeScope<'scope, 'ctx>,
     methods: Vec<FuncItem<'scope, 'ctx, FunctionIndex>>,
@@ -366,6 +387,7 @@ impl<'scope, 'ctx> ClassItem<'scope, 'ctx> {
     #[inline]
     pub fn new(
         id: TypeId<'ctx>,
+        span: Span,
         name_span: Span,
         scope: TypeScope<'scope, 'ctx>,
         methods: Vec<FuncItem<'scope, 'ctx, FunctionIndex>>,
@@ -373,6 +395,7 @@ impl<'scope, 'ctx> ClassItem<'scope, 'ctx> {
     ) -> Self {
         Self {
             id,
+            span,
             name_span,
             scope,
             methods,
@@ -399,10 +422,20 @@ pub enum FuncItemKind<'scope, 'ctx> {
     AddMethod(FuncItem<'scope, 'ctx, MethodId<'ctx>, Option<ast::SourceFunctionBody<'ctx>>>),
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct LoweredFunction<'ctx> {
     pub block: ir::Block<'ctx>,
     pub locals: Vec<(ir::Local, Type<'ctx>)>,
+    pub span: Span,
+}
+
+impl<'ctx> LoweredFunction<'ctx> {
+    pub fn find_local(&self, loc: ir::Local) -> Option<&Type<'ctx>> {
+        self.locals
+            .binary_search_by_key(&loc, |&(local, _)| local)
+            .ok()
+            .map(|idx| &self.locals[idx].1)
+    }
 }
 
 #[derive(Debug, Default)]
@@ -415,10 +448,25 @@ pub struct LoweredCompilationUnit<'ctx> {
     pub added_methods: IndexMap<MethodId<'ctx>, Option<LoweredFunction<'ctx>>>,
     pub method_replacements: IndexMap<MethodId<'ctx>, LoweredFunction<'ctx>>,
     pub method_wrappers: IndexMap<MethodId<'ctx>, Vec<LoweredFunction<'ctx>>>,
+
+    pub scopes: IndexMap<FileId, IndexMap<&'ctx str, TypeRef<'static, 'ctx>>>,
 }
 
-#[derive(Debug, Default)]
+impl<'ctx> LoweredCompilationUnit<'ctx> {
+    pub fn all_functions(&self) -> impl Iterator<Item = &LoweredFunction<'ctx>> {
+        self.classes
+            .values()
+            .flat_map(|class| class.methods.values())
+            .chain(self.functions.values())
+            .chain(self.added_methods.values().flatten())
+            .chain(self.method_replacements.values())
+            .chain(self.method_wrappers.values().flatten())
+    }
+}
+
+#[derive(Debug)]
 pub struct LoweredClass<'ctx> {
     pub methods: IndexMap<FunctionIndex, LoweredFunction<'ctx>>,
     pub fields: IndexMap<FieldIndex, ir::Const<'ctx>>,
+    pub span: Span,
 }

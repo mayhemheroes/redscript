@@ -184,27 +184,33 @@ impl<'ctx> Symbols<'ctx> {
         }
     }
 
-    pub fn query_methods<'a>(
+    pub fn query_methods_by_name<'a>(
         &'a self,
-        ty: TypeId<'ctx>,
+        typ: TypeId<'ctx>,
         name: &'a str,
     ) -> impl Iterator<Item = MethodEntry<'a, 'ctx>> + use<'a, 'ctx> {
-        self.base_iter(ty)
-            .filter_map(|(id, ty)| Some((id, ty.schema().as_aggregate()?)))
+        self.base_iter(typ)
+            .filter_map(|(id, typ)| Some((id, typ.schema().as_aggregate()?)))
             .flat_map(|(id, agg)| {
                 agg.methods().by_name(name).map(move |entry| {
                     MethodEntry::new(MethodId::new(id, *entry.key()), entry.name(), entry.func())
                 })
             })
-            .filter_map({
-                let mut dedup = HashSet::new();
-                move |entry| {
-                    if let Some(overloaded) = entry.func().overloaded {
-                        dedup.insert(overloaded);
-                    }
-                    dedup.remove(entry.key()).not().then_some(entry)
-                }
+            .filter_map(method_dedup())
+    }
+
+    pub fn query_methods<'a>(
+        &'a self,
+        typ: TypeId<'ctx>,
+    ) -> impl Iterator<Item = MethodEntry<'a, 'ctx>> + use<'a, 'ctx> {
+        self.base_iter(typ)
+            .filter_map(|(id, typ)| Some((id, typ.schema().as_aggregate()?)))
+            .flat_map(|(id, agg)| {
+                agg.methods().iter().map(move |entry| {
+                    MethodEntry::new(MethodId::new(id, *entry.key()), entry.name(), entry.func())
+                })
             })
+            .filter_map(method_dedup())
     }
 }
 
@@ -1229,3 +1235,17 @@ impl fmt::Display for QualifiedName<'_> {
 
 #[derive(Debug)]
 pub struct FieldRedefinition;
+
+fn method_dedup<'ctx: 'a, 'a>() -> impl FnMut(
+    FunctionEntry<MethodId<'ctx>, &'ctx str, &'a Method<'ctx>>,
+) -> Option<
+    FunctionEntry<MethodId<'ctx>, &'ctx str, &'a Method<'ctx>>,
+> {
+    let mut dedup = HashSet::new();
+    move |entry| {
+        if let Some(overloaded) = entry.func().overloaded {
+            dedup.insert(overloaded);
+        }
+        dedup.remove(entry.key()).not().then_some(entry)
+    }
+}
