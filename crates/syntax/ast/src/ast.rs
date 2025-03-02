@@ -1070,7 +1070,19 @@ impl<'src> Expr<'src, WithSpan> {
                     QueryResult::Expr(self)
                 }
             }
-            Expr::Lambda { body, .. } => body.find_at(pos).unwrap_or(QueryResult::Expr(self)),
+            Expr::Lambda { body, params, .. } => {
+                if let Ok(idx) = params.binary_search_by(|(_, span)| span.cmp_pos(pos)) {
+                    let (param, _) = &params[idx];
+                    param
+                        .typ
+                        .as_ref()
+                        .filter(|(_, s)| s.contains(pos))
+                        .map(|(t, _)| t.find_at(pos))
+                        .unwrap_or(QueryResult::Expr(self))
+                } else {
+                    body.find_at(pos).unwrap_or(QueryResult::Expr(self))
+                }
+            }
         }
     }
 }

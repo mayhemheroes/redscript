@@ -519,7 +519,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 let &(name, name_span) = name;
                 let typ = typ
                     .as_deref()
-                    .map(|(typ, span)| resolve_type(typ, env, *span))
+                    .map(|(typ, span)| self.resolve_type(typ, env, *span))
                     .transpose()?;
                 if let Some(value @ (_, value_span)) = value.as_deref() {
                     let (mut value, value_t) = self.lower_expr_with(value, typ.as_ref(), env)?;
@@ -779,7 +779,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         expr_span: Span,
     ) -> LowerResult<'ctx, (ir::Call<'ctx>, PolyType<'ctx>)> {
         let target_t = match (type_args, hint) {
-            ([(target, target_span)], _) => resolve_type(target, env, *target_span)?,
+            ([(target, target_span)], _) => self.resolve_type(target, env, *target_span)?,
             ([], Some(hint)) => hint.clone(),
             ([], None) => return Err(Error::UnknownStaticCastType(expr_span)),
             _ => return Err(Error::InvalidTypeArgCount(1, expr_span)),
@@ -821,7 +821,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 param
                     .typ
                     .as_ref()
-                    .map_or(Ok(hint), |(typ, span)| resolve_type(typ, env, *span))
+                    .map_or(Ok(hint), |(typ, span)| self.resolve_type(typ, env, *span))
             })
             .chain([Ok(return_t.clone())])
             .collect::<Result<Rc<_>, _>>()?;
@@ -1140,7 +1140,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 .and_then(|typ| typ.base_type_env(primary.key().parent()?, self.symbols))
                 .unwrap_or_default();
             let type_env = type_env.push_scope(
-                function_env(primary.func().type_(), type_args, env, self.symbols, span)?
+                self.function_env(primary.func().type_(), type_args, env, span)?
                     .pop_scope(),
             );
 
@@ -1264,7 +1264,8 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             .and_then(|typ| typ.base_type_env(selected.key().parent()?, self.symbols))
             .unwrap_or_default();
         let type_env = type_env.push_scope(
-            function_env(selected.func().type_(), &[], env, self.symbols, span)?.pop_scope(),
+            self.function_env(selected.func().type_(), &[], env, span)?
+                .pop_scope(),
         );
         for ((arg, typ), param) in args
             .iter_mut()
@@ -1415,6 +1416,79 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             span,
         };
         Ok((ir, typ))
+    }
+
+    fn function_env(
+        &self,
+        func_t: &FunctionType<'ctx>,
+        type_args: &[Spanned<ast::SourceType<'ctx>>],
+        env: &Env<'scope, 'ctx>,
+        span: Span,
+    ) -> LowerResult<'ctx, ScopedMap<'scope, &'ctx str, PolyType<'ctx>>> {
+        let map: ScopedMap<'_, _, _> = func_t
+            .type_params()
+            .iter()
+            .map(|var| (var.name(), PolyType::fresh()))
+            .collect();
+
+        for ((_, var), param) in map.top().iter().zip(func_t.type_params()) {
+            if let Some(upper) = param.upper() {
+                let constraint = PolyType::from_type_with_env(upper, &map)
+                    .map_err(|var| Error::UnresolvedVar(var, span))?;
+                var.constrain(&constraint, self.symbols).with_span(span)?;
+            }
+            if let Some(lower) = param.lower() {
+                PolyType::from_type_with_env(lower, &map)
+                    .map_err(|var| Error::UnresolvedVar(var, span))?
+                    .constrain(var, self.symbols)
+                    .with_span(span)?;
+            }
+        }
+
+        if type_args.is_empty() {
+            return Ok(map);
+        }
+
+        if type_args.len() != func_t.type_params().len() {
+            let expected = func_t.type_params().len();
+            return Err(Error::InvalidTypeArgCount(expected, span));
+        }
+
+        for ((_, var), (arg, span)) in map.top().iter().zip(type_args) {
+            self.resolve_type(arg, env, *span)?
+                .constrain(var, self.symbols)
+                .with_span(*span)?;
+        }
+
+        Ok(map)
+    }
+
+    fn resolve_type(
+        &self,
+        typ: &ast::SourceType<'ctx>,
+        env: &Env<'_, 'ctx>,
+        span: Span,
+    ) -> LowerResult<'ctx, PolyType<'ctx>> {
+        let typ = PolyType::from_type(&env.types.resolve(typ, span)?);
+        self.check_type(&typ, span)?;
+        Ok(typ)
+    }
+
+    fn check_type(&self, typ: &PolyType<'ctx>, span: Span) -> LowerResult<'ctx, ()> {
+        match typ {
+            PolyType::Mono(Type::Data(app)) => self.check_type_app(app, span),
+            _ => Ok(()),
+        }
+    }
+
+    fn check_type_app(&self, typ: &InferredTypeApp<'ctx>, span: Span) -> LowerResult<'ctx, ()> {
+        let sym = &self.symbols[typ.id()];
+        if sym.params().len() != typ.args().len() {
+            return Err(Error::InvalidTypeArgCount(sym.params().len(), span));
+        }
+        typ.args()
+            .iter()
+            .try_for_each(|arg| self.check_type(arg, span))
     }
 }
 
@@ -2693,60 +2767,6 @@ impl<T: fmt::Display + PartialEq> fmt::Display for DisplayRangeInclusive<'_, T> 
             write!(f, "between {} and {}", start, end)
         }
     }
-}
-
-#[inline]
-fn resolve_type<'ctx>(
-    typ: &ast::SourceType<'ctx>,
-    env: &Env<'_, 'ctx>,
-    span: Span,
-) -> LowerResult<'ctx, PolyType<'ctx>> {
-    Ok(PolyType::from_type(&env.types.resolve(typ, span)?))
-}
-
-fn function_env<'scope, 'ctx>(
-    func_t: &FunctionType<'ctx>,
-    type_args: &[Spanned<ast::SourceType<'ctx>>],
-    env: &Env<'scope, 'ctx>,
-    symbols: &Symbols<'ctx>,
-    span: Span,
-) -> LowerResult<'ctx, ScopedMap<'scope, &'ctx str, PolyType<'ctx>>> {
-    let map: ScopedMap<'_, _, _> = func_t
-        .type_params()
-        .iter()
-        .map(|var| (var.name(), PolyType::fresh()))
-        .collect();
-
-    for ((_, var), param) in map.top().iter().zip(func_t.type_params()) {
-        if let Some(upper) = param.upper() {
-            let constraint = PolyType::from_type_with_env(upper, &map)
-                .map_err(|var| Error::UnresolvedVar(var, span))?;
-            var.constrain(&constraint, symbols).with_span(span)?;
-        }
-        if let Some(lower) = param.lower() {
-            PolyType::from_type_with_env(lower, &map)
-                .map_err(|var| Error::UnresolvedVar(var, span))?
-                .constrain(var, symbols)
-                .with_span(span)?;
-        }
-    }
-
-    if type_args.is_empty() {
-        return Ok(map);
-    }
-
-    if type_args.len() != func_t.type_params().len() {
-        let expected = func_t.type_params().len();
-        return Err(Error::InvalidTypeArgCount(expected, span));
-    }
-
-    for ((_, var), (arg, span)) in map.top().iter().zip(type_args) {
-        resolve_type(arg, env, *span)?
-            .constrain(var, symbols)
-            .with_span(*span)?;
-    }
-
-    Ok(map)
 }
 
 fn binop_name(op: &ast::BinOp) -> &'static str {

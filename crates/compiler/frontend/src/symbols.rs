@@ -331,6 +331,13 @@ impl<'ctx> TypeDef<'ctx> {
     pub fn doc(&self) -> &[&'ctx str] {
         &self.doc
     }
+
+    pub fn span(&self) -> Option<Span> {
+        match &self.schema {
+            TypeSchema::Aggregate(aggregate) => aggregate.span(),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug)]
