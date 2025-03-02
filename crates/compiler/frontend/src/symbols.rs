@@ -14,7 +14,7 @@ use smallvec::SmallVec;
 
 use crate::types::{CtxVar, Type, TypeApp, TypeId};
 use crate::utils::fmt::sep_by;
-use crate::{ir, predef, Immutable, IndexMap, MonoType, TypeKind, Variance};
+use crate::{Immutable, IndexMap, MonoType, TypeKind, Variance, ir, predef};
 
 #[derive(Debug)]
 pub struct Symbols<'ctx> {

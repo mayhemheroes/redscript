@@ -7,9 +7,9 @@ pub use redscript_compiler_backend::CompilationInputs;
 use redscript_compiler_backend::{AssembleError, PoolError, PoolMappings};
 use redscript_compiler_frontend::UnknownSource;
 pub use redscript_compiler_frontend::{
-    infer_from_sources, ir, parse_sources, process_sources, types, CompileErrorReporter,
-    Diagnostic, FunctionType, LoweredCompilationUnit, LoweredFunction, PolyType, Symbols, TypeId,
-    TypeIndex, TypeInterner, TypeScope,
+    CompileErrorReporter, Diagnostic, FunctionType, LoweredCompilationUnit, LoweredFunction,
+    PolyType, Symbols, TypeId, TypeIndex, TypeInterner, TypeScope, infer_from_sources, ir,
+    parse_sources, process_sources, types,
 };
 use redscript_io::byte;
 pub use redscript_io::{SaveError, ScriptBundle};

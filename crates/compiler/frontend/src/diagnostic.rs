@@ -6,8 +6,8 @@ use {redscript_ast as ast, redscript_parser as parser};
 
 use crate::lower::{LowerResult, Poly, TypeError};
 use crate::stages::FunctionAnnotation;
-use crate::utils::fmt::{lowercase, sep_by, DisplayFn};
-use crate::{cte, predef, CoalesceError, LowerError, Param, PolyType, Type, TypeId, Variance};
+use crate::utils::fmt::{DisplayFn, lowercase, sep_by};
+use crate::{CoalesceError, LowerError, Param, PolyType, Type, TypeId, Variance, cte, predef};
 
 #[derive(Debug, Error)]
 pub enum Diagnostic<'ctx> {

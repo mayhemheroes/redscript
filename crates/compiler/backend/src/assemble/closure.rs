@@ -1,7 +1,7 @@
 use std::mem;
 
 use redscript_compiler_frontend::ast::Span;
-use redscript_compiler_frontend::{ir, predef, MonoType, Symbols};
+use redscript_compiler_frontend::{MonoType, Symbols, ir, predef};
 use redscript_io::{
     Class as PoolClass, ClassFlags as PoolClassFlags, ClassIndex as PoolClassIndex,
     Field as PoolField, FieldFlags as PoolFieldFlags, FieldIndex as PoolFieldIndex,
@@ -11,7 +11,7 @@ use redscript_io::{
     ParameterFlags as PoolParameterFlags, ScriptBundle, TypeIndex as PoolTypeIndex, Visibility,
 };
 
-use super::{assemble_block, AssembleError, Assembler};
+use super::{AssembleError, Assembler, assemble_block};
 use crate::monomorph::Monomorphizer;
 
 pub(super) const INSTANTIATE_METHOD: &str = "Instantiate";

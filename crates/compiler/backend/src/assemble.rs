@@ -1,14 +1,14 @@
-use closure::{emit_closure, CALL_METHOD};
+use closure::{CALL_METHOD, emit_closure};
 use redscript_compiler_frontend::ast::Span;
 use redscript_compiler_frontend::utils::ScopedMap;
 use redscript_compiler_frontend::{
-    ir, predef, CoalesceError, MonoType, RefType, Symbols, Type, TypeSchema,
+    CoalesceError, MonoType, RefType, Symbols, Type, TypeSchema, ir, predef,
 };
 use redscript_io::{
-    byte, Conditional, FieldIndex as PoolFieldIndex, FunctionIndex as PoolFunctionIndex, Instr,
+    Conditional, FieldIndex as PoolFieldIndex, FunctionIndex as PoolFunctionIndex, Instr,
     InvokeFlags, Jump, Local as PoolLocal, LocalFlags as PoolLocalFlags,
     LocalIndex as PoolLocalIndex, Offset, ParameterIndex as PoolParameterIndex, ScriptBundle,
-    Switch, SwitchLabel, TypeIndex as PoolTypeIndex,
+    Switch, SwitchLabel, TypeIndex as PoolTypeIndex, byte,
 };
 use slab::Slab;
 use thiserror::Error;

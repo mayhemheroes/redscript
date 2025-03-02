@@ -8,19 +8,19 @@ use hashbrown::{HashMap, HashSet};
 use identity_hash::BuildIdentityHasher;
 use redscript_ast::{self as ast, Span, Spanned};
 
-use super::infer::{ClassItem, FieldItem, FuncItem, FuncItemKind, InferStageModule};
 use super::TypeInference;
+use super::infer::{ClassItem, FieldItem, FuncItem, FuncItemKind, InferStageModule};
 use crate::cte::{self, Evaluator};
 use crate::diagnostic::MissingMethod;
 use crate::lower::{FreeFunctionIndexes, InferredTypeApp, TypeEnv};
 use crate::modules::{Export, ModuleMap};
 use crate::utils::{Lazy, ScopedMap};
 use crate::{
-    ir, predef, Aggregate, AggregateFlags, CompileErrorReporter, CtxVar, Diagnostic, Enum, Field,
-    FieldFlags, FieldId, FieldMap, FreeFunction, FreeFunctionFlags, FreeFunctionIndex,
-    FunctionIndex, FunctionType, IndexMap, IndexSet, LowerError, Method, MethodFlags, MethodId,
-    MethodMap, Param, ParamFlags, PolyType, QualifiedName, Symbols, Type, TypeApp, TypeDef, TypeId,
-    TypeInterner, TypeRef, TypeSchema, TypeScope, Variance,
+    Aggregate, AggregateFlags, CompileErrorReporter, CtxVar, Diagnostic, Enum, Field, FieldFlags,
+    FieldId, FieldMap, FreeFunction, FreeFunctionFlags, FreeFunctionIndex, FunctionIndex,
+    FunctionType, IndexMap, IndexSet, LowerError, Method, MethodFlags, MethodId, MethodMap, Param,
+    ParamFlags, PolyType, QualifiedName, Symbols, Type, TypeApp, TypeDef, TypeId, TypeInterner,
+    TypeRef, TypeSchema, TypeScope, Variance, ir, predef,
 };
 
 pub(super) const WRAP_METHOD_ANNOTATION: &str = "wrapMethod";
@@ -1270,7 +1270,7 @@ impl<'ctx> NameResolution<'ctx> {
                     x.clone().into(),
                     y.clone().into(),
                     span,
-                ))
+                ));
             }
             _ => {}
         }

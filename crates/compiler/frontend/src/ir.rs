@@ -6,7 +6,7 @@ use redscript_ast::{self as ast, Span};
 
 use crate::lower::{InferredTypeApp, PolyType};
 use crate::symbols::{FieldId, FreeFunctionIndex, MethodId};
-use crate::types::{self, predef, TypeId};
+use crate::types::{self, TypeId, predef};
 use crate::{CoalesceError, RefType, Symbols};
 
 #[derive(Debug)]

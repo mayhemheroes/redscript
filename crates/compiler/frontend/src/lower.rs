@@ -19,11 +19,11 @@ use crate::symbols::{
     TypeSchema,
 };
 use crate::types::{
-    predef, CtxVar, RefType, Type, TypeApp, TypeId, TypeKind, Variance, MAX_FN_ARITY,
-    MAX_STATIC_ARRAY_SIZE,
+    CtxVar, MAX_FN_ARITY, MAX_STATIC_ARRAY_SIZE, RefType, Type, TypeApp, TypeId, TypeKind,
+    Variance, predef,
 };
 use crate::utils::{Lazy, ScopedMap};
-use crate::{ir, FreeFunction, IndexMap, IndexSet, LowerReporter, MethodId, Param};
+use crate::{FreeFunction, IndexMap, IndexSet, LowerReporter, MethodId, Param, ir};
 
 pub type InferredType<'ctx> = Type<'ctx, Poly>;
 pub type InferredTypeApp<'ctx> = TypeApp<'ctx, Poly>;
@@ -460,14 +460,14 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                         }
                     }
                     TypeSchema::Aggregate(agg) if agg.flags().is_abstract() => {
-                        return Err(Error::InstantiatingAbstract(typ.id(), *type_span))
+                        return Err(Error::InstantiatingAbstract(typ.id(), *type_span));
                     }
                     TypeSchema::Aggregate(_) if args.is_empty() => ir::Expr::NewClass {
                         class_type: typ.into(),
                         span: *span,
                     },
                     TypeSchema::Aggregate(_) => {
-                        return Err(Error::ClassConstructorHasArguments(*span))
+                        return Err(Error::ClassConstructorHasArguments(*span));
                     }
                     _ => return Err(Error::InvalidNewType(*type_span)),
                 };

@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
 
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 use arguments::Arguments;
 
 mod arguments;
@@ -32,10 +32,10 @@ fn main() -> anyhow::Result<()> {
             (r6_dir, None)
         }
     };
-    unsafe { run(&r6_dir, args) }
+    run(&r6_dir, args)
 }
 
-unsafe fn run(r6_dir: &Path, args: Option<Arguments>) -> anyhow::Result<()> {
+fn run(r6_dir: &Path, args: Option<Arguments>) -> anyhow::Result<()> {
     let api = capi::load()?;
 
     let settings_new = api.settings_new.context("missing 'settings_new'")?;
@@ -49,28 +49,32 @@ unsafe fn run(r6_dir: &Path, args: Option<Arguments>) -> anyhow::Result<()> {
     let free_result = api.free_result.context("missing 'free_result'")?;
 
     let root = c_path(r6_dir)?;
-    let settings = settings_new(root.as_ptr());
 
-    if let Some(args) = args {
-        if let Some(cache_file) = args.cache_file {
-            let cache_file = c_path(&cache_file)?;
-            set_custom_cache_file(settings, cache_file.as_ptr());
-        }
+    unsafe {
+        let settings = settings_new(root.as_ptr());
 
-        if let Some(script_paths_file) = args.script_paths_file {
-            for script_path in io::BufReader::new(File::open(script_paths_file)?)
-                .lines()
-                .map(|line| Ok(PathBuf::from(line?)))
-                .collect::<io::Result<Vec<_>>>()?
-            {
-                let script_path = c_path(&script_path)?;
-                add_script_path(settings, script_path.as_ptr());
+        if let Some(args) = args {
+            if let Some(cache_file) = args.cache_file {
+                let cache_file = c_path(&cache_file)?;
+                set_custom_cache_file(settings, cache_file.as_ptr());
+            }
+
+            if let Some(script_paths_file) = args.script_paths_file {
+                for script_path in io::BufReader::new(File::open(script_paths_file)?)
+                    .lines()
+                    .map(|line| Ok(PathBuf::from(line?)))
+                    .collect::<io::Result<Vec<_>>>()?
+                {
+                    let script_path = c_path(&script_path)?;
+                    add_script_path(settings, script_path.as_ptr());
+                }
             }
         }
+
+        let res = compile(settings);
+        free_result(res);
     }
 
-    let res = compile(settings);
-    free_result(res);
     Ok(())
 }
 

@@ -1,7 +1,7 @@
 use std::env;
 
 use redscript_ast::SourceMap;
-use redscript_formatter::{format_document, FormatSettings};
+use redscript_formatter::{FormatSettings, format_document};
 
 #[test]
 fn formatted_files() {

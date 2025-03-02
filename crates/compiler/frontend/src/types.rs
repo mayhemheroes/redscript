@@ -8,8 +8,8 @@ use derive_where::derive_where;
 use identity_hash::IdentityHashable;
 use redscript_ast as ast;
 
-use crate::utils::fmt::{sep_by, DisplayFn};
 use crate::utils::ScopedMap;
+use crate::utils::fmt::{DisplayFn, sep_by};
 use crate::{FrozenIndexSet, Symbols, TypeSchema};
 
 pub(super) const MAX_FN_ARITY: usize = 8;

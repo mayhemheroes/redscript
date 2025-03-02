@@ -3,7 +3,7 @@ use std::iter;
 use chumsky::prelude::*;
 use redscript_ast::{Case, ConditionalBlock, SourceBlock, SourceExpr, SourceStmt, Span, Stmt};
 
-use super::{ident_with_span, type_with_span, Parse};
+use super::{Parse, ident_with_span, type_with_span};
 use crate::lexer::Token;
 
 pub fn stmt_rec<'tok, 'src: 'tok>(
@@ -125,7 +125,7 @@ mod tests {
     use similar_asserts::assert_eq;
 
     use super::*;
-    use crate::{parse_stmt, Error, Span};
+    use crate::{Error, Span, parse_stmt};
 
     #[test]
     fn if_else_chain() {

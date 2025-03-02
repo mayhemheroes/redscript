@@ -9,9 +9,9 @@ use indexmap::Equivalent;
 use redscript_compiler_frontend::ast::{FileId, SourceMap, Span};
 use redscript_compiler_frontend::utils::ScopedMap;
 use redscript_compiler_frontend::{
-    ir, predef, Field, FreeFunction, FreeFunctionIndex, FunctionIndex, FunctionKind,
-    LoweredCompilationUnit, LoweredFunction, Method, MethodId, MonoType, Param, QualifiedName,
-    Symbols, TypeId, TypeSchema,
+    Field, FreeFunction, FreeFunctionIndex, FunctionIndex, FunctionKind, LoweredCompilationUnit,
+    LoweredFunction, Method, MethodId, MonoType, Param, QualifiedName, Symbols, TypeId, TypeSchema,
+    ir, predef,
 };
 use redscript_io::{
     Class as PoolClass, ClassFlags as PoolClassFlags, ClassIndex as PoolClassIndex,
@@ -23,11 +23,11 @@ use redscript_io::{
     SourceFileIndex as PoolSourceFileIndex, SourceReference, Type as PoolType,
     TypeIndex as PoolTypeIndex, TypeKind as PoolTypeKind, Visibility,
 };
-use smallvec::{smallvec, SmallVec};
+use smallvec::{SmallVec, smallvec};
 
-use crate::assemble::{assemble_block, AssembleError};
-use crate::inputs::{ClassMappings, Signature};
 use crate::IndexMap;
+use crate::assemble::{AssembleError, assemble_block};
+use crate::inputs::{ClassMappings, Signature};
 
 #[derive(Debug)]
 pub struct Monomorphizer<'ctx> {
@@ -317,7 +317,7 @@ impl<'ctx> Monomorphizer<'ctx> {
             TypeSchema::Aggregate(agg)
                 if !agg.flags().is_struct() && !agg.flags().is_never_ref() =>
             {
-                return self.type_(&MonoType::new(predef::REF, [typ.clone()]), symbols, bundle)
+                return self.type_(&MonoType::new(predef::REF, [typ.clone()]), symbols, bundle);
             }
             _ => {}
         }

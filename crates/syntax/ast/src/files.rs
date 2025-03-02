@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::{fmt, fs, io};
 
-use crate::span::FileId;
 use crate::Span;
+use crate::span::FileId;
 
 #[derive(Debug, Default)]
 pub struct SourceMap {

@@ -6,7 +6,7 @@ use redscript_ast::{
     SourceType, Span, StrPart, UnOp,
 };
 
-use super::{extended_ident, ident, type_with_span, Parse};
+use super::{Parse, extended_ident, ident, type_with_span};
 use crate::lexer::Token;
 use crate::parser_input;
 

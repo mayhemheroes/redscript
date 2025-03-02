@@ -11,7 +11,7 @@ use crate::index::{
 };
 use crate::instr::Instr;
 use crate::util::{self, FlagDependent, OptionalIndex, Prefixed};
-use crate::{Offset, Str, ENDIANESS};
+use crate::{ENDIANESS, Offset, Str};
 
 #[derive(Debug, Default, Clone, Copy, TryRead, TryWrite, Measure)]
 pub struct DefinitionHeader {
@@ -207,7 +207,7 @@ impl<'i, Ctx: Endianess> TryRead<'i, (Ctx, DefinitionHeader)> for Definition<'i>
             _ => {
                 return Err(byte::Error::BadInput {
                     err: "invalid definition type",
-                })
+                });
             }
         };
         Ok((result, *offset))

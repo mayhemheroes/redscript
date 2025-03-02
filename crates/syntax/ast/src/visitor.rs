@@ -360,7 +360,7 @@ impl<K: AstKind> AstNode<'_, '_, K> {
 impl AstNode<'_, '_, WithSpan> {
     pub fn span(&self) -> Span {
         match self {
-            Self::ItemDecl(&(_, span)) | Self::Stmt(&(_, span)) | Self::Expr(&(_, span)) => span,
+            Self::ItemDecl((_, span)) | Self::Stmt((_, span)) | Self::Expr((_, span)) => *span,
         }
     }
 }

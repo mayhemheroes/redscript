@@ -6,8 +6,8 @@ use redscript_compiler_api::ast::SourceMap;
 use redscript_compiler_api::{Diagnostic, Diagnostics};
 use thiserror::Error;
 
-use crate::hints::UserHints;
 use crate::SccSettings;
+use crate::hints::UserHints;
 
 #[derive(Debug)]
 pub struct ErrorReport<'ctx> {
@@ -43,11 +43,11 @@ impl fmt::Display for ErrorReport<'_> {
                 }
             } else {
                 writeln!(
-                f,
-                "You should check if these mods are outdated and update them if possible. They may \
+                    f,
+                    "You should check if these mods are outdated and update them if possible. They may \
                  also be incompatible with the current version of the game, in which case you \
                  should remove them and try again."
-            )?;
+                )?;
             }
         } else {
             writeln!(f, "Reason: {}", self.cause)?;

@@ -9,9 +9,9 @@ use smallvec::smallvec;
 use super::resolution::{Scope, THIS_IDENT, WRAPPED_METHOD_IDENT};
 use crate::lower::{Env, FreeFunctionIndexes, Lower};
 use crate::{
-    ir, CompileErrorReporter, Diagnostic, FieldId, FieldIndex, FreeFunction, FreeFunctionIndex,
+    CompileErrorReporter, Diagnostic, FieldId, FieldIndex, FreeFunction, FreeFunctionIndex,
     FunctionIndex, FunctionType, IndexMap, IndexSet, MethodId, PolyType, Symbols, Type, TypeId,
-    TypeRef, TypeScope,
+    TypeRef, TypeScope, ir,
 };
 
 #[derive(Debug)]

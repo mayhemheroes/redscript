@@ -21,8 +21,8 @@ pub use symbols::{
     Symbols, TypeDef, TypeSchema,
 };
 pub use types::{
-    predef, CtxVar, Immutable, Mono, MonoType, RefType, Type, TypeApp, TypeId, TypeIndex,
-    TypeInterner, TypeKind, Variance,
+    CtxVar, Immutable, Mono, MonoType, RefType, Type, TypeApp, TypeId, TypeIndex, TypeInterner,
+    TypeKind, Variance, predef,
 };
 
 type IndexMap<K, V, S = hashbrown::DefaultHashBuilder> = indexmap::IndexMap<K, V, S>;

@@ -16,7 +16,7 @@ use crate::index::{
     NzPoolIndex, ParameterIndex, PoolIndex, ResourceIndex, SourceFileIndex, StringIndex,
     TweakDbIndex, TypeIndex,
 };
-use crate::{util, Str, ENDIANESS};
+use crate::{ENDIANESS, Str, util};
 
 #[derive(Debug)]
 pub struct BundleReader<'i> {

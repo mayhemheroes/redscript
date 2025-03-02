@@ -5,12 +5,12 @@ use std::rc::Rc;
 use hashbrown::HashMap;
 use identity_hash::BuildIdentityHasher;
 use redscript_compiler_frontend::ast::SourceMap;
-use redscript_compiler_frontend::utils::fmt::{sep_by, DisplayFn};
+use redscript_compiler_frontend::utils::fmt::{DisplayFn, sep_by};
 use redscript_compiler_frontend::{
-    predef, Aggregate, AggregateFlags, Enum, Field, FieldFlags, FieldMap, FreeFunction,
-    FreeFunctionFlags, FreeFunctionIndex, FunctionIndex, FunctionMap, FunctionType, Immutable,
-    Method, MethodFlags, MethodId, Mono, MonoType, Param, ParamFlags, Symbols, Type, TypeApp,
-    TypeDef, TypeId, TypeInterner, TypeKind, TypeSchema,
+    Aggregate, AggregateFlags, Enum, Field, FieldFlags, FieldMap, FreeFunction, FreeFunctionFlags,
+    FreeFunctionIndex, FunctionIndex, FunctionMap, FunctionType, Immutable, Method, MethodFlags,
+    MethodId, Mono, MonoType, Param, ParamFlags, Symbols, Type, TypeApp, TypeDef, TypeId,
+    TypeInterner, TypeKind, TypeSchema, predef,
 };
 use redscript_io::{
     CNameIndex, ClassIndex as PoolClassIndex, EnumIndex as PoolEnumIndex, Function as PoolFunction,
@@ -19,8 +19,8 @@ use redscript_io::{
 };
 use thiserror::Error;
 
-use crate::monomorph::Monomorphizer;
 use crate::IndexMap;
+use crate::monomorph::Monomorphizer;
 
 const NEVER_REF_WHITELIST: [&str; 1] = ["ReactionData"];
 

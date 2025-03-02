@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::{fmt, mem};
 
-use pretty_dtoa::{dtoa, ftoa, FmtFloatConfig};
+use pretty_dtoa::{FmtFloatConfig, dtoa, ftoa};
 use redscript_ast::{
     Aggregate, Annotation, Assoc, AstKind, AstNode, AstVisitor, BinOp, Block, Constant, Enum,
     EnumVariant, Expr, Field, FileId, Function, FunctionBody, Import, Item, ItemDecl,
@@ -9,7 +9,7 @@ use redscript_ast::{
     SourceStmt, Span, Spanned, Stmt, StrPart, Type, TypeParam, UnOp, Variance, Visibility,
     WithSpan, Wrapper,
 };
-use redscript_parser::{lex_with_lf_and_comments, parse, parser, ParseResult, Token};
+use redscript_parser::{ParseResult, Token, lex_with_lf_and_comments, parse, parser};
 
 #[derive(Debug)]
 pub struct FormatSettings {

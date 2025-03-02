@@ -10,8 +10,8 @@ use redscript_ast::{
 };
 
 use super::{
-    extended_ident, extended_ident_with_span, ident, ident_with_span, type_params, type_with_span,
-    Parse,
+    Parse, extended_ident, extended_ident_with_span, ident, ident_with_span, type_params,
+    type_with_span,
 };
 use crate::lexer::Token;
 

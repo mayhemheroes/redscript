@@ -3,8 +3,8 @@ use std::mem;
 use byte::ctx::{Endianess, Len};
 use byte::{BytesExt, Measure, TryRead, TryWrite};
 
-use crate::index::NzPoolIndex;
 use crate::Str;
+use crate::index::NzPoolIndex;
 
 pub struct Prefixed<Ctx>(pub Ctx);
 
