@@ -62,7 +62,7 @@ impl<'ctx> CompilationInputs<'ctx> {
                         })?;
                         let id = interner.intern(name.as_ref());
                         let def = TypeDef::new([], TypeSchema::Primitive, []);
-                        inputs.symbols.add_type(id, def);
+                        inputs.symbols.add_type_if_none(id, def);
                     }
                     let typ = load_type::<Mono>(typ, bundle, interner)?;
 
