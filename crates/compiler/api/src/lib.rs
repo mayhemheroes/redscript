@@ -7,15 +7,14 @@ pub use redscript_compiler_backend::CompilationInputs;
 use redscript_compiler_backend::{AssembleError, PoolError, PoolMappings};
 use redscript_compiler_frontend::UnknownSource;
 pub use redscript_compiler_frontend::{
-    CompileErrorReporter, Diagnostic, FunctionType, LoweredCompilationUnit, LoweredFunction,
-    PolyType, Symbols, TypeId, TypeIndex, TypeInterner, TypeScope, infer_from_sources, ir,
-    parse_sources, process_sources, types,
+    CompileErrorReporter, Diagnostic, Evaluator, FunctionType, LoweredCompilationUnit,
+    LoweredFunction, PolyType, Symbols, TypeId, TypeIndex, TypeInterner, TypeScope,
+    infer_from_sources, ir, parse_one, parse_sources, process_sources, types,
 };
 use redscript_io::byte;
 pub use redscript_io::{SaveError, ScriptBundle};
 use thiserror::Error;
 
-#[derive(Debug)]
 pub struct Compilation<'ctx> {
     sources: &'ctx SourceMap,
     symbols: Symbols<'ctx>,
@@ -170,11 +169,11 @@ impl<'ctx> From<AssembleError<'ctx>> for FlushError<'ctx> {
 }
 
 pub trait SourceMapExt {
-    fn populate_boot_lib(&mut self);
+    fn populate_boot_lib(&self);
 }
 
 impl SourceMapExt for SourceMap {
-    fn populate_boot_lib(&mut self) {
+    fn populate_boot_lib(&self) {
         self.push_front(
             "boot.reds",
             include_str!("../../../../assets/reds/boot.reds"),

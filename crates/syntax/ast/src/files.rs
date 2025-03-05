@@ -1,10 +1,12 @@
 use std::path::{Path, PathBuf};
 use std::{fmt, fs, io};
 
+use elsa::FrozenVec;
+
 use crate::Span;
 use crate::span::FileId;
 
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct SourceMap {
     files: StableDeque<File>,
 }
@@ -15,7 +17,7 @@ impl SourceMap {
     }
 
     pub fn from_files(it: impl IntoIterator<Item = impl Into<PathBuf>>) -> io::Result<Self> {
-        let mut files = Self::new();
+        let files = Self::new();
         for path in it {
             let path = path.into();
             let source = fs::read_to_string(&path)?;
@@ -41,11 +43,11 @@ impl SourceMap {
         Self::from_files(it)
     }
 
-    pub fn push_front(&mut self, path: impl Into<PathBuf>, source: impl Into<String>) -> FileId {
+    pub fn push_front(&self, path: impl Into<PathBuf>, source: impl Into<String>) -> FileId {
         FileId(self.files.push_front(File::new(path, source)))
     }
 
-    pub fn push_back(&mut self, path: impl Into<PathBuf>, source: impl Into<String>) -> FileId {
+    pub fn push_back(&self, path: impl Into<PathBuf>, source: impl Into<String>) -> FileId {
         FileId(self.files.push_back(File::new(path, source)))
     }
 
@@ -71,7 +73,6 @@ impl SourceMap {
     }
 }
 
-#[derive(Debug)]
 pub struct DisplaySourceMap<'a> {
     map: &'a SourceMap,
     root: &'a Path,
@@ -172,10 +173,9 @@ impl fmt::Display for SourceLoc {
     }
 }
 
-#[derive(Debug)]
 struct StableDeque<T> {
-    front: Vec<T>,
-    back: Vec<T>,
+    front: FrozenVec<Box<T>>,
+    back: FrozenVec<Box<T>>,
 }
 
 impl<T> StableDeque<T> {
@@ -187,13 +187,13 @@ impl<T> StableDeque<T> {
         }
     }
 
-    fn push_front(&mut self, value: T) -> i32 {
-        self.front.push(value);
+    fn push_front(&self, value: T) -> i32 {
+        self.front.push(Box::new(value));
         -i32::try_from(self.front.len()).expect("deque size overflows i32")
     }
 
-    fn push_back(&mut self, value: T) -> i32 {
-        self.back.push(value);
+    fn push_back(&self, value: T) -> i32 {
+        self.back.push(Box::new(value));
         i32::try_from(self.back.len()).expect("deque size overflows i32") - 1
     }
 
@@ -210,11 +210,11 @@ impl<T> StableDeque<T> {
     }
 }
 
-impl Default for StableDeque<File> {
+impl<A> Default for StableDeque<A> {
     fn default() -> Self {
         Self {
-            front: Vec::new(),
-            back: Vec::new(),
+            front: FrozenVec::default(),
+            back: FrozenVec::default(),
         }
     }
 }

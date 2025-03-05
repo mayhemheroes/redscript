@@ -8,6 +8,7 @@ mod symbols;
 pub mod types;
 pub mod utils;
 
+pub use cte::Evaluator;
 pub use diagnostic::{Diagnostic, Reporter, UnknownSource};
 pub use lower::{CoalesceError, Error as LowerError, PolyType, TypeRef};
 pub use redscript_ast as ast;
@@ -43,28 +44,34 @@ pub fn infer_from_sources<'ctx>(
     Vec<Diagnostic<'ctx>>,
 ) {
     let mut reporter = CompileErrorReporter::default();
-    let modules = parse_sources(sources, &mut reporter);
-    process_sources(modules, interner, symbols, reporter)
+    let mods = parse_sources(sources, &mut reporter);
+    let evaluator = Evaluator::from_modules(&mods);
+    process_sources(mods, evaluator, interner, symbols, reporter)
 }
 
 pub fn parse_sources<'ctx>(
     sources: &'ctx ast::SourceMap,
     reporter: &mut CompileErrorReporter<'ctx>,
 ) -> Vec<ast::SourceModule<'ctx>> {
-    let mut modules = vec![];
-    for (id, file) in sources.files() {
-        let (module, errs) = parser::parse_module(file.source(), id);
-        reporter.report_many(errs);
+    sources
+        .files()
+        .filter_map(|(id, file)| parse_one(id, file, reporter))
+        .collect()
+}
 
-        if let Some(module) = module {
-            modules.push(module);
-        }
-    }
-    modules
+pub fn parse_one<'ctx>(
+    id: ast::FileId,
+    file: &'ctx ast::File,
+    reporter: &mut CompileErrorReporter<'ctx>,
+) -> Option<ast::SourceModule<'ctx>> {
+    let (module, errs) = parser::parse_module(file.source(), id);
+    reporter.report_many(errs);
+    module
 }
 
 pub fn process_sources<'ctx>(
-    modules: Vec<ast::SourceModule<'ctx>>,
+    modules: impl IntoIterator<Item = ast::SourceModule<'ctx>>,
+    evaluator: Evaluator<'ctx>,
     interner: &'ctx TypeInterner,
     symbols: Symbols<'ctx>,
     reporter: CompileErrorReporter<'ctx>,
@@ -74,7 +81,7 @@ pub fn process_sources<'ctx>(
     Vec<Diagnostic<'ctx>>,
 ) {
     let mut scope = Scope::new(&symbols);
-    let mut resolution = NameResolution::new(modules, symbols, reporter, interner);
+    let mut resolution = NameResolution::new(modules, evaluator, symbols, reporter, interner);
 
     resolution.populate_globals(&mut scope);
     resolution.progress(&scope).finish(&scope)

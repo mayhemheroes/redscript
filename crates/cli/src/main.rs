@@ -98,7 +98,7 @@ fn main() -> anyhow::Result<()> {
 fn compile(opts: CompileOpts) -> anyhow::Result<()> {
     let (map, _f) = Map::with_options().open(opts.bundle)?;
     let interner = TypeInterner::default();
-    let mut sources = SourceMap::from_paths_recursively(&opts.src)?;
+    let sources = SourceMap::from_paths_recursively(&opts.src)?;
     sources.populate_boot_lib();
 
     match Compilation::new(&map, &sources, &interner)?.flush(opts.output) {
@@ -118,7 +118,7 @@ fn compile(opts: CompileOpts) -> anyhow::Result<()> {
 fn lint(opts: LintOpts) -> anyhow::Result<()> {
     let (map, _f) = Map::with_options().open(opts.bundle)?;
     let interner = TypeInterner::default();
-    let mut sources = SourceMap::from_files(&opts.src)?;
+    let sources = SourceMap::from_files(&opts.src)?;
     sources.populate_boot_lib();
 
     Compilation::new(&map, &sources, &interner)?

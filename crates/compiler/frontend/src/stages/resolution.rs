@@ -46,23 +46,18 @@ pub struct NameResolution<'ctx> {
 
 impl<'ctx> NameResolution<'ctx> {
     pub fn new(
-        modules: Vec<ast::SourceModule<'ctx>>,
+        modules: impl IntoIterator<Item = ast::SourceModule<'ctx>>,
+        evaluator: Evaluator<'ctx>,
         symbols: Symbols<'ctx>,
         reporter: CompileErrorReporter<'ctx>,
         interner: &'ctx TypeInterner,
     ) -> Self {
-        let names = modules
-            .iter()
-            .filter_map(|m| m.path.as_ref())
-            .map(|path| path.segments.clone())
-            .collect::<HashSet<_>>();
-
         let mut this = Self {
             modules: vec![],
 
             symbols,
             module_map: ModuleMap::default(),
-            evaluator: Evaluator::new(names),
+            evaluator,
             reporter,
         };
         for module in modules {

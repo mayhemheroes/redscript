@@ -61,7 +61,7 @@ fn compile_inner(settings: &SccSettings) -> anyhow::Result<SccOutput> {
     let input_file = prepare_input_cache(settings, &mut ts_file)?;
     let output_file = settings.output_cache_file_path();
 
-    let mut sources = SourceMap::from_paths_recursively(settings.script_paths())?;
+    let sources = SourceMap::from_paths_recursively(settings.script_paths())?;
     log::info!(
         "Compiling {} files:\n{}",
         sources.len(),

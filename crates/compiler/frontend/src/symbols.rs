@@ -16,7 +16,7 @@ use crate::types::{CtxVar, Type, TypeApp, TypeId};
 use crate::utils::fmt::sep_by;
 use crate::{Immutable, IndexMap, MonoType, TypeKind, Variance, ir, predef};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Symbols<'ctx> {
     types: HashMap<TypeId<'ctx>, TypeDef<'ctx>, BuildIdentityHasher<usize>>,
     free_funcs: FreeFunctionMap<'ctx>,
@@ -343,7 +343,7 @@ impl<'sym, 'ctx> Iterator for BaseIter<'sym, 'ctx> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TypeDef<'ctx> {
     params: Box<[Rc<CtxVar<'ctx>>]>,
     schema: TypeSchema<'ctx>,
@@ -406,7 +406,7 @@ impl<'ctx> TypeDef<'ctx> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TypeSchema<'ctx> {
     Aggregate(Box<Aggregate<'ctx>>),
     Enum(Box<Enum<'ctx>>),
@@ -443,7 +443,7 @@ impl<'ctx> TypeSchema<'ctx> {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Enum<'ctx> {
     variants: IndexMap<&'ctx str, i64>,
 }
@@ -473,7 +473,7 @@ impl<'ctx> Enum<'ctx> {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Aggregate<'ctx> {
     flags: AggregateFlags,
     base: Option<TypeApp<'ctx>>,
@@ -554,7 +554,7 @@ impl<'ctx> Aggregate<'ctx> {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct FieldMap<'ctx> {
     map: IndexMap<&'ctx str, Field<'ctx>>,
 }
@@ -611,7 +611,7 @@ impl<'ctx> FieldMap<'ctx> {
 pub type MethodMap<'ctx> = FunctionMap<&'ctx str, Method<'ctx>>;
 pub type FreeFunctionMap<'ctx> = FunctionMap<QualifiedName<'ctx>, FreeFunction<'ctx>>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FunctionMap<N, V> {
     map: IndexMap<N, Slab<V>>,
 }
@@ -833,7 +833,7 @@ impl Default for FunctionType<'_> {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct FreeFunction<'ctx> {
     flags: FreeFunctionFlags,
     type_: FunctionType<'ctx>,
@@ -917,7 +917,7 @@ impl<'ctx> FreeFunction<'ctx> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Method<'ctx> {
     flags: MethodFlags,
     typ: FunctionType<'ctx>,
@@ -1118,7 +1118,7 @@ impl<K: TypeKind> fmt::Display for Param<'_, K> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Field<'ctx> {
     flags: FieldFlags,
     typ: Type<'ctx>,

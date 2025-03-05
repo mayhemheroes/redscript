@@ -13,7 +13,7 @@ pub(super) type ParamT<'src, A> = <A as AstKind>::Inner<Param<'src, A>>;
 pub(super) type StmtT<'src, A> = <A as AstKind>::Inner<Stmt<'src, A>>;
 pub(super) type TypeT<'src, A> = <A as AstKind>::Inner<Type<'src, A>>;
 
-#[derive_where(Debug, PartialEq)]
+#[derive_where(Debug, Clone, PartialEq)]
 pub struct Module<'src, K: AstKind = Identity> {
     pub path: Option<Path<'src>>,
     pub items: Box<[ItemDeclT<'src, K>]>,
@@ -58,14 +58,14 @@ impl<'src> Module<'src, WithSpan> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Import<'src> {
     Exact(Path<'src>),
     Select(Path<'src>, Box<[&'src str]>),
     All(Path<'src>),
 }
 
-#[derive_where(Debug, PartialEq)]
+#[derive_where(Debug, Clone, PartialEq)]
 pub struct ItemDecl<'src, K: AstKind = Identity> {
     pub annotations: Vec<AnnotationT<'src, K>>,
     pub visibility: Option<Visibility>,
@@ -139,7 +139,7 @@ impl<'src> ItemDecl<'src, WithSpan> {
     }
 }
 
-#[derive_where(Debug, PartialEq)]
+#[derive_where(Debug, Clone, PartialEq)]
 pub enum Item<'src, K: AstKind = Identity> {
     Import(Import<'src>),
     Class(Aggregate<'src, K>),
@@ -162,7 +162,7 @@ impl<'src, K: AstKind> Item<'src, K> {
     }
 }
 
-#[derive_where(Debug, PartialEq)]
+#[derive_where(Debug, Clone, PartialEq)]
 pub struct Aggregate<'src, K: AstKind = Identity> {
     pub name: K::Inner<&'src str>,
     pub type_params: Box<[TypeParam<'src, K>]>,
@@ -223,7 +223,7 @@ impl<'src> Aggregate<'src, WithSpan> {
     }
 }
 
-#[derive_where(Debug, PartialEq)]
+#[derive_where(Debug, Clone, PartialEq)]
 pub struct Field<'src, K: AstKind = Identity> {
     pub name: K::Inner<&'src str>,
     pub typ: Box<TypeT<'src, K>>,
@@ -249,7 +249,7 @@ impl<'src, K: AstKind> Field<'src, K> {
     }
 }
 
-#[derive_where(Debug, PartialEq)]
+#[derive_where(Debug, Clone, PartialEq)]
 pub struct Function<'src, K: AstKind = Identity> {
     pub name: K::Inner<&'src str>,
     pub type_params: Box<[TypeParam<'src, K>]>,
@@ -299,7 +299,7 @@ impl<'src, K: AstKind> Function<'src, K> {
     }
 }
 
-#[derive_where(Debug, PartialEq)]
+#[derive_where(Debug, Clone, PartialEq)]
 pub enum FunctionBody<'src, K: AstKind = Identity> {
     Block(Block<'src, K>),
     Inline(Box<ExprT<'src, K>>),
@@ -326,7 +326,7 @@ impl<'src> FunctionBody<'src, WithSpan> {
     }
 }
 
-#[derive_where(Debug, PartialEq)]
+#[derive_where(Debug, Clone, PartialEq)]
 pub struct Enum<'src, K: AstKind = Identity> {
     pub name: K::Inner<&'src str>,
     pub variants: Box<[K::Inner<EnumVariant<'src>>]>,
@@ -357,7 +357,7 @@ impl<'src, K: AstKind> Enum<'src, K> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EnumVariant<'src> {
     pub name: &'src str,
     pub value: Option<i32>,
@@ -370,7 +370,7 @@ impl<'src> EnumVariant<'src> {
     }
 }
 
-#[derive_where(Debug, PartialEq)]
+#[derive_where(Debug, Clone, PartialEq)]
 pub struct Annotation<'src, K: AstKind = Identity> {
     pub name: &'src str,
     pub args: Box<[ExprT<'src, K>]>,
@@ -398,7 +398,7 @@ impl<'src, K: AstKind> Annotation<'src, K> {
     }
 }
 
-#[derive_where(Debug, PartialEq)]
+#[derive_where(Debug, Clone, PartialEq)]
 pub enum Type<'src, K: AstKind = Identity> {
     Named {
         name: &'src str,
@@ -484,7 +484,7 @@ impl<'src> Type<'src, WithSpan> {
         }
     }
 }
-#[derive_where(Debug, PartialEq)]
+#[derive_where(Debug, Clone, PartialEq)]
 pub struct TypeParam<'src, K: AstKind = Identity> {
     pub variance: Variance,
     pub name: K::Inner<&'src str>,
@@ -523,7 +523,7 @@ pub enum Variance {
     Invariant,
 }
 
-#[derive_where(Debug, PartialEq)]
+#[derive_where(Debug, Clone, PartialEq)]
 pub struct Param<'src, K: AstKind = Identity> {
     pub name: &'src str,
     pub typ: Option<TypeT<'src, K>>,
@@ -549,7 +549,7 @@ impl<'src, K: AstKind> Param<'src, K> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Path<'src> {
     pub segments: Box<[&'src str]>,
 }
@@ -570,7 +570,7 @@ impl<'stc> AsRef<[&'stc str]> for Path<'stc> {
     }
 }
 
-#[derive_where(Debug, PartialEq)]
+#[derive_where(Debug, Clone, PartialEq)]
 pub struct Block<'src, K: AstKind = Identity> {
     pub stmts: Box<[StmtT<'src, K>]>,
 }
@@ -619,7 +619,7 @@ impl<'src> Block<'src, WithSpan> {
     }
 }
 
-#[derive_where(Debug, PartialEq)]
+#[derive_where(Debug, Clone, PartialEq)]
 pub enum Stmt<'src, K: AstKind = Identity> {
     Let {
         name: K::Inner<&'src str>,
@@ -756,7 +756,7 @@ impl<'src> Stmt<'src, WithSpan> {
     }
 }
 
-#[derive_where(Debug, PartialEq)]
+#[derive_where(Debug, Clone, PartialEq)]
 pub struct ConditionalBlock<'src, K: AstKind = Identity> {
     pub cond: ExprT<'src, K>,
     pub body: Block<'src, K>,
@@ -786,7 +786,7 @@ impl<'src> ConditionalBlock<'src, WithSpan> {
     }
 }
 
-#[derive_where(Debug, PartialEq)]
+#[derive_where(Debug, Clone, PartialEq)]
 pub struct Case<'src, K: AstKind = Identity> {
     pub label: ExprT<'src, K>,
     pub body: Box<[StmtT<'src, K>]>,
@@ -826,7 +826,7 @@ impl<'src> Case<'src, WithSpan> {
     }
 }
 
-#[derive_where(Debug, PartialEq)]
+#[derive_where(Debug, Clone, PartialEq)]
 pub enum Expr<'src, K: AstKind = Identity> {
     Ident(&'src str),
     Constant(Constant<'src>),
@@ -1087,7 +1087,7 @@ impl<'src> Expr<'src, WithSpan> {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Constant<'src> {
     String(Cow<'src, str>),
     CName(Cow<'src, str>),
@@ -1102,7 +1102,7 @@ pub enum Constant<'src> {
     Bool(bool),
 }
 
-#[derive_where(Debug, PartialEq)]
+#[derive_where(Debug, Clone, PartialEq)]
 pub enum StrPart<'src, K: AstKind = Identity> {
     Expr(ExprT<'src, K>),
     Str(Cow<'src, str>),
@@ -1239,9 +1239,9 @@ bitflags! {
 }
 
 pub trait AstKind {
-    type Inner<A>: Wrapper<A> + fmt::Debug + PartialEq
+    type Inner<A>: Wrapper<A> + fmt::Debug + Clone + PartialEq
     where
-        A: fmt::Debug + PartialEq;
+        A: fmt::Debug + Clone + PartialEq;
 }
 
 pub struct Identity;
@@ -1250,7 +1250,7 @@ impl AstKind for Identity {
     type Inner<A>
         = A
     where
-        A: fmt::Debug + PartialEq;
+        A: fmt::Debug + Clone + PartialEq;
 }
 
 pub struct WithSpan;
@@ -1259,7 +1259,7 @@ impl AstKind for WithSpan {
     type Inner<A>
         = Spanned<A>
     where
-        A: fmt::Debug + PartialEq;
+        A: fmt::Debug + Clone + PartialEq;
 }
 
 pub trait Wrapper<A> {

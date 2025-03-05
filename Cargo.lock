@@ -1184,6 +1184,7 @@ dependencies = [
  "bitflags 2.9.0",
  "chumsky",
  "derive-where",
+ "elsa",
  "walkdir",
 ]
 

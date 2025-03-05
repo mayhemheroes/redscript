@@ -9,7 +9,7 @@ fn compilation_errors() {
     insta::glob!("data/*.reds", |path| {
         let current = env::current_dir().unwrap().canonicalize().unwrap();
         let relative = path.strip_prefix(&current).unwrap();
-        let mut sources = SourceMap::from_files(&[relative]).unwrap();
+        let sources = SourceMap::from_files(&[relative]).unwrap();
         sources.populate_boot_lib();
 
         let interner = TypeInterner::default();

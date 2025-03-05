@@ -36,7 +36,6 @@ pub fn assemble_block<'ctx>(
     assembler.into_code()
 }
 
-#[derive(Debug)]
 struct Assembler<'scope, 'ctx> {
     code: Vec<Instr<Label>>,
     locals: Vec<(ir::Local, PoolLocalIndex)>,

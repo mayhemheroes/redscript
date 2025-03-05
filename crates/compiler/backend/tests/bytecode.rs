@@ -15,7 +15,7 @@ use redscript_io::{
 #[test]
 fn bytecode() {
     insta::glob!("data/*.reds", |path| {
-        let mut sources = SourceMap::from_files(&[path]).unwrap();
+        let sources = SourceMap::from_files(&[path]).unwrap();
         sources.populate_boot_lib();
 
         let interner = TypeInterner::default();

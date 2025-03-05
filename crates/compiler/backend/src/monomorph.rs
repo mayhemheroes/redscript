@@ -29,7 +29,6 @@ use crate::IndexMap;
 use crate::assemble::{AssembleError, assemble_block};
 use crate::inputs::{ClassMappings, Signature};
 
-#[derive(Debug)]
 pub struct Monomorphizer<'ctx> {
     sources: &'ctx SourceMap,
     files: HashMap<FileId, PoolSourceFileIndex, BuildIdentityHasher<i32>>,

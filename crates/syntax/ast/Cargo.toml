@@ -7,6 +7,7 @@ edition.workspace = true
 [dependencies]
 derive-where.workspace = true
 bitflags.workspace = true
+elsa.workspace = true
 chumsky = { workspace = true, optional = true }
 walkdir = { workspace = true, optional = true }
 

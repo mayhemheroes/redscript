@@ -12,6 +12,18 @@ impl<'a> Evaluator<'a> {
         Self { modules }
     }
 
+    pub fn from_modules<'b>(modules: impl IntoIterator<Item = &'b ast::SourceModule<'a>>) -> Self
+    where
+        'a: 'b,
+    {
+        let modules = modules
+            .into_iter()
+            .filter_map(|m| m.path.as_ref())
+            .map(|path| path.segments.clone())
+            .collect::<HashSet<_>>();
+        Self { modules }
+    }
+
     pub fn eval(&self, (expr, span): &Spanned<ast::SourceExpr<'_>>) -> Result<Value, Error> {
         let res = match expr {
             ast::Expr::Constant(ast::Constant::Bool(b)) => Value::Bool(*b),
