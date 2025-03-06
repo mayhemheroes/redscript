@@ -5,7 +5,7 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
-redscript-compiler-api = { workspace = true, features = ["walkdir"] }
+redscript-compiler-api = { workspace = true, features = ["ignore"] }
 
 log.workspace = true
 thiserror.workspace = true
@@ -16,7 +16,6 @@ serde = { workspace = true, features = ["derive"] }
 toml = { workspace = true, features = ["parse"] }
 flexi_logger.workspace = true
 vmap.workspace = true
-walkdir.workspace = true
 file-id.workspace = true
 fd-lock.workspace = true
 msgbox.workspace = true

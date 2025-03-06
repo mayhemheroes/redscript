@@ -1,18 +1,18 @@
 [workspace]
 resolver = "2"
 members = [
-  "crates/syntax/ast",
-  "crates/syntax/parser",
-  "crates/syntax/formatter",
-  "crates/syntax/formatter-cli",
-  "crates/io",
-  "crates/compiler/frontend",
-  "crates/compiler/backend",
-  "crates/compiler/api",
-  "crates/cli",
-  "crates/scc/shared",
-  "crates/scc/capi",
-  "crates/scc/cli",
+    "crates/syntax/ast",
+    "crates/syntax/parser",
+    "crates/syntax/formatter",
+    "crates/syntax/formatter-cli",
+    "crates/io",
+    "crates/compiler/frontend",
+    "crates/compiler/backend",
+    "crates/compiler/api",
+    "crates/cli",
+    "crates/scc/shared",
+    "crates/scc/capi",
+    "crates/scc/cli",
 ]
 
 [workspace.package]
@@ -51,7 +51,7 @@ flexi_logger = { version = "0.29", default-features = false }
 argh = "0.1"
 chumsky = { version = "1.0.0-alpha.7", features = ["label"] }
 crc32fast = "1"
-walkdir = "2"
+ignore = "0.4"
 vmap = "0.6"
 file-id = "0.2"
 fd-lock = "4"

@@ -26,19 +26,19 @@ impl SourceMap {
         Ok(files)
     }
 
-    #[cfg(feature = "walkdir")]
+    #[cfg(feature = "ignore")]
     pub fn from_paths_recursively(
         it: impl IntoIterator<Item = impl Into<PathBuf>>,
     ) -> io::Result<Self> {
         use std::ffi::OsStr;
 
         let it = it.into_iter().flat_map(|path| {
-            walkdir::WalkDir::new(path.into())
+            ignore::WalkBuilder::new(path.into())
                 .follow_links(true)
-                .into_iter()
+                .build()
                 .filter_map(Result::ok)
                 .filter(|entry| entry.path().extension() == Some(OsStr::new("reds")))
-                .map(walkdir::DirEntry::into_path)
+                .map(ignore::DirEntry::into_path)
         });
         Self::from_files(it)
     }

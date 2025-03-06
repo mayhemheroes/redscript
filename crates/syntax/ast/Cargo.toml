@@ -9,12 +9,12 @@ derive-where.workspace = true
 bitflags.workspace = true
 elsa.workspace = true
 chumsky = { workspace = true, optional = true }
-walkdir = { workspace = true, optional = true }
+ignore = { workspace = true, optional = true }
 
 [lints]
 workspace = true
 
 [features]
 chumsky = ["dep:chumsky"]
-walkdir = ["dep:walkdir"]
+ignore = ["dep:ignore"]
 testing = []
