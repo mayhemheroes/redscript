@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::process::ExitCode;
 
 use argh::FromArgs;
 use mimalloc::MiMalloc;
@@ -76,7 +77,7 @@ struct LintOpts {
     bundle: PathBuf,
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<ExitCode> {
     let colors = fern::colors::ColoredLevelConfig::default();
     fern::Dispatch::new()
         .format(move |out, message, record| {
@@ -95,7 +96,7 @@ fn main() -> anyhow::Result<()> {
     }
 }
 
-fn compile(opts: CompileOpts) -> anyhow::Result<()> {
+fn compile(opts: CompileOpts) -> anyhow::Result<ExitCode> {
     let (map, _f) = Map::with_options().open(opts.bundle)?;
     let interner = TypeInterner::default();
     let sources = SourceMap::from_paths_recursively(&opts.src)?;
@@ -105,24 +106,30 @@ fn compile(opts: CompileOpts) -> anyhow::Result<()> {
         Ok((_, diagnostics)) => {
             diagnostics.dump(&sources)?;
             log::info!("Compilation successful");
+            Ok(ExitCode::SUCCESS)
         }
         Err(FlushError::CompilationErrors(diagnostics)) => {
             diagnostics.dump(&sources)?;
-            log::error!("Compilation failed");
+            log::info!("Compilation failed");
+            Ok(ExitCode::FAILURE)
         }
         Err(err) => anyhow::bail!("{err}"),
-    };
-    Ok(())
+    }
 }
 
-fn lint(opts: LintOpts) -> anyhow::Result<()> {
+fn lint(opts: LintOpts) -> anyhow::Result<ExitCode> {
     let (map, _f) = Map::with_options().open(opts.bundle)?;
     let interner = TypeInterner::default();
     let sources = SourceMap::from_files(&opts.src)?;
     sources.populate_boot_lib();
 
-    Compilation::new(&map, &sources, &interner)?
-        .diagnostics()
-        .dump(&sources)?;
-    Ok(())
+    let comp = Compilation::new(&map, &sources, &interner)?;
+    comp.diagnostics().dump(&sources)?;
+    if comp.diagnostics().has_fatal_errors() {
+        log::info!("Compilation failed");
+        Ok(ExitCode::FAILURE)
+    } else {
+        log::info!("Compilation successful");
+        Ok(ExitCode::SUCCESS)
+    }
 }
