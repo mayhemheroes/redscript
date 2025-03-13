@@ -105,7 +105,7 @@ impl<'ctx> Diagnostics<'ctx> {
                 warnings += 1;
             }
         }
-        log::info!("{} warnings, {} errors", warnings, errors);
+        log::info!("Completed with {} warnings and {} errors", warnings, errors);
         Ok(())
     }
 

@@ -161,7 +161,7 @@ fn compile(opts: CompileOpts) -> anyhow::Result<ExitCode> {
 fn lint(opts: LintOpts) -> anyhow::Result<ExitCode> {
     let (map, _f) = Map::with_options().open(opts.bundle)?;
     let interner = TypeInterner::default();
-    let sources = SourceMap::from_files(&opts.src)?;
+    let sources = SourceMap::from_paths_recursively(&opts.src)?;
     sources.populate_boot_lib();
 
     let comp = Compilation::new(&map, &sources, &interner)?;
