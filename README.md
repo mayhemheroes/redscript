@@ -3,7 +3,7 @@
 
 <h3>REDscript</h3>
 
-REDscript is a statically-typed, object-oriented programming language designed for developing scripts for the REDengine, CD Projekt RED’s game engine used in Cyberpunk 2077. If you want to learn more about the language, visit the [official wiki](https://wiki.redmodding.org/redscript).
+REDscript is a statically-typed, object-oriented programming language designed for developing scripts for the REDengine, CD Projekt's game engine used in Cyberpunk 2077. If you want to learn more about the language, visit the [official wiki](https://wiki.redmodding.org/redscript).
 
 ## Installation
 
@@ -21,14 +21,14 @@ REDscript provides extensive editor tooling, including a language server and deb
 
 This project includes various tools for working with REDscript, such as a compiler, a decompiler, and a formatter. These are organized as modular Rust crates located in the `crates` directory:
 
-- **`cli`** - A command-line interface serving as the entry point for all tools in this project.
-- **`compiler/frontend`** - Parses REDscript source code and performs static analysis, lowering the syntax to an intermediate representation.
+- **`cli`** - Exposes a command-line interface serving as the entry point for all tools in this project.
+- **`compiler/frontend`** - Performs static analysis on REDscript syntax, lowering it to an intermediate representation.
 - **`compiler/backend`** - Generates bytecode from the intermediate representation and handles monomorphization for generic functions and types.
 - **`compiler/api`** - Provides a high-level API for interacting seamlessly with the compiler.
-- **`io`** - A module dedicated to reading and writing the binary files following the REDengine format.
-- **`scc/cli`** - A CLI that acts as a drop-in replacement for the original CD Projekt RED's REDscript compiler.
-- **`scc/capi`** - A C API with an interface similar to the `scc` CLI, but with some additional capabilities like source mapping.
-- **`scc/shared`** - Common code used across the scc C API and CLI.
+- **`io`** - Reads and writes binary files in the native REDengine format.
+- **`scc/cli`** - Exposes a CLI that acts as a drop-in replacement for the original compiler made by CD Projekt.
+- **`scc/capi`** - Exposes a C API with an interface similar to the `scc` CLI, but with some additional capabilities like source mapping.
+- **`scc/shared`** - Contains common code used across the scc C API and CLI.
 - **`syntax/ast`** - Defines the Abstract Syntax Tree (AST) for REDscript.
-- **`syntax/formatter`** - A code formatter for REDscript.
-- **`syntax/parser`** - A parser dedicated to processing REDscript code.
+- **`syntax/formatter`** - Formats REDscript source code according to configuration.
+- **`syntax/parser`** - Parses REDscript source code into the AST.
