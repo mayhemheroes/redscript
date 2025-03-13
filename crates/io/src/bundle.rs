@@ -460,6 +460,10 @@ impl<'i, A> StringPool<'i, A> {
         }
     }
 
+    pub fn clear(&mut self) {
+        self.strings.clear();
+    }
+
     fn write<Ctx>(
         &self,
         offset: &mut usize,
