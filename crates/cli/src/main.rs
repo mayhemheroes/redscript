@@ -204,7 +204,7 @@ fn format(opts: FormatOpts) -> anyhow::Result<ExitCode> {
         let formatted = module.to_string();
 
         if opts.check {
-            if formatted != file.source() {
+            if formatted.trim() != file.source().trim() {
                 failed = true;
                 eprintln!("[ERROR] At {}", file.path().display());
                 eprintln!("file is not formatted correctly");
