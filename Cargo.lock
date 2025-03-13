@@ -1220,7 +1220,7 @@ dependencies = [
 
 [[package]]
 name = "redscript-ast"
-version = "1.0.0-preview4"
+version = "1.0.0-preview5"
 dependencies = [
  "bitflags 2.9.0",
  "chumsky",
@@ -1231,7 +1231,7 @@ dependencies = [
 
 [[package]]
 name = "redscript-cli"
-version = "1.0.0-preview4"
+version = "1.0.0-preview5"
 dependencies = [
  "anyhow",
  "argh",
@@ -1245,7 +1245,7 @@ dependencies = [
 
 [[package]]
 name = "redscript-compiler-api"
-version = "1.0.0-preview4"
+version = "1.0.0-preview5"
 dependencies = [
  "log",
  "redscript-ast",
@@ -1258,7 +1258,7 @@ dependencies = [
 
 [[package]]
 name = "redscript-compiler-backend"
-version = "1.0.0-preview4"
+version = "1.0.0-preview5"
 dependencies = [
  "hashbrown 0.15.2",
  "identity-hash",
@@ -1275,7 +1275,7 @@ dependencies = [
 
 [[package]]
 name = "redscript-compiler-frontend"
-version = "1.0.0-preview4"
+version = "1.0.0-preview5"
 dependencies = [
  "bitfield-struct",
  "derive-where",
@@ -1295,7 +1295,7 @@ dependencies = [
 
 [[package]]
 name = "redscript-formatter"
-version = "1.0.0-preview4"
+version = "1.0.0-preview5"
 dependencies = [
  "insta",
  "pretty_dtoa",
@@ -1305,7 +1305,7 @@ dependencies = [
 
 [[package]]
 name = "redscript-io"
-version = "1.0.0-preview4"
+version = "1.0.0-preview5"
 dependencies = [
  "argh",
  "bitfield-struct",
@@ -1319,7 +1319,7 @@ dependencies = [
 
 [[package]]
 name = "redscript-parser"
-version = "1.0.0-preview4"
+version = "1.0.0-preview5"
 dependencies = [
  "chumsky",
  "redscript-ast",
@@ -1429,7 +1429,7 @@ dependencies = [
 
 [[package]]
 name = "scc"
-version = "1.0.0-preview4"
+version = "1.0.0-preview5"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -1440,7 +1440,7 @@ dependencies = [
 
 [[package]]
 name = "scc-lib"
-version = "1.0.0-preview4"
+version = "1.0.0-preview5"
 dependencies = [
  "anyhow",
  "mimalloc",
@@ -1449,7 +1449,7 @@ dependencies = [
 
 [[package]]
 name = "scc-shared"
-version = "1.0.0-preview4"
+version = "1.0.0-preview5"
 dependencies = [
  "anyhow",
  "chrono",
