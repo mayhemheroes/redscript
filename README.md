@@ -9,7 +9,7 @@ REDscript is a statically-typed, object-oriented programming language designed f
 
 To compile your scripts automatically on game startup, follow these steps:
 
-- Download the `redscript-mod-{version}.zip` archive from the [latest release](https://github.com/jac3km4/redscript/releases).
+- Download the `redscript-mod-{version}.zip` archive from the [latest release](https://github.com/jac3km4/redscript/releases/latest).
 - Extract it into the main `Cyberpunk 2077` directory.
 - When you start the game, successful setup can be confirmed with logs appearing in `Cyberpunk 2077/r6/logs/redscript_rCURRENT.log`.
 
