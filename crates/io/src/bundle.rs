@@ -206,6 +206,11 @@ impl<'i> ScriptBundle<'i> {
         self.definitions.iter().skip(1)
     }
 
+    #[inline]
+    pub fn definitions_mut(&mut self) -> impl ExactSizeIterator<Item = &mut Definition<'i>> {
+        self.definitions.iter_mut().skip(1)
+    }
+
     pub fn indexed_definitions(&self) -> impl ExactSizeIterator<Item = IndexedDefinition<'_, 'i>> {
         self.definitions
             .iter()
