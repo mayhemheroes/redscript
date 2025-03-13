@@ -15,7 +15,7 @@ To compile your scripts automatically on game startup, follow these steps:
 
 ## Editor Support
 
-REDscript provides extensive editor tooling, including a language server and debugger that integrate with many popular editors such as VSCode, neovim, IntelliJ IDEA, Zed, and Helix. For detailed setup instructions, check out the [REDscript IDE repository](https://github.com/jac3km4/redscript-ide).
+REDscript provides extensive editor tooling, including a language server and a debugger that integrate with many popular editors such as VSCode, neovim, IntelliJ IDEA, Zed, and Helix. For detailed setup instructions, check out the [REDscript IDE repository](https://github.com/jac3km4/redscript-ide).
 
 ## Project Structure
 
