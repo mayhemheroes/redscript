@@ -1239,6 +1239,7 @@ dependencies = [
  "log",
  "mimalloc",
  "redscript-compiler-api",
+ "redscript-formatter",
  "vmap",
 ]
 
@@ -1299,17 +1300,6 @@ dependencies = [
  "insta",
  "pretty_dtoa",
  "redscript-ast",
- "redscript-parser",
-]
-
-[[package]]
-name = "redscript-formatter-cli"
-version = "1.0.0-preview4"
-dependencies = [
- "anyhow",
- "argh",
- "redscript-ast",
- "redscript-formatter",
  "redscript-parser",
 ]
 

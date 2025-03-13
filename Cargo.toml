@@ -4,7 +4,6 @@ members = [
     "crates/syntax/ast",
     "crates/syntax/parser",
     "crates/syntax/formatter",
-    "crates/syntax/formatter-cli",
     "crates/io",
     "crates/compiler/frontend",
     "crates/compiler/backend",

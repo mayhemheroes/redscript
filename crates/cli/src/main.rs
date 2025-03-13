@@ -1,10 +1,13 @@
+use std::fs;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use anyhow::Context;
 use argh::FromArgs;
 use mimalloc::MiMalloc;
 use redscript_compiler_api::ast::SourceMap;
 use redscript_compiler_api::{Compilation, FlushError, SourceMapExt, TypeInterner};
+use redscript_formatter::{FormatSettings, format_document};
 use vmap::Map;
 
 #[global_allocator]
@@ -25,6 +28,7 @@ enum Command {
     Decompile(DecompileOpts),
     Compile(CompileOpts),
     Lint(LintOpts),
+    Format(FormatOpts),
 }
 
 /// decompile a .redscripts file
@@ -77,6 +81,42 @@ struct LintOpts {
     bundle: PathBuf,
 }
 
+/// format redscript source code
+#[derive(Debug, FromArgs)]
+#[argh(subcommand, name = "format")]
+struct FormatOpts {
+    /// path to an input source file or directory
+    #[argh(option, short = 's')]
+    src: Vec<PathBuf>,
+    /// write the formatted source code to the input files
+    #[argh(switch)]
+    save: bool,
+    /// return exit code 1 if the source code is not formatted correctly
+    #[argh(switch, short = 'c')]
+    check: bool,
+    /// size of the indentation
+    #[argh(option, default = "2")]
+    indent: u16,
+    /// max line width, defaults to 80
+    #[argh(option, default = "80")]
+    max_width: u16,
+    /// max fields in a chain, defaults to 4
+    #[argh(option, default = "4")]
+    max_chain_fields: u8,
+    /// max calls in a chain, defaults to 2
+    #[argh(option, default = "2")]
+    max_chain_calls: u8,
+    /// max operators in a chain, defaults to 4
+    #[argh(option, default = "4")]
+    max_chain_operators: u8,
+    /// max total chain length, defaults to 4
+    #[argh(option, default = "4")]
+    max_chain_total: u8,
+    /// max significant digits in floating point numbers, defaults to unlimited
+    #[argh(option)]
+    max_sig_digits: Option<u8>,
+}
+
 fn main() -> anyhow::Result<ExitCode> {
     let colors = fern::colors::ColoredLevelConfig::default();
     fern::Dispatch::new()
@@ -93,6 +133,7 @@ fn main() -> anyhow::Result<ExitCode> {
         Command::Decompile(_) => todo!(),
         Command::Compile(opts) => compile(opts),
         Command::Lint(opts) => lint(opts),
+        Command::Format(opts) => format(opts),
     }
 }
 
@@ -130,6 +171,66 @@ fn lint(opts: LintOpts) -> anyhow::Result<ExitCode> {
         Ok(ExitCode::FAILURE)
     } else {
         log::info!("Compilation successful");
+        Ok(ExitCode::SUCCESS)
+    }
+}
+
+fn format(opts: FormatOpts) -> anyhow::Result<ExitCode> {
+    let map = SourceMap::from_paths_recursively(opts.src)?;
+    let settings = FormatSettings {
+        indent: opts.indent,
+        max_width: opts.max_width,
+        max_chain_calls: opts.max_chain_calls,
+        max_chain_fields: opts.max_chain_fields,
+        max_chain_operators: opts.max_chain_operators,
+        max_chain_total: opts.max_chain_total,
+        trunc_sig_digits: opts.max_sig_digits,
+    };
+    let mut errors = vec![];
+    let mut failed = false;
+
+    for (id, file) in map.files() {
+        let (module, e) = format_document(file.source(), id, &settings);
+        errors.extend(e);
+
+        if !errors.is_empty() {
+            failed = true;
+            continue;
+        }
+        let Some(module) = module else {
+            continue;
+        };
+
+        let formatted = module.to_string();
+
+        if opts.check {
+            if formatted != file.source() {
+                failed = true;
+                eprintln!(
+                    "[CHECK_FAILED] File is not formatted: {}",
+                    file.path().display()
+                );
+            }
+            continue;
+        }
+
+        if opts.save {
+            fs::write(file.path(), formatted)?;
+        } else {
+            println!("{}", module);
+        }
+    }
+
+    for err in &errors {
+        eprintln!(
+            "[SYNTAX_ERR] {}",
+            err.display(&map).context("unknown source")?
+        );
+    }
+
+    if failed {
+        Ok(ExitCode::FAILURE)
+    } else {
         Ok(ExitCode::SUCCESS)
     }
 }
