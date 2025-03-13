@@ -206,10 +206,8 @@ fn format(opts: FormatOpts) -> anyhow::Result<ExitCode> {
         if opts.check {
             if formatted != file.source() {
                 failed = true;
-                eprintln!(
-                    "[CHECK_FAILED] File is not formatted: {}",
-                    file.path().display()
-                );
+                eprintln!("[ERROR] At {}", file.path().display());
+                eprintln!("file is not formatted correctly");
             }
             continue;
         }
