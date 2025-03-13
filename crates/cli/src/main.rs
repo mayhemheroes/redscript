@@ -220,10 +220,7 @@ fn format(opts: FormatOpts) -> anyhow::Result<ExitCode> {
     }
 
     for err in &errors {
-        eprintln!(
-            "[SYNTAX_ERR] {}",
-            err.display(&map).context("unknown source")?
-        );
+        eprintln!("[ERROR] {}", err.display(&map).context("unknown source")?);
     }
 
     if failed {
