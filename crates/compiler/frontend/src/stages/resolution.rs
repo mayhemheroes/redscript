@@ -267,17 +267,17 @@ impl<'ctx> NameResolution<'ctx> {
             let mut func_scope = scope.funcs.introduce_scope();
 
             for module in &modules {
-                for ((name, _), id) in module
-                    .classes
-                    .iter()
-                    .chain(&module.structs)
-                    .map(|p| (p.aggregate.name, p.id))
-                    .chain(module.enums.iter().map(|p| (p.enum_.name, p.id)))
-                {
-                    type_scope.add(name, TypeRef::Name(id));
-                }
-
                 if path.is_some() {
+                    for ((name, _), id) in module
+                        .classes
+                        .iter()
+                        .chain(&module.structs)
+                        .map(|p| (p.aggregate.name, p.id))
+                        .chain(module.enums.iter().map(|p| (p.enum_.name, p.id)))
+                    {
+                        type_scope.add(name, TypeRef::Name(id));
+                    }
+
                     for entry in &module.functions {
                         let (name, _) = entry.function.name;
                         func_scope
