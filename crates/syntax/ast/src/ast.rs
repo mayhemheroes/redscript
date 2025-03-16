@@ -549,7 +549,7 @@ impl<'src, K: AstKind> Param<'src, K> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Path<'src> {
     pub segments: Box<[&'src str]>,
 }
@@ -563,9 +563,9 @@ impl<'src> Path<'src> {
     }
 }
 
-impl<'stc> AsRef<[&'stc str]> for Path<'stc> {
+impl<'src> AsRef<[&'src str]> for Path<'src> {
     #[inline]
-    fn as_ref(&self) -> &[&'stc str] {
+    fn as_ref(&self) -> &[&'src str] {
         &self.segments
     }
 }

@@ -36,7 +36,7 @@ pub(super) const WRAPPED_METHOD_IDENT: &str = "wrappedMethod";
 
 #[derive(Debug)]
 pub struct NameResolution<'ctx> {
-    modules: Vec<ResolutionStageModule<'ctx>>,
+    modules: HashMap<Option<ast::Path<'ctx>>, Vec<ResolutionStageModule<'ctx>>>,
 
     symbols: Symbols<'ctx>,
     module_map: ModuleMap<'ctx>,
@@ -53,7 +53,7 @@ impl<'ctx> NameResolution<'ctx> {
         interner: &'ctx TypeInterner,
     ) -> Self {
         let mut this = Self {
-            modules: vec![],
+            modules: HashMap::new(),
 
             symbols,
             module_map: ModuleMap::default(),
@@ -225,16 +225,18 @@ impl<'ctx> NameResolution<'ctx> {
             }
         }
 
-        self.modules.push(ResolutionStageModule {
-            path: module.path,
-            imports,
-            classes,
-            structs,
-            functions,
-            enums,
-            lets,
-            span,
-        });
+        self.modules
+            .entry(module.path)
+            .or_default()
+            .push(ResolutionStageModule {
+                imports,
+                classes,
+                structs,
+                functions,
+                enums,
+                lets,
+                span,
+            });
     }
 
     pub fn populate_globals(&mut self, scope: &mut Scope<'_, 'ctx>) {
@@ -259,88 +261,96 @@ impl<'ctx> NameResolution<'ctx> {
         mut self,
         scope: &'scope Scope<'_, 'ctx>,
     ) -> TypeInference<'scope, 'ctx> {
-        let mut modules = vec![];
-
-        for module in mem::take(&mut self.modules) {
-            let path = module.path.as_ref();
+        let mut results = vec![];
+        for (path, modules) in mem::take(&mut self.modules) {
             let mut type_scope = scope.types.introduce_scope();
             let mut func_scope = scope.funcs.introduce_scope();
 
-            for entry in &module.imports {
-                self.module_map.visit_import(
-                    &entry.import,
-                    |name, typ| type_scope.add(name, TypeRef::Name(typ)),
-                    |name, func| func_scope.top_mut().entry(name).or_default().push(func),
-                    |name| {
-                        self.reporter
-                            .report(Diagnostic::ImportNotFound(name, entry.span));
-                    },
-                );
-            }
-
-            for ((name, _), id) in module
-                .classes
-                .iter()
-                .chain(&module.structs)
-                .map(|p| (p.aggregate.name, p.id))
-                .chain(module.enums.iter().map(|p| (p.enum_.name, p.id)))
-            {
-                type_scope.add(name, TypeRef::Name(id));
-            }
-
-            let mut classes = vec![];
-            for entry in module.classes {
-                classes.push(self.process_aggregate(entry, path, &type_scope, false));
-            }
-            for entry in module.structs {
-                classes.push(self.process_aggregate(entry, path, &type_scope, true));
-            }
-
-            let mut enums = vec![];
-            for entry in module.enums {
-                enums.push(entry.id);
-                self.process_enum(entry, &mut type_scope);
-            }
-
-            let mut functions = vec![];
-            for entry in module.functions {
-                if module.path.is_some() {
-                    let (name, _) = entry.function.name;
-                    func_scope
-                        .top_mut()
-                        .entry(name)
-                        .or_default()
-                        .push(entry.index);
+            for module in &modules {
+                for ((name, _), id) in module
+                    .classes
+                    .iter()
+                    .chain(&module.structs)
+                    .map(|p| (p.aggregate.name, p.id))
+                    .chain(module.enums.iter().map(|p| (p.enum_.name, p.id)))
+                {
+                    type_scope.add(name, TypeRef::Name(id));
                 }
-                if let Some(item) = self.process_free_function(entry, &type_scope) {
-                    functions.push(item);
+
+                if path.is_some() {
+                    for entry in &module.functions {
+                        let (name, _) = entry.function.name;
+                        func_scope
+                            .top_mut()
+                            .entry(name)
+                            .or_default()
+                            .push(entry.index);
+                    }
                 }
             }
 
-            let mut fields = vec![];
-            for let_ in module.lets {
-                if let Some(item) = self.process_free_field(let_, &type_scope) {
-                    fields.push(item);
-                }
-            }
+            for module in modules {
+                let mut type_scope = type_scope.clone();
+                let mut func_scope = func_scope.clone();
 
-            modules.push(InferStageModule::new(
-                type_scope.pop_scope(),
-                func_scope.pop_scope(),
-                classes,
-                enums,
-                functions,
-                fields,
-                module.span,
-            ));
+                for entry in &module.imports {
+                    self.module_map.visit_import(
+                        &entry.import,
+                        |name, typ| type_scope.add(name, TypeRef::Name(typ)),
+                        |name, func| func_scope.top_mut().entry(name).or_default().push(func),
+                        |name| {
+                            self.reporter
+                                .report(Diagnostic::ImportNotFound(name, entry.span));
+                        },
+                    );
+                }
+
+                let mut classes = vec![];
+                for entry in module.classes {
+                    classes.push(self.process_aggregate(entry, path.as_ref(), &type_scope, false));
+                }
+                for entry in module.structs {
+                    classes.push(self.process_aggregate(entry, path.as_ref(), &type_scope, true));
+                }
+
+                let mut enums = vec![];
+                for entry in module.enums {
+                    enums.push(entry.id);
+                    self.process_enum(entry);
+                }
+
+                let mut functions = vec![];
+                for entry in module.functions {
+                    if let Some(item) = self.process_free_function(entry, &type_scope) {
+                        functions.push(item);
+                    }
+                }
+
+                let mut fields = vec![];
+                for let_ in module.lets {
+                    if let Some(item) = self.process_free_field(let_, &type_scope) {
+                        fields.push(item);
+                    }
+                }
+
+                results.push(InferStageModule::new(
+                    type_scope.pop_scope(),
+                    func_scope.pop_scope(),
+                    classes,
+                    enums,
+                    functions,
+                    fields,
+                    module.span,
+                ));
+            }
         }
 
-        modules
+        results
             .iter()
             .for_each(|module| self.validate_module(module));
-        self.process_inheritance(modules.iter().flat_map(InferStageModule::classes));
+        self.process_inheritance(results.iter().flat_map(InferStageModule::classes));
 
-        TypeInference::new(modules, self.symbols, self.reporter)
+        TypeInference::new(results, self.symbols, self.reporter)
     }
 
     fn process_aggregate<'scope>(
@@ -531,16 +541,14 @@ impl<'ctx> NameResolution<'ctx> {
         )
     }
 
-    fn process_enum(&mut self, entry: ParsedEnum<'ctx>, types: &mut TypeEnv<'_, 'ctx>) {
-        let (name, name_span) = entry.enum_.name;
+    fn process_enum(&mut self, entry: ParsedEnum<'ctx>) {
+        let (_, name_span) = entry.enum_.name;
 
         let qs = entry.meta.qualifiers;
         if !qs.is_empty() {
             self.reporter
                 .report(Diagnostic::UnusedItemQualifiers(qs, name_span));
         }
-
-        types.add(name, TypeRef::Name(entry.id));
 
         let mut by_name = IndexMap::default();
         let mut by_val = BTreeSet::<i64>::new();
@@ -1138,7 +1146,7 @@ impl<'ctx> NameResolution<'ctx> {
 
         for param in params {
             let (name, name_span) = param.name;
-            let typ = TypeRef::LazyVar(Box::new(Lazy::new(Box::new(|env| {
+            let typ = TypeRef::LazyVar(Rc::new(Lazy::new(Box::new(|env| {
                 env.resolve_param(param).map(Rc::new)
             }))));
             if types.get(name).is_some() {
@@ -1149,7 +1157,7 @@ impl<'ctx> NameResolution<'ctx> {
         }
 
         let vars = types
-            .top_level()
+            .top()
             .iter()
             .zip(params)
             .filter_map(|((_, typ), param)| {
@@ -1334,7 +1342,6 @@ fn process_conditionals<'ctx>(
 
 #[derive(Debug)]
 struct ResolutionStageModule<'ctx> {
-    path: Option<ast::Path<'ctx>>,
     imports: Vec<ParsedImport<'ctx>>,
     classes: Vec<ParsedAggregate<'ctx>>,
     structs: Vec<ParsedAggregate<'ctx>>,

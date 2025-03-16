@@ -3,7 +3,7 @@ use std::hash::Hash;
 
 use crate::IndexMap;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ScopedMap<'a, K, V> {
     Cons(IndexMap<K, V>, &'a Self),
     Tail(IndexMap<K, V>),

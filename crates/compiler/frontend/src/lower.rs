@@ -2124,7 +2124,7 @@ impl<'ctx> VarState<'ctx> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TypeEnv<'scope, 'ctx>(ScopedMap<'scope, &'ctx str, TypeRef<'scope, 'ctx>>);
 
 impl<'scope, 'ctx> TypeEnv<'scope, 'ctx> {
@@ -2154,7 +2154,7 @@ impl<'scope, 'ctx> TypeEnv<'scope, 'ctx> {
     }
 
     #[inline]
-    pub fn top_level(&self) -> &IndexMap<&'ctx str, TypeRef<'scope, 'ctx>> {
+    pub fn top(&self) -> &IndexMap<&'ctx str, TypeRef<'scope, 'ctx>> {
         self.0.top()
     }
 
@@ -2290,13 +2290,13 @@ impl<'scope, 'ctx> Env<'scope, 'ctx> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TypeRef<'scope, 'ctx> {
     Name(TypeId<'ctx>),
     Var(Rc<CtxVar<'ctx>>),
     #[allow(clippy::type_complexity)]
     LazyVar(
-        Box<
+        Rc<
             Lazy<
                 LowerResult<'ctx, Rc<CtxVar<'ctx>>>,
                 Box<dyn Fn(&TypeEnv<'_, 'ctx>) -> LowerResult<'ctx, Rc<CtxVar<'ctx>>> + 'scope>,
@@ -2621,7 +2621,7 @@ pub enum Error<'ctx> {
     UnresolvedType(&'ctx str, Span),
     #[error("'{0}' has no member named '{1}'")]
     UnresolvedMember(TypeId<'ctx>, &'ctx str, Span),
-    #[error("{1} matching overloads found for method '{0}'")]
+    #[error("{1} matching overloads found for '{0}'")]
     MultipleMatchingOverloads(&'ctx str, usize, Span),
     #[error("there's no matching '{0}' function")]
     UnresolvedFunction(&'ctx str, Span),
