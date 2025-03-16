@@ -22,17 +22,21 @@ pub struct FormatSettings {
     pub trunc_sig_digits: Option<u8>,
 }
 
+impl FormatSettings {
+    pub const DEFAULT: FormatSettings = FormatSettings {
+        indent: 2,
+        max_width: 80,
+        max_chain_fields: 4,
+        max_chain_calls: 2,
+        max_chain_operators: 4,
+        max_chain_total: 4,
+        trunc_sig_digits: None,
+    };
+}
+
 impl Default for FormatSettings {
     fn default() -> Self {
-        Self {
-            indent: 2,
-            max_width: 80,
-            max_chain_fields: 4,
-            max_chain_calls: 2,
-            max_chain_operators: 4,
-            max_chain_total: 4,
-            trunc_sig_digits: None,
-        }
+        Self::DEFAULT
     }
 }
 
