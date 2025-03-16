@@ -12,6 +12,7 @@ members = [
     "crates/scc/shared",
     "crates/scc/capi",
     "crates/scc/cli",
+    "crates/dotfile"
 ]
 
 [workspace.package]
@@ -28,6 +29,7 @@ redscript-compiler-frontend.path = "crates/compiler/frontend"
 redscript-compiler-backend.path = "crates/compiler/backend"
 redscript-compiler-api.path = "crates/compiler/api"
 scc-shared.path = "crates/scc/shared"
+redscript-dotfile.path = "crates/dotfile"
 
 log = "0.4"
 thiserror = "2"

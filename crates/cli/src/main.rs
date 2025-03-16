@@ -7,6 +7,7 @@ use argh::FromArgs;
 use mimalloc::MiMalloc;
 use redscript_compiler_api::ast::SourceMap;
 use redscript_compiler_api::{Compilation, FlushError, SourceMapExt, TypeInterner};
+use redscript_dotfile::Dotfile;
 use redscript_formatter::{FormatSettings, format_document};
 use vmap::Map;
 
@@ -87,7 +88,7 @@ struct LintOpts {
 struct FormatOpts {
     /// path to an input source file or directory
     #[argh(option, short = 's')]
-    src: Vec<PathBuf>,
+    src: PathBuf,
     /// write the formatted source code to the input files
     #[argh(switch)]
     save: bool,
@@ -95,24 +96,24 @@ struct FormatOpts {
     #[argh(switch, short = 'c')]
     check: bool,
     /// size of the indentation
-    #[argh(option, default = "2")]
-    indent: u16,
-    /// max line width, defaults to 80
-    #[argh(option, default = "80")]
-    max_width: u16,
-    /// max fields in a chain, defaults to 4
-    #[argh(option, default = "4")]
-    max_chain_fields: u8,
-    /// max calls in a chain, defaults to 2
-    #[argh(option, default = "2")]
-    max_chain_calls: u8,
-    /// max operators in a chain, defaults to 4
-    #[argh(option, default = "4")]
-    max_chain_operators: u8,
-    /// max total chain length, defaults to 4
-    #[argh(option, default = "4")]
-    max_chain_total: u8,
-    /// max significant digits in floating point numbers, defaults to unlimited
+    #[argh(option)]
+    indent: Option<u16>,
+    /// max line width
+    #[argh(option)]
+    max_width: Option<u16>,
+    /// max fields in a chain
+    #[argh(option)]
+    max_chain_fields: Option<u8>,
+    /// max calls in a chain
+    #[argh(option)]
+    max_chain_calls: Option<u8>,
+    /// max operators in a chain
+    #[argh(option)]
+    max_chain_operators: Option<u8>,
+    /// max total chain length
+    #[argh(option)]
+    max_chain_total: Option<u8>,
+    /// max significant digits in floating point numbers
     #[argh(option)]
     max_sig_digits: Option<u8>,
 }
@@ -140,8 +141,7 @@ fn main() -> anyhow::Result<ExitCode> {
 fn compile(opts: CompileOpts) -> anyhow::Result<ExitCode> {
     let (map, _f) = Map::with_options().open(opts.bundle)?;
     let interner = TypeInterner::default();
-    let sources = SourceMap::from_paths_recursively(&opts.src)?;
-    sources.populate_boot_lib();
+    let sources = load_sources(&opts.src)?;
 
     match Compilation::new(&map, &sources, &interner)?.flush(opts.output) {
         Ok((_, diagnostics)) => {
@@ -161,8 +161,7 @@ fn compile(opts: CompileOpts) -> anyhow::Result<ExitCode> {
 fn lint(opts: LintOpts) -> anyhow::Result<ExitCode> {
     let (map, _f) = Map::with_options().open(opts.bundle)?;
     let interner = TypeInterner::default();
-    let sources = SourceMap::from_paths_recursively(&opts.src)?;
-    sources.populate_boot_lib();
+    let sources = load_sources(&opts.src)?;
 
     let comp = Compilation::new(&map, &sources, &interner)?;
     comp.diagnostics().dump(&sources)?;
@@ -176,19 +175,36 @@ fn lint(opts: LintOpts) -> anyhow::Result<ExitCode> {
 }
 
 fn format(opts: FormatOpts) -> anyhow::Result<ExitCode> {
-    let map = SourceMap::from_paths_recursively(opts.src)?;
-    let settings = FormatSettings {
-        indent: opts.indent,
-        max_width: opts.max_width,
-        max_chain_calls: opts.max_chain_calls,
-        max_chain_fields: opts.max_chain_fields,
-        max_chain_operators: opts.max_chain_operators,
-        max_chain_total: opts.max_chain_total,
-        trunc_sig_digits: opts.max_sig_digits,
-    };
+    let dotfile = Dotfile::load_or_default(&opts.src)?;
+
+    let mut settings = FormatSettings::default();
+    if let Some(indent) = opts.indent.or(dotfile.format.indent) {
+        settings.indent = indent;
+    }
+    if let Some(max_width) = opts.max_width.or(dotfile.format.max_width) {
+        settings.max_width = max_width;
+    }
+    if let Some(max_chain_calls) = opts.max_chain_calls.or(dotfile.format.max_chain_calls) {
+        settings.max_chain_calls = max_chain_calls;
+    }
+    if let Some(max_chain_fields) = opts.max_chain_fields.or(dotfile.format.max_chain_fields) {
+        settings.max_chain_fields = max_chain_fields;
+    }
+    if let Some(max_chain_operators) = opts
+        .max_chain_operators
+        .or(dotfile.format.max_chain_operators)
+    {
+        settings.max_chain_operators = max_chain_operators;
+    }
+    if let Some(max_chain_total) = opts.max_chain_total.or(dotfile.format.max_chain_total) {
+        settings.max_chain_total = max_chain_total;
+    }
+    settings.trunc_sig_digits = opts.max_sig_digits;
+
     let mut errors = vec![];
     let mut failed = false;
 
+    let map = SourceMap::from_paths_recursively([opts.src])?;
     for (id, file) in map.files() {
         let (module, e) = format_document(file.source(), id, &settings);
         errors.extend(e);
@@ -228,4 +244,15 @@ fn format(opts: FormatOpts) -> anyhow::Result<ExitCode> {
     } else {
         Ok(ExitCode::SUCCESS)
     }
+}
+
+fn load_sources(src: &[PathBuf]) -> anyhow::Result<SourceMap> {
+    let mut roots = vec![];
+    for src in src {
+        let dotfile = Dotfile::load_or_default(src)?;
+        roots.extend(dotfile.source_roots.into_iter().map(|p| src.join(p)));
+    }
+    let sources = SourceMap::from_paths_recursively(&roots)?;
+    sources.populate_boot_lib();
+    Ok(sources)
 }
