@@ -11,7 +11,7 @@ use redscript_ast::{
 };
 use redscript_parser::{ParseResult, Token, lex_with_lf_and_comments, parse, parser};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FormatSettings {
     pub indent: u16,
     pub max_width: u16,
