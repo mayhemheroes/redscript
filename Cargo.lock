@@ -1220,7 +1220,7 @@ dependencies = [
 
 [[package]]
 name = "redscript-ast"
-version = "1.0.0-preview8"
+version = "1.0.0-preview9"
 dependencies = [
  "bitflags 2.9.0",
  "chumsky",
@@ -1231,7 +1231,7 @@ dependencies = [
 
 [[package]]
 name = "redscript-cli"
-version = "1.0.0-preview8"
+version = "1.0.0-preview9"
 dependencies = [
  "anyhow",
  "argh",
@@ -1246,7 +1246,7 @@ dependencies = [
 
 [[package]]
 name = "redscript-compiler-api"
-version = "1.0.0-preview8"
+version = "1.0.0-preview9"
 dependencies = [
  "log",
  "redscript-ast",
@@ -1259,7 +1259,7 @@ dependencies = [
 
 [[package]]
 name = "redscript-compiler-backend"
-version = "1.0.0-preview8"
+version = "1.0.0-preview9"
 dependencies = [
  "hashbrown 0.15.2",
  "identity-hash",
@@ -1276,7 +1276,7 @@ dependencies = [
 
 [[package]]
 name = "redscript-compiler-frontend"
-version = "1.0.0-preview8"
+version = "1.0.0-preview9"
 dependencies = [
  "bitfield-struct",
  "derive-where",
@@ -1296,7 +1296,7 @@ dependencies = [
 
 [[package]]
 name = "redscript-dotfile"
-version = "1.0.0-preview8"
+version = "1.0.0-preview9"
 dependencies = [
  "anyhow",
  "serde",
@@ -1305,7 +1305,7 @@ dependencies = [
 
 [[package]]
 name = "redscript-formatter"
-version = "1.0.0-preview8"
+version = "1.0.0-preview9"
 dependencies = [
  "insta",
  "pretty_dtoa",
@@ -1315,7 +1315,7 @@ dependencies = [
 
 [[package]]
 name = "redscript-io"
-version = "1.0.0-preview8"
+version = "1.0.0-preview9"
 dependencies = [
  "argh",
  "bitfield-struct",
@@ -1329,7 +1329,7 @@ dependencies = [
 
 [[package]]
 name = "redscript-parser"
-version = "1.0.0-preview8"
+version = "1.0.0-preview9"
 dependencies = [
  "chumsky",
  "redscript-ast",
@@ -1439,7 +1439,7 @@ dependencies = [
 
 [[package]]
 name = "scc"
-version = "1.0.0-preview8"
+version = "1.0.0-preview9"
 dependencies = [
  "anyhow",
  "bindgen",
@@ -1450,7 +1450,7 @@ dependencies = [
 
 [[package]]
 name = "scc-lib"
-version = "1.0.0-preview8"
+version = "1.0.0-preview9"
 dependencies = [
  "anyhow",
  "mimalloc",
@@ -1459,7 +1459,7 @@ dependencies = [
 
 [[package]]
 name = "scc-shared"
-version = "1.0.0-preview8"
+version = "1.0.0-preview9"
 dependencies = [
  "anyhow",
  "chrono",
