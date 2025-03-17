@@ -9,7 +9,7 @@ use redscript_compiler_frontend::UnknownSource;
 pub use redscript_compiler_frontend::{
     CompileErrorReporter, Diagnostic, Evaluator, FunctionType, LoweredCompilationUnit,
     LoweredFunction, PolyType, Symbols, TypeId, TypeIndex, TypeInterner, TypeScope,
-    infer_from_sources, ir, parse_one, parse_sources, process_sources, types,
+    infer_from_sources, ir, parse_file, parse_files, process_sources, types,
 };
 use redscript_io::byte;
 pub use redscript_io::{SaveError, ScriptBundle};

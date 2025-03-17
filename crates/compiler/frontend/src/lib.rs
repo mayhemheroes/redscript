@@ -44,22 +44,21 @@ pub fn infer_from_sources<'ctx>(
     Vec<Diagnostic<'ctx>>,
 ) {
     let mut reporter = CompileErrorReporter::default();
-    let mods = parse_sources(sources, &mut reporter);
+    let mods = parse_files(sources, &mut reporter);
     let evaluator = Evaluator::from_modules(&mods);
     process_sources(mods, evaluator, interner, symbols, reporter)
 }
 
-pub fn parse_sources<'ctx>(
+pub fn parse_files<'ctx>(
     sources: &'ctx ast::SourceMap,
     reporter: &mut CompileErrorReporter<'ctx>,
 ) -> Vec<ast::SourceModule<'ctx>> {
-    sources
-        .files()
-        .filter_map(|(id, file)| parse_one(id, file, reporter))
-        .collect()
+    let (module, errs) = parser::parse_modules(sources.files().map(|(id, f)| (id, f.source())));
+    reporter.report_many(errs);
+    module
 }
 
-pub fn parse_one<'ctx>(
+pub fn parse_file<'ctx>(
     id: ast::FileId,
     file: &'ctx ast::File,
     reporter: &mut CompileErrorReporter<'ctx>,

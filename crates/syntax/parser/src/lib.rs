@@ -17,13 +17,39 @@ pub type ParseResult<A> = (Option<A>, Vec<Error>);
 macro_rules! parse {
     ($src:expr, $parser:expr, $ctx:expr) => {{
         let (toks, mut errs) = lex($src, $ctx);
-        let Some(toks) = toks else {
-            return (None, errs);
-        };
-        let (res, perrs) = parse($parser, &toks, $ctx);
-        errs.extend(perrs);
-        (res, errs)
+        if let Some(toks) = toks {
+            let (res, e) = parse($parser, &toks, $ctx);
+            errs.extend(e);
+            (res, errs)
+        } else {
+            (None, errs)
+        }
     }};
+}
+
+pub fn parse_modules<'a>(
+    it: impl IntoIterator<Item = (FileId, &'a str)>,
+) -> (Vec<SourceModule<'a>>, Vec<Error>) {
+    let mut errs = vec![];
+    let toks = it
+        .into_iter()
+        .filter_map(|(file, src)| {
+            let (t, e) = lex(src, file);
+            errs.extend(e);
+            Some((file, t?))
+        })
+        .collect::<Vec<_>>();
+
+    let parser = parser::module();
+    let modules = toks
+        .iter()
+        .filter_map(|(file, toks)| {
+            let (res, e) = parse(parser.clone(), toks, *file);
+            errs.extend(e);
+            res
+        })
+        .collect::<Vec<_>>();
+    (modules, errs)
 }
 
 pub fn parse_module(src: &str, file: FileId) -> ParseResult<SourceModule<'_>> {
