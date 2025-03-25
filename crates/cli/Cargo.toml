@@ -6,11 +6,13 @@ edition.workspace = true
 
 [dependencies]
 redscript-compiler-api = { workspace = true, features = ["ignore"] }
+redscript-decompiler.workspace = true
 redscript-formatter.workspace = true
 redscript-dotfile.workspace = true
 
 log.workspace = true
 anyhow.workspace = true
+hashbrown.workspace = true
 fern = { workspace = true, features = ["colored"] }
 vmap.workspace = true
 argh.workspace = true

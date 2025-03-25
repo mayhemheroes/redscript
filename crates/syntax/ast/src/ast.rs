@@ -360,13 +360,16 @@ impl<'src, K: AstKind> Enum<'src, K> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumVariant<'src> {
     pub name: &'src str,
-    pub value: Option<i32>,
+    pub value: Option<i64>,
 }
 
 impl<'src> EnumVariant<'src> {
     #[inline]
-    pub fn new(name: &'src str, value: Option<i32>) -> Self {
-        Self { name, value }
+    pub fn new(name: &'src str, value: Option<impl Into<i64>>) -> Self {
+        Self {
+            name,
+            value: value.map(Into::into),
+        }
     }
 }
 
@@ -1124,6 +1127,25 @@ pub enum UnOp {
     Neg,
 }
 
+impl UnOp {
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Not => "OperatorLogicNot",
+            Self::Neg => "OperatorNeg",
+            Self::BitNot => "OperatorBitNot",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "OperatorLogicNot" => Some(Self::Not),
+            "OperatorNeg" => Some(Self::Neg),
+            "OperatorBitNot" => Some(Self::BitNot),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinOp {
     AssignAdd,
@@ -1195,6 +1217,61 @@ impl BinOp {
             | Self::Mul
             | Self::Div
             | Self::Mod => Assoc::Left,
+        }
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::AssignAdd => "OperatorAssignAdd",
+            Self::AssignSub => "OperatorAssignSubtract",
+            Self::AssignMul => "OperatorAssignMultiply",
+            Self::AssignDiv => "OperatorAssignDivide",
+            Self::AssignBitOr => "OperatorAssignOr",
+            Self::AssignBitAnd => "OperatorAssignAnd",
+            Self::Or => "OperatorLogicOr",
+            Self::And => "OperatorLogicAnd",
+            Self::BitOr => "OperatorOr",
+            Self::BitXor => "OperatorXor",
+            Self::BitAnd => "OperatorAnd",
+            Self::Eq => "OperatorEqual",
+            Self::Ne => "OperatorNotEqual",
+            Self::Lt => "OperatorLess",
+            Self::Le => "OperatorLessEqual",
+            Self::Gt => "OperatorGreater",
+            Self::Ge => "OperatorGreaterEqual",
+            Self::Add => "OperatorAdd",
+            Self::Sub => "OperatorSubtract",
+            Self::Mul => "OperatorMultiply",
+            Self::Div => "OperatorDivide",
+            Self::Mod => "OperatorModulo",
+        }
+    }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "OperatorAssignAdd" => Some(Self::AssignAdd),
+            "OperatorAssignSubtract" => Some(Self::AssignSub),
+            "OperatorAssignMultiply" => Some(Self::AssignMul),
+            "OperatorAssignDivide" => Some(Self::AssignDiv),
+            "OperatorAssignOr" => Some(Self::AssignBitOr),
+            "OperatorAssignAnd" => Some(Self::AssignBitAnd),
+            "OperatorLogicOr" => Some(Self::Or),
+            "OperatorLogicAnd" => Some(Self::And),
+            "OperatorOr" => Some(Self::BitOr),
+            "OperatorXor" => Some(Self::BitXor),
+            "OperatorAnd" => Some(Self::BitAnd),
+            "OperatorEqual" => Some(Self::Eq),
+            "OperatorNotEqual" => Some(Self::Ne),
+            "OperatorLess" => Some(Self::Lt),
+            "OperatorLessEqual" => Some(Self::Le),
+            "OperatorGreater" => Some(Self::Gt),
+            "OperatorGreaterEqual" => Some(Self::Ge),
+            "OperatorAdd" => Some(Self::Add),
+            "OperatorSubtract" => Some(Self::Sub),
+            "OperatorMultiply" => Some(Self::Mul),
+            "OperatorDivide" => Some(Self::Div),
+            "OperatorModulo" => Some(Self::Mod),
+            _ => None,
         }
     }
 }

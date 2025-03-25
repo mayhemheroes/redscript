@@ -555,7 +555,7 @@ impl<'ctx> NameResolution<'ctx> {
 
         for (variant, span) in &entry.enum_.variants {
             let val = if let Some(val) = variant.value {
-                i64::from(val)
+                val
             } else if let Some(last) = by_val.last() {
                 let Some(next) = last.checked_add(1) else {
                     self.reporter.report(Diagnostic::ValueOverflow(*span));

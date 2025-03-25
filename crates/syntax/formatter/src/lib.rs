@@ -1,6 +1,6 @@
-use std::collections::HashMap;
 use std::{fmt, mem};
 
+use hashbrown::HashMap;
 use pretty_dtoa::{FmtFloatConfig, dtoa, ftoa};
 use redscript_ast::{
     Aggregate, Annotation, Assoc, AstKind, AstNode, AstVisitor, BinOp, Block, Constant, Enum,
@@ -845,7 +845,7 @@ where
     }
 }
 
-trait SyntaxOps {
+pub trait SyntaxOps {
     fn as_fmt(&self, ctx: FormatCtx<'_>) -> impl fmt::Display;
 }
 

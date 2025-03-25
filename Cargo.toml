@@ -8,11 +8,12 @@ members = [
     "crates/compiler/frontend",
     "crates/compiler/backend",
     "crates/compiler/api",
+    "crates/decompiler",
     "crates/cli",
     "crates/scc/shared",
     "crates/scc/capi",
     "crates/scc/cli",
-    "crates/dotfile"
+    "crates/dotfile",
 ]
 
 [workspace.package]
@@ -28,6 +29,7 @@ redscript-io.path = "crates/io"
 redscript-compiler-frontend.path = "crates/compiler/frontend"
 redscript-compiler-backend.path = "crates/compiler/backend"
 redscript-compiler-api.path = "crates/compiler/api"
+redscript-decompiler.path = "crates/decompiler"
 scc-shared.path = "crates/scc/shared"
 redscript-dotfile.path = "crates/dotfile"
 

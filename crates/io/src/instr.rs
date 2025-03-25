@@ -788,6 +788,13 @@ impl From<Offset> for i16 {
     }
 }
 
+impl From<Offset> for i32 {
+    #[inline]
+    fn from(offset: Offset) -> Self {
+        offset.value.into()
+    }
+}
+
 impl From<i16> for Offset {
     #[inline]
     fn from(value: i16) -> Self {

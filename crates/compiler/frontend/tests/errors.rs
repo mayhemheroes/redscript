@@ -8,7 +8,11 @@ use redscript_compiler_frontend::infer_from_sources;
 fn compilation_errors() {
     insta::glob!("data/*.reds", |path| {
         let current = env::current_dir().unwrap().canonicalize().unwrap();
-        let relative = path.strip_prefix(&current).unwrap();
+        let relative = path
+            .strip_prefix(&current)
+            .unwrap()
+            .to_string_lossy()
+            .replace("\\", "/");
         let sources = SourceMap::from_files(&[relative]).unwrap();
         sources.populate_boot_lib();
 

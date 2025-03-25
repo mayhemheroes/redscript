@@ -2,7 +2,6 @@
 source: crates/compiler/backend/tests/bytecode.rs
 expression: "BytecodePrinter::new(&bundle, bundle_len)"
 input_file: crates/compiler/backend/tests/data/string-interp.reds
-snapshot_kind: text
 ---
 // Test;Int32 (f0)
 assign
@@ -30,7 +29,7 @@ string.const 2
 param.end
 as_ref 0
 to_string 1
-invoke.static j34 l1 f2 0000000000000000
+invoke.static j34 l2 f2 0000000000000000
 param 0
 local 0
 param.end

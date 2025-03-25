@@ -2,130 +2,129 @@
 source: crates/compiler/frontend/tests/errors.rs
 expression: "DisplayDiagnostics(diagnostics, &sources)"
 input_file: crates/compiler/frontend/tests/data/class-checks.reds
-snapshot_kind: text
 ---
-[SYM_REDEFINITION] At tests\data\class-checks.reds:23:7
+[SYM_REDEFINITION] At tests/data/class-checks.reds:23:7
 class ClassDefinedTwice {}
       ^^^^^^^^^^^^^^^^^^
 this name is already defined in the scope
 
-[INVALID_ANN_USE] At tests\data\class-checks.reds:19:1
+[INVALID_ANN_USE] At tests/data/class-checks.reds:19:1
 @badAnnotation()
 ^^^
 'badAnnotation' is not a valid annotation in this context
 
-[UNEXPECTED_NATIVE] At tests\data\class-checks.reds:49:14
+[UNEXPECTED_NATIVE] At tests/data/class-checks.reds:49:14
   native let field: Int32;
              ^^^^^
 scripted types are not allowed to have native members
 
-[UNEXPECTED_NATIVE] At tests\data\class-checks.reds:51:15
+[UNEXPECTED_NATIVE] At tests/data/class-checks.reds:51:15
   native func NativeMethod()
               ^^^^^^^^^^^^
 scripted types are not allowed to have native members
 
-[INVALID_PERSISTENT] At tests\data\class-checks.reds:55:18
+[INVALID_PERSISTENT] At tests/data/class-checks.reds:55:18
   persistent let string: String;
                  ^^^^^^
 Strings, Variants and Resources cannot be persisted
 
-[INVALID_PERSISTENT] At tests\data\class-checks.reds:56:18
+[INVALID_PERSISTENT] At tests/data/class-checks.reds:56:18
   persistent let variant: Variant;
                  ^^^^^^^
 Strings, Variants and Resources cannot be persisted
 
-[INVALID_PERSISTENT] At tests\data\class-checks.reds:57:18
+[INVALID_PERSISTENT] At tests/data/class-checks.reds:57:18
   persistent let res: ResRef;
                  ^^^
 Strings, Variants and Resources cannot be persisted
 
-[MISSING_BODY] At tests\data\class-checks.reds:65:8
+[MISSING_BODY] At tests/data/class-checks.reds:65:8
   func MethodA(a: A)
        ^^^^^^^
 this function must have a body
 
-[MISSING_BODY] At tests\data\class-checks.reds:66:8
+[MISSING_BODY] At tests/data/class-checks.reds:66:8
   func MethodB() -> B
        ^^^^^^^
 this function must have a body
 
-[NON_STATIC_STRUCT_FN] At tests\data\class-checks.reds:45:8
+[NON_STATIC_STRUCT_FN] At tests/data/class-checks.reds:45:8
   func Method() {}
        ^^^^^^
 struct methods must be static
 
-[SYM_REDEFINITION] At tests\data\class-checks.reds:85:21
+[SYM_REDEFINITION] At tests/data/class-checks.reds:85:21
 @nameImplementation(ClashingIntStruct as GenericStruct<Int32>)
                     ^^^^^^^^^^^^^^^^^^
 this name is already defined in the scope
 
-[DUP_IMPL] At tests\data\class-checks.reds:87:46
+[DUP_IMPL] At tests/data/class-checks.reds:87:46
 @nameImplementation(DuplicateStringStruct as GenericStruct<String>)
                                              ^^^^^^^^^^^^^^^^^^^^^
 this implementation is a duplicate of a previous one
 
-[INVALID_BASE] At tests\data\class-checks.reds:4:7
+[INVALID_BASE] At tests/data/class-checks.reds:4:7
 class ClassExtendingStruct extends Struct {}
       ^^^^^^^^^^^^^^^^^^^^^
 this type cannot inherit from a struct
 
-[INVALID_BASE] At tests\data\class-checks.reds:17:7
+[INVALID_BASE] At tests/data/class-checks.reds:17:7
 class ClassExtendingPrimitive extends Int32 {}
       ^^^^^^^^^^^^^^^^^^^^^^^^
 this type cannot inherit from a primitive
 
-[INVALID_TYPE_ARG_COUNT] At tests\data\class-checks.reds:35:7
+[INVALID_TYPE_ARG_COUNT] At tests/data/class-checks.reds:35:7
 class ClassWithInvalidTypeArgCounts extends AbstractClass<Int32, Int32> {
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 type AbstractClass expects 1 type arguments
 
-[INVALID_TYPE_ARG_COUNT] At tests\data\class-checks.reds:36:7
+[INVALID_TYPE_ARG_COUNT] At tests/data/class-checks.reds:36:7
   let field: AbstractClass;
       ^^^^^
 type AbstractClass expects 1 type arguments
 
-[INVALID_TYPE_ARG_COUNT] At tests\data\class-checks.reds:38:15
+[INVALID_TYPE_ARG_COUNT] At tests/data/class-checks.reds:38:15
   func Method(a: AbstractClass) -> AbstractClass<String, String> {}
               ^^^^^^^^^^^^^^^^
 type AbstractClass expects 1 type arguments
 
-[INVALID_BASE] At tests\data\class-checks.reds:41:7
+[INVALID_BASE] At tests/data/class-checks.reds:41:7
 class CircularClassA extends CircularClassB {}
       ^^^^^^^^^^^^^^^
 this class circularly extends itself
 
-[INVALID_VARIANCE] At tests\data\class-checks.reds:65:16
+[INVALID_VARIANCE] At tests/data/class-checks.reds:65:16
   func MethodA(a: A)
                ^^^^
 the type 'A' appears in contravariant position, which is incompatible with its declaration
 
-[INVALID_VARIANCE] At tests\data\class-checks.reds:66:8
+[INVALID_VARIANCE] At tests/data/class-checks.reds:66:8
   func MethodB() -> B
        ^^^^^^^
 the type 'B' appears in covariant position, which is incompatible with its declaration
 
-[UNSASTISFIED_BOUND] At tests\data\class-checks.reds:78:7
+[UNSASTISFIED_BOUND] At tests/data/class-checks.reds:78:7
 class ClassViolatingBound extends ClassWithBound<Chair> {}
       ^^^^^^^^^^^^^^^^^^^^
 type Chair does not satisfy expected bound Animal
 
-[DUP_METHOD] At tests\data\class-checks.reds:25:7
+[DUP_METHOD] At tests/data/class-checks.reds:25:7
 class ClassWithDuplicateMethod {
       ^^^^^^^^^^^^^^^^^^^^^^^^^
 this class contains a duplicated implementation of the 'Method' method
 
-[MISSING_IMPL] At tests\data\class-checks.reds:11:7
+[MISSING_IMPL] At tests/data/class-checks.reds:11:7
 class IncompleteClass extends AbstractClass<Int32> {}
       ^^^^^^^^^^^^^^^^
 this class is missing some required method implementation(s):
   func UnimplementedMethod(a: Int32) {}
 
-[FINAL_FN_OVERRIDE] At tests\data\class-checks.reds:30:7
+[FINAL_FN_OVERRIDE] At tests/data/class-checks.reds:30:7
 class ClassOverridingFinalMethod extends AbstractClass<Int32> {
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 this class overrides a final method 'FinalMethod'
 
-[MISSING_IMPL] At tests\data\class-checks.reds:35:7
+[MISSING_IMPL] At tests/data/class-checks.reds:35:7
 class ClassWithInvalidTypeArgCounts extends AbstractClass<Int32, Int32> {
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 this class is missing some required method implementation(s):

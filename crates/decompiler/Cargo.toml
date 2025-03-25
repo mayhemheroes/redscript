@@ -1,18 +1,16 @@
 [package]
-name = "redscript-formatter"
+name = "redscript-decompiler"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 
 [dependencies]
+redscript-io.workspace = true
 redscript-ast.workspace = true
-redscript-parser.workspace = true
+redscript-formatter.workspace = true
 
+thiserror.workspace = true
 hashbrown.workspace = true
-pretty_dtoa.workspace = true
-
-[dev-dependencies]
-insta.workspace = true
 
 [lints]
 workspace = true

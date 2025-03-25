@@ -2,29 +2,28 @@
 source: crates/compiler/frontend/tests/errors.rs
 expression: "DisplayDiagnostics(diagnostics, &sources)"
 input_file: crates/compiler/frontend/tests/data/expr-checks.reds
-snapshot_kind: text
 ---
-[INVALID_PLACE] At tests\data\expr-checks.reds:11:3
+[INVALID_PLACE] At tests/data/expr-checks.reds:11:3
   ReturnsInt() = 2;
   ^^^^^^^^^^^^^^^^
 this expression is not a place that can be written to
 
-[INVALID_TEMP] At tests\data\expr-checks.reds:13:3
+[INVALID_TEMP] At tests/data/expr-checks.reds:13:3
   (new Struct(2)).x;
   ^^^^^^^^^^^^^^^^^
 a temporary cannot be used here, consider storing this value in a variable
 
-[INVALID_TEMP] At tests\data\expr-checks.reds:15:13
+[INVALID_TEMP] At tests/data/expr-checks.reds:15:13
   ArraySize(ReturnsArray());
             ^^^^^^^^^^^^^^
 a temporary cannot be used here, consider storing this value in a variable
 
-[INVALID_TEMP] At tests\data\expr-checks.reds:16:3
+[INVALID_TEMP] At tests/data/expr-checks.reds:16:3
   ReturnsArray()[0] = 2;
   ^^^^^^^^^^^^^^
 a temporary cannot be used here, consider storing this value in a variable
 
-[INVALID_TEMP] At tests\data\expr-checks.reds:18:15
+[INVALID_TEMP] At tests/data/expr-checks.reds:18:15
   HasOutParam(2);
               ^
 a temporary cannot be used here, consider storing this value in a variable

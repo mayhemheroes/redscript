@@ -323,8 +323,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             ast::Expr::BinOp { lhs, op, rhs } => {
                 let lhs = self.lower_expr(lhs, env)?;
                 let rhs = self.lower_expr(rhs, env)?;
-                let (call, typ) =
-                    self.free_function_call(binop_name(op), [lhs, rhs], env, *span)?;
+                let (call, typ) = self.free_function_call(op.name(), [lhs, rhs], env, *span)?;
                 let ir = ir::Expr::Call {
                     call: call.into(),
                     span: *span,
@@ -333,7 +332,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             }
             ast::Expr::UnOp { op, expr } => {
                 let arg = self.lower_expr(expr, env)?;
-                let (call, typ) = self.free_function_call(unop_name(op), [arg], env, *span)?;
+                let (call, typ) = self.free_function_call(op.name(), [arg], env, *span)?;
                 let ir = ir::Expr::Call {
                     call: call.into(),
                     span: *span,
@@ -2766,40 +2765,5 @@ impl<T: fmt::Display + PartialEq> fmt::Display for DisplayRangeInclusive<'_, T> 
         } else {
             write!(f, "between {} and {}", start, end)
         }
-    }
-}
-
-fn binop_name(op: &ast::BinOp) -> &'static str {
-    match op {
-        ast::BinOp::AssignAdd => "OperatorAssignAdd",
-        ast::BinOp::AssignSub => "OperatorAssignSubtract",
-        ast::BinOp::AssignMul => "OperatorAssignMultiply",
-        ast::BinOp::AssignDiv => "OperatorAssignDivide",
-        ast::BinOp::AssignBitOr => "OperatorAssignOr",
-        ast::BinOp::AssignBitAnd => "OperatorAssignAnd",
-        ast::BinOp::Or => "OperatorLogicOr",
-        ast::BinOp::And => "OperatorLogicAnd",
-        ast::BinOp::BitOr => "OperatorOr",
-        ast::BinOp::BitXor => "OperatorXor",
-        ast::BinOp::BitAnd => "OperatorAnd",
-        ast::BinOp::Eq => "OperatorEqual",
-        ast::BinOp::Ne => "OperatorNotEqual",
-        ast::BinOp::Lt => "OperatorLess",
-        ast::BinOp::Le => "OperatorLessEqual",
-        ast::BinOp::Gt => "OperatorGreater",
-        ast::BinOp::Ge => "OperatorGreaterEqual",
-        ast::BinOp::Add => "OperatorAdd",
-        ast::BinOp::Sub => "OperatorSubtract",
-        ast::BinOp::Mul => "OperatorMultiply",
-        ast::BinOp::Div => "OperatorDivide",
-        ast::BinOp::Mod => "OperatorModulo",
-    }
-}
-
-fn unop_name(op: &ast::UnOp) -> &'static str {
-    match op {
-        ast::UnOp::Not => "OperatorLogicNot",
-        ast::UnOp::Neg => "OperatorNeg",
-        ast::UnOp::BitNot => "OperatorBitNot",
     }
 }

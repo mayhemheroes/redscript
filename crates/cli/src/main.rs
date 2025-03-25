@@ -1,14 +1,17 @@
-use std::fs;
+use std::fs::{self, File};
+use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 use anyhow::Context;
 use argh::FromArgs;
+use hashbrown::HashMap;
 use mimalloc::MiMalloc;
 use redscript_compiler_api::ast::SourceMap;
-use redscript_compiler_api::{Compilation, FlushError, SourceMapExt, TypeInterner};
+use redscript_compiler_api::{Compilation, FlushError, ScriptBundle, SourceMapExt, TypeInterner};
+use redscript_decompiler::{Verbosity, decompile_all};
 use redscript_dotfile::Dotfile;
-use redscript_formatter::{FormatSettings, format_document};
+use redscript_formatter::{FormatCtx, FormatSettings, SyntaxOps, format_document};
 use vmap::Map;
 
 #[global_allocator]
@@ -24,8 +27,6 @@ struct Args {
 #[derive(Debug, FromArgs)]
 #[argh(subcommand)]
 enum Command {
-    // TODO: decompiler
-    #[allow(unused)]
     Decompile(DecompileOpts),
     Compile(CompileOpts),
     Lint(LintOpts),
@@ -33,26 +34,39 @@ enum Command {
 }
 
 /// decompile a .redscripts file
-#[allow(unused)]
 #[derive(Debug, FromArgs)]
 #[argh(subcommand, name = "decompile")]
 struct DecompileOpts {
     /// path to an input .redscripts file
-    #[argh(option, short = 'i')]
-    input: PathBuf,
-    /// path to an output file or directory
+    #[argh(option, short = 'b')]
+    bundle: PathBuf,
+    /// path to an output file
     #[argh(option, short = 'o')]
     output: PathBuf,
-    /// output mode, use 'code' to print redscript code, 'ast' to print a direct representation
-    /// of the AST, 'bytecode' to print individual bytecode instructions
-    #[argh(option, short = 'm', default = "String::from(\"code\")")]
-    mode: String,
-    /// write individual files based on the stored file index instead of a single file
-    #[argh(switch, short = 'f')]
-    dump_files: bool,
     /// include implicit operations in the output (conversions etc.)
     #[argh(switch, short = 'v')]
     verbose: bool,
+    /// size of the indentation
+    #[argh(option)]
+    indent: Option<u16>,
+    /// max line width
+    #[argh(option)]
+    max_width: Option<u16>,
+    /// max fields in a chain
+    #[argh(option)]
+    max_chain_fields: Option<u8>,
+    /// max calls in a chain
+    #[argh(option)]
+    max_chain_calls: Option<u8>,
+    /// max operators in a chain
+    #[argh(option)]
+    max_chain_operators: Option<u8>,
+    /// max total chain length
+    #[argh(option)]
+    max_chain_total: Option<u8>,
+    /// max significant digits in floating point numbers
+    #[argh(option)]
+    max_sig_digits: Option<u8>,
 }
 
 /// compile redscript source code into a .redscripts file
@@ -131,7 +145,7 @@ fn main() -> anyhow::Result<ExitCode> {
     let args: Args = argh::from_env();
 
     match args.command {
-        Command::Decompile(_) => todo!(),
+        Command::Decompile(opts) => decompile(opts),
         Command::Compile(opts) => compile(opts),
         Command::Lint(opts) => lint(opts),
         Command::Format(opts) => format(opts),
@@ -172,6 +186,48 @@ fn lint(opts: LintOpts) -> anyhow::Result<ExitCode> {
         log::info!("Compilation successful");
         Ok(ExitCode::SUCCESS)
     }
+}
+
+fn decompile(opts: DecompileOpts) -> anyhow::Result<ExitCode> {
+    let mut settings = FormatSettings::default();
+    if let Some(indent) = opts.indent {
+        settings.indent = indent;
+    }
+    if let Some(max_width) = opts.max_width {
+        settings.max_width = max_width;
+    }
+    if let Some(max_chain_calls) = opts.max_chain_calls {
+        settings.max_chain_calls = max_chain_calls;
+    }
+    if let Some(max_chain_fields) = opts.max_chain_fields {
+        settings.max_chain_fields = max_chain_fields;
+    }
+    if let Some(max_chain_operators) = opts.max_chain_operators {
+        settings.max_chain_operators = max_chain_operators;
+    }
+    if let Some(max_chain_total) = opts.max_chain_total {
+        settings.max_chain_total = max_chain_total;
+    }
+    settings.trunc_sig_digits = opts.max_sig_digits;
+
+    let verbosity = if opts.verbose {
+        Verbosity::Verbose
+    } else {
+        Verbosity::Quiet
+    };
+
+    let prefix_map = HashMap::default();
+    let ctx = FormatCtx::new(&settings, &prefix_map);
+
+    let (map, _f) = Map::with_options().open(opts.bundle)?;
+    let bundle = ScriptBundle::from_bytes(&map)?;
+
+    let mut output = BufWriter::new(File::create(opts.output)?);
+    for item in decompile_all(&bundle, verbosity) {
+        writeln!(output, "{}", item?.as_fmt(ctx))?;
+    }
+
+    Ok(ExitCode::SUCCESS)
 }
 
 fn format(opts: FormatOpts) -> anyhow::Result<ExitCode> {

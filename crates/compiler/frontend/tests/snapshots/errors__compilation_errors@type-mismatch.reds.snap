@@ -2,55 +2,54 @@
 source: crates/compiler/frontend/tests/errors.rs
 expression: "DisplayDiagnostics(diagnostics, &sources)"
 input_file: crates/compiler/frontend/tests/data/type-mismatch.reds
-snapshot_kind: text
 ---
-[TYPE_ERR] At tests\data\type-mismatch.reds:11:18
+[TYPE_ERR] At tests/data/type-mismatch.reds:11:18
   let _: Int32 = "";
                  ^^
 type mismatch: found String when expected Int32
 
-[WRONG_STRING_LIT] At tests\data\type-mismatch.reds:12:18
+[WRONG_STRING_LIT] At tests/data/type-mismatch.reds:12:18
   let _: CName = "";
                  ^^
 expected a CName here, you should prefix your literal with 'n', e.g. n"lorem ipsum"
 
-[TYPE_ERR] At tests\data\type-mismatch.reds:12:18
+[TYPE_ERR] At tests/data/type-mismatch.reds:12:18
   let _: CName = "";
                  ^^
 type mismatch: found String when expected CName
 
-[WRONG_STRING_LIT] At tests\data\type-mismatch.reds:13:22
+[WRONG_STRING_LIT] At tests/data/type-mismatch.reds:13:22
   let _: TweakDBID = "";
                      ^^
 expected a TweakDBID here, you should prefix your literal with 't', e.g. t"lorem ipsum"
 
-[TYPE_ERR] At tests\data\type-mismatch.reds:13:22
+[TYPE_ERR] At tests/data/type-mismatch.reds:13:22
   let _: TweakDBID = "";
                      ^^
 type mismatch: found String when expected TweakDBID
 
-[WRONG_STRING_LIT] At tests\data\type-mismatch.reds:14:19
+[WRONG_STRING_LIT] At tests/data/type-mismatch.reds:14:19
   let _: ResRef = "";
                   ^^
 expected a ResRef here, you should prefix your literal with 'r', e.g. r"lorem ipsum"
 
-[TYPE_ERR] At tests\data\type-mismatch.reds:14:19
+[TYPE_ERR] At tests/data/type-mismatch.reds:14:19
   let _: ResRef = "";
                   ^^
 type mismatch: found String when expected ResRef
 
-[TYPE_ERR] At tests\data\type-mismatch.reds:16:16
+[TYPE_ERR] At tests/data/type-mismatch.reds:16:16
   let _: Pet = new Animal();
                ^^^^^^^^^^^^
 type mismatch: found Animal when expected Pet
 
-[TYPE_ERR] At tests\data\type-mismatch.reds:21:22
+[TYPE_ERR] At tests/data/type-mismatch.reds:21:22
   let c: List<Pet> = new List<Animal>();
                      ^^^^^^^^^^^^^^^^^^
 type mismatch: found Animal when expected Pet
   when comparing List<Animal> and List<Pet>
 
-[TYPE_ERR] At tests\data\type-mismatch.reds:25:30
+[TYPE_ERR] At tests/data/type-mismatch.reds:25:30
   let _: Predicate<Animal> = new Predicate<Pet>();
                              ^^^^^^^^^^^^^^^^^^^^
 type mismatch: found Animal when expected Pet

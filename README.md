@@ -25,6 +25,7 @@ This project includes various tools for working with REDscript, such as a compil
 - **`compiler/frontend`** - Performs static analysis on REDscript syntax, lowering it to an intermediate representation.
 - **`compiler/backend`** - Generates bytecode from the intermediate representation and handles monomorphization for generic functions and types.
 - **`compiler/api`** - Provides a high-level API for interacting seamlessly with the compiler.
+- **`decompiler`** - Decompiles bytecode back into REDscript source code.
 - **`io`** - Reads and writes binary files in the native REDengine format.
 - **`scc/cli`** - Exposes a CLI that acts as a drop-in replacement for the original compiler made by CD Projekt.
 - **`scc/capi`** - Exposes a C API with an interface similar to the `scc` CLI, but with some additional capabilities like source mapping.
@@ -32,3 +33,4 @@ This project includes various tools for working with REDscript, such as a compil
 - **`syntax/ast`** - Defines the Abstract Syntax Tree (AST) for REDscript.
 - **`syntax/formatter`** - Formats REDscript source code according to configuration.
 - **`syntax/parser`** - Parses REDscript source code into the AST.
+- **`dotfile`** - Parses the configuration `.redscript` file.

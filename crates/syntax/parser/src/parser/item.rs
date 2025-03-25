@@ -332,7 +332,7 @@ mod tests {
                 [
                     EnumVariant::new("A", Some(1)),
                     EnumVariant::new("B", Some(2)),
-                    EnumVariant::new("C", None),
+                    EnumVariant::new("C", None::<i64>),
                 ]
             ))
         );
