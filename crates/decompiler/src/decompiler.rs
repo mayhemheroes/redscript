@@ -11,8 +11,9 @@ use crate::error::{Error, Result};
 use crate::location::{Bounds, Location};
 use crate::{BundleOps, expect_borrowed, extract_mangled_name, extract_type};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Verbosity {
+    #[default]
     Quiet,
     Verbose,
 }
@@ -458,6 +459,8 @@ impl<'scope, 'ctx: 'i, 'i> Decompiler<'scope, 'ctx, 'i> {
                 }
             }
             &Instr::InvokeVirtual { function, .. } => {
+                let mangled_name = self.bundle.try_get_item_hint(function, "function name")?;
+                let name = extract_mangled_name(mangled_name);
                 let receiver = if let Some(ctx) = ctx {
                     ctx
                 } else {
@@ -466,7 +469,7 @@ impl<'scope, 'ctx: 'i, 'i> Decompiler<'scope, 'ctx, 'i> {
                 ast::Expr::Call {
                     expr: ast::Expr::Member {
                         expr: receiver.into(),
-                        member: self.bundle.try_get_item(function)?,
+                        member: name,
                     }
                     .into(),
                     type_args: [].into(),

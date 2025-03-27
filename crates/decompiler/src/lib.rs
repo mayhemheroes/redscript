@@ -15,14 +15,32 @@ mod decompiler;
 mod error;
 mod location;
 
+#[derive(Debug, Default)]
+pub struct Settings {
+    verbosity: Verbosity,
+    omit_function_bodies: bool,
+}
+
+impl Settings {
+    pub fn verbose(mut self) -> Self {
+        self.verbosity = Verbosity::Verbose;
+        self
+    }
+
+    pub fn omit_function_bodies(mut self) -> Self {
+        self.omit_function_bodies = true;
+        self
+    }
+}
+
 pub fn decompile_all<'ctx: 'i, 'i>(
     bundle: &'ctx ScriptBundle<'i>,
-    verbosity: Verbosity,
+    settings: &Settings,
 ) -> impl Iterator<Item = Result<ast::ItemDecl<'i>>> {
     bundle.definitions().filter_map(move |def| match def {
-        Definition::Class(class) => Some(decompile_class(class, bundle, verbosity)),
+        Definition::Class(class) => Some(decompile_class(class, bundle, settings)),
         Definition::Function(function) if function.class().is_none() => {
-            Some(decompile_function(function, bundle, verbosity))
+            Some(decompile_function(function, bundle, settings))
         }
         Definition::Enum(enum_) => Some(decompile_enum(enum_, bundle)),
         _ => None,
@@ -32,7 +50,7 @@ pub fn decompile_all<'ctx: 'i, 'i>(
 pub fn decompile_class<'ctx: 'i, 'i>(
     class: &'ctx Class,
     bundle: &'ctx ScriptBundle<'i>,
-    verbosity: Verbosity,
+    settings: &Settings,
 ) -> Result<ast::ItemDecl<'i>> {
     let name = extract_mangled_name(expect_borrowed(
         bundle.try_get_item_hint(class.name(), "class name")?,
@@ -49,30 +67,15 @@ pub fn decompile_class<'ctx: 'i, 'i>(
         })
         .transpose()?;
 
-    let fields = class.fields().iter().map(|&field_idx| {
-        let field = bundle.try_get_item(field_idx)?;
-        let name = expect_borrowed(bundle.try_get_item_hint(field.name(), "field name")?);
-        let visibility = extract_visibility(field.visibility());
-        let typ = extract_type(field.type_(), bundle)?.into();
-        let qualifiers = extract_field_qualifiers(field);
-
-        Ok(ast::ItemDecl::new(
-            [],
-            Some(visibility),
-            qualifiers,
-            [],
-            ast::Item::Let(ast::Field {
-                name,
-                typ,
-                default: None,
-            }),
-        ))
-    });
+    let fields = class
+        .fields()
+        .iter()
+        .map(|&field_idx| decompile_field(bundle.try_get_item(field_idx)?, bundle));
 
     let methods = class
         .methods()
         .iter()
-        .map(|&func_idx| decompile_function(bundle.try_get_item(func_idx)?, bundle, verbosity));
+        .map(|&func_idx| decompile_function(bundle.try_get_item(func_idx)?, bundle, settings));
 
     let members = fields.chain(methods).collect::<Result<Vec<_>>>()?;
     let aggregate = ast::Aggregate::new(name, [], base, members);
@@ -115,7 +118,7 @@ pub fn decompile_enum<'ctx: 'i, 'i>(
 pub fn decompile_function<'ctx: 'i, 'i>(
     func: &'ctx Function<'i>,
     bundle: &'ctx ScriptBundle<'i>,
-    verbosity: Verbosity,
+    settings: &Settings,
 ) -> Result<ast::ItemDecl<'i>> {
     let demangled_name = extract_mangled_name(expect_borrowed(
         bundle.try_get_item_hint(func.name(), "function name")?,
@@ -123,12 +126,12 @@ pub fn decompile_function<'ctx: 'i, 'i>(
     let name = demangled_name;
     let visibility = extract_visibility(func.visibility());
 
-    let block = if func.body().is_empty() {
+    let block = if func.body().is_empty() || settings.omit_function_bodies {
         None
     } else {
         let code = func.body().code_iter().collect::<Result<Vec<_>, _>>()?;
         let cf_block = build_control_flow(CodeIter::new(&code))?;
-        let block = decompile_block(func, bundle, &code, &cf_block, verbosity)?;
+        let block = decompile_block(func, bundle, &code, &cf_block, settings.verbosity)?;
         Some(ast::FunctionBody::Block(block))
     };
 
@@ -157,6 +160,28 @@ pub fn decompile_function<'ctx: 'i, 'i>(
         qualifiers,
         [],
         item,
+    ))
+}
+
+pub fn decompile_field<'i>(
+    field: &Field<'i>,
+    bundle: &ScriptBundle<'i>,
+) -> Result<ast::ItemDecl<'i>> {
+    let name = expect_borrowed(bundle.try_get_item_hint(field.name(), "field name")?);
+    let visibility = extract_visibility(field.visibility());
+    let typ = extract_type(field.type_(), bundle)?.into();
+    let qualifiers = extract_field_qualifiers(field);
+
+    Ok(ast::ItemDecl::new(
+        [],
+        Some(visibility),
+        qualifiers,
+        [],
+        ast::Item::Let(ast::Field {
+            name,
+            typ,
+            default: None,
+        }),
     ))
 }
 

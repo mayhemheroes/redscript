@@ -9,7 +9,7 @@ use hashbrown::HashMap;
 use mimalloc::MiMalloc;
 use redscript_compiler_api::ast::SourceMap;
 use redscript_compiler_api::{Compilation, FlushError, ScriptBundle, SourceMapExt, TypeInterner};
-use redscript_decompiler::{Verbosity, decompile_all};
+use redscript_decompiler::{Settings, decompile_all};
 use redscript_dotfile::Dotfile;
 use redscript_formatter::{FormatCtx, FormatSettings, SyntaxOps, format_document};
 use vmap::Map;
@@ -210,12 +210,6 @@ fn decompile(opts: DecompileOpts) -> anyhow::Result<ExitCode> {
     }
     settings.trunc_sig_digits = opts.max_sig_digits;
 
-    let verbosity = if opts.verbose {
-        Verbosity::Verbose
-    } else {
-        Verbosity::Quiet
-    };
-
     let prefix_map = HashMap::default();
     let ctx = FormatCtx::new(&settings, &prefix_map);
 
@@ -223,7 +217,13 @@ fn decompile(opts: DecompileOpts) -> anyhow::Result<ExitCode> {
     let bundle = ScriptBundle::from_bytes(&map)?;
 
     let mut output = BufWriter::new(File::create(opts.output)?);
-    for item in decompile_all(&bundle, verbosity) {
+    let settings = Settings::default();
+    let settings = if opts.verbose {
+        settings.verbose()
+    } else {
+        settings
+    };
+    for item in decompile_all(&bundle, &settings) {
         writeln!(output, "{}", item?.as_fmt(ctx))?;
     }
 
