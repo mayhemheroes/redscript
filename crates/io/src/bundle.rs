@@ -336,7 +336,7 @@ impl<'i> PoolItemIndex<'i> for CNameIndex {
     #[inline]
     fn get<'a>(self, bundle: &'a ScriptBundle<'i>) -> Option<&'a Self::Output> {
         match bundle.cnames.get(self)? {
-            str if str == "" => Some(&Str::Borrowed("None")),
+            str if str.is_empty() => Some(&Str::Borrowed("None")),
             str => Some(str),
         }
     }
