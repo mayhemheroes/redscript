@@ -34,3 +34,6 @@ This project includes various tools for working with REDscript, such as a compil
 - **`syntax/formatter`** - Formats REDscript source code according to configuration.
 - **`syntax/parser`** - Parses REDscript source code into the AST.
 - **`dotfile`** - Parses the configuration `.redscript` file.
+
+### Component Diagram
+<img width="100%" height="750px" src="https://mermaid.ink/svg/pako:eNqtlFGPmkAQx78Kmb5wicciIgpNmiiI-tCk6fl04MMKq1KBJbtLojV-9y5LtXfN0TZeH0iWYf7_38yyO2dIaErAgx3D1V5bBXGpaZMoBl-GNX1FjuIhhrX2-PhJm-rRF8w4YeuHj03aVEX9aPK0WquArwKBruRFleWEaSGjpSBlKk1aVaCSZtHyayuaqffwlWiKk8NLTahy5tH0JEhTb6ucq-hCjwIZbJU_8xdtZS-KWupRSFmBhbglLdWHiVo3T5JnyUE2FcNeiIp7CO0ysa83hjRH33AyOBQ2YiTlCcsqgQQjBPUN0ziihGFBOOKnUuAjqtQexSCNnmjNEhJDY8_FKSfSPqE5Zd4H03Td7fYX1383F3PRAfW7oMH90OuOo-3tB7_JDrrYs39lb3K6-QsbcZagjBmMd1Qx66oi_A87sLme1jfRYRd6fv8GZLTtuOTiD03Pu8iL-5tOb1etA7rogi7ffcC31wvcgV7-joaeHGtZCt4W55z0oCDSoHmHs7r0IPakkBaeXKaYHRqzixRVuHymtABPsFrKGK13-5tJXaWyqCDDcmIWtyiTB4Awn9alAG8wspQJeGc4gmePjb5jjhzHMftDxxr24ASeMzYcyxpZjm2btuU67qUH3xXUNMa2PRi5tpT0zfHQGvSApJmg7HM7qtXEvvwAQCLa_g"/>
