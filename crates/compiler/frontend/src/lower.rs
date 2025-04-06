@@ -1150,16 +1150,19 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 return_t.constrain(hint, self.symbols).ok();
             }
 
-            let checked_args: Box<[_]> = args
-                .zip(primary.func().type_().params())
-                .map(|(arg @ (_, span), param)| {
-                    let expected = PolyType::from_type_with_env(param.type_(), &type_env)
-                        .map_err(|var| Error::UnresolvedVar(var, *span))?;
-                    let (mut expr, typ) = self.lower_expr_with(arg, Some(&expected), env)?;
-                    self.arg(&mut expr, typ.clone(), expected, param, env, *span)?;
-                    Ok(expr)
-                })
-                .collect::<Result<_, _>>()?;
+            let mut checked_args = Vec::with_capacity(args.len());
+            for arg in args.zip(primary.func().type_().params()) {
+                let (arg @ (_, span), param) = arg;
+                let expected = PolyType::from_type_with_env(param.type_(), &type_env)
+                    .map_err(|var| Error::UnresolvedVar(var, *span))?;
+                let res = self.lower_expr_with(arg, Some(&expected), env);
+                let Some((mut expr, typ)) = self.reporter.unwrap_err(res) else {
+                    continue;
+                };
+                let res = self.arg(&mut expr, typ.clone(), expected, param, env, *span);
+                self.reporter.unwrap_err(res);
+                checked_args.push(expr);
+            }
 
             let type_args = type_env
                 .pop_scope()
