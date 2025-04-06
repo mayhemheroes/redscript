@@ -316,8 +316,10 @@ mod tests {
 
     #[test]
     fn operators() {
-        let code = r#"-b + 10 * 23 - 4 / 20 + 2"#;
-        let res = parse_expr(code, FileId::from_i32(0)).0.unwrap().unwrapped();
+        let code = r#"-b + 10 * 23-4 / 20 + 2"#;
+        let res = parse_expr(code, FileId::from_i32(0));
+        assert_eq!(res.1, []);
+        let res = res.0.unwrap().unwrapped();
 
         assert_eq!(
             res,

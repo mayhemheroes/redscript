@@ -13,9 +13,7 @@ type LexExtra<'src> = extra::Err<Rich<'src, char, LexSpan>>;
 pub fn lex<'src>(
     keep_lf_and_comments: bool,
 ) -> impl Parser<'src, &'src str, Vec<(Token<'src, LexSpan>, LexSpan)>, LexExtra<'src>> + Clone {
-    let num = just('-')
-        .or_not()
-        .then(text::int(10))
+    let num = text::int(10)
         .then(just('.').then(text::digits(10).or_not()).or_not())
         .to_slice()
         .then(choice([just("ul"), just("u"), just("l"), just("d")]).or_not())
