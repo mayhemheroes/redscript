@@ -387,7 +387,6 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 let Type::Data(typ) = env.types.resolve(typ, *type_span)? else {
                     return Err(Error::InvalidDynCastType(*type_span));
                 };
-
                 let target = InferredTypeApp::from_type(&typ);
                 let expected = target.clone().into_type().into_poly();
                 let inferred = if let Some((RefType::Weak, inner)) = expr_t.strip_ref(self.symbols)

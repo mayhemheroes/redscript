@@ -3,7 +3,7 @@ use std::fmt;
 
 use indexmap::IndexSet;
 use redscript_compiler_api::ast::SourceMap;
-use redscript_compiler_api::{Diagnostic, Diagnostics, SourceMapExt, TypeInterner};
+use redscript_compiler_api::{Diagnostics, SourceMapExt, TypeInterner};
 use redscript_compiler_backend::CompilationInputs;
 use redscript_compiler_frontend::infer_from_sources;
 use redscript_io::{

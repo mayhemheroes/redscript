@@ -24,100 +24,57 @@ pub struct Symbols<'ctx> {
 
 impl<'ctx> Symbols<'ctx> {
     pub fn with_default_types() -> Self {
-        fn one_param_primitive<'a>(v: Variance, doc: impl Into<Box<[&'a str]>>) -> TypeDef<'a> {
-            TypeDef::new(
-                [CtxVar::new("T", v, None, None).into()],
-                TypeSchema::Primitive,
-                doc,
-            )
+        macro_rules! primitives {
+            ($(type <$($arg:ident: $var:ident),*> $id:ident;)*) => {
+                [$((
+                    paste::paste!(predef::[<$id:snake:upper>]),
+                    TypeDef::new(
+                        [$(CtxVar::new(stringify!($arg), Variance::$var, None, None).into()),*],
+                        TypeSchema::Primitive,
+                        [include_str!(concat!("../../../../docs/types/", stringify!($id), ".md"))],
+                    )
+                )),*]
+                .into_iter()
+                .collect::<HashMap<_, _, _>>()
+            };
         }
 
-        let mut types = HashMap::default();
+        let mut types = primitives! {
+            type<> String;
+            type<> Cname;
+            type<> Resource;
+            type<> TweakDbId;
+            type<> Float;
+            type<> Double;
+            type<> Int8;
+            type<> Int16;
+            type<> Int32;
+            type<> Int64;
+            type<> Uint8;
+            type<> Uint16;
+            type<> Uint32;
+            type<> Uint64;
+            type<> Bool;
+            type<> Variant;
+            type<> Void;
+            type<> Nothing;
 
-        types.insert(
-            predef::STRING,
-            TypeDef::new_primitive(["A dynamically allocated string."]),
-        );
-        types.insert(
-            predef::CNAME,
-            TypeDef::new_primitive(["An immutable string representing a name."]),
-        );
-        types.insert(
-            predef::RESOURCE,
-            TypeDef::new_primitive(["A resource path."]),
-        );
-        types.insert(
-            predef::TWEAK_DB_ID,
-            TypeDef::new_primitive(["An identifier of a record in the Tweak database."]),
-        );
-        types.insert(
-            predef::FLOAT,
-            TypeDef::new_primitive(["A 32-bit floating-point number."]),
-        );
-        types.insert(
-            predef::DOUBLE,
-            TypeDef::new_primitive(["A 64-bit floating-point number."]),
-        );
-        types.insert(
-            predef::INT8,
-            TypeDef::new_primitive(["An 8-bit signed integer."]),
-        );
-        types.insert(
-            predef::INT16,
-            TypeDef::new_primitive(["A 16-bit signed integer."]),
-        );
-        types.insert(
-            predef::INT32,
-            TypeDef::new_primitive(["A 32-bit signed integer."]),
-        );
-        types.insert(
-            predef::INT64,
-            TypeDef::new_primitive(["A 64-bit signed integer."]),
-        );
-        types.insert(
-            predef::UINT8,
-            TypeDef::new_primitive(["An 8-bit unsigned integer."]),
-        );
-        types.insert(
-            predef::UINT16,
-            TypeDef::new_primitive(["A 16-bit unsigned integer."]),
-        );
-        types.insert(
-            predef::UINT32,
-            TypeDef::new_primitive(["A 32-bit unsigned integer."]),
-        );
-        types.insert(
-            predef::UINT64,
-            TypeDef::new_primitive(["A 64-bit unsigned integer."]),
-        );
-        types.insert(predef::BOOL, TypeDef::new_primitive(["A boolean value."]));
-        types.insert(
-            predef::VARIANT,
-            TypeDef::new_primitive(["A variant type that can hold any value."]),
-        );
+            type<T: Covariant> Ref;
+            type<T: Covariant> Wref;
+            type<T: Invariant> ScriptRef;
+            type<T: Invariant> Array;
+        };
 
-        types.insert(
-            predef::REF,
-            one_param_primitive(Variance::Covariant, ["A strong reference to a value."]),
-        );
-        types.insert(
-            predef::WREF,
-            one_param_primitive(Variance::Covariant, ["A weak reference to a value."]),
-        );
-        types.insert(
-            predef::SCRIPT_REF,
-            one_param_primitive(Variance::Invariant, ["A script reference to a value."]),
-        );
-        types.insert(
-            predef::ARRAY,
-            one_param_primitive(Variance::Invariant, ["A dynamically allocated array."]),
-        );
         for ty in predef::STATIC_ARRAY_TYPES {
-            types.insert(*ty, one_param_primitive(Variance::Invariant, []));
+            types.insert(
+                *ty,
+                TypeDef::new(
+                    [CtxVar::new("T", Variance::Invariant, None, None).into()],
+                    TypeSchema::Primitive,
+                    [],
+                ),
+            );
         }
-
-        types.insert(predef::VOID, TypeDef::new_primitive([]));
-        types.insert(predef::NOTHING, TypeDef::new_primitive([]));
 
         types.insert(
             predef::ISCRIPTABLE,

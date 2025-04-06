@@ -237,7 +237,7 @@ func WeakRefToRef<A>(weak: wref<A>) -> A
 @intrinsic(IsDefined)
 func IsDefined(a: IScriptable) -> Bool
 
-/// Returns the name of a type.
+/// Returns the fully qualified name of a type including its full module path.
 ///
 /// ### Example
 /// ```

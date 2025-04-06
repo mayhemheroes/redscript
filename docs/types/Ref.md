@@ -1,0 +1,1 @@
+A strong reference to a value. This is the default reference type for newly created objects. It guarantees that the underlying value is kept alive as long as the reference exists (unlike a weak reference, `wref`).
