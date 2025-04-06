@@ -633,9 +633,25 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 break 'free_func;
             };
 
-            if name == "Cast" {
-                return self.lower_static_cast(args, type_args, hint, env, *expr_span);
-            };
+            match (name, type_args, args) {
+                ("Cast", [] | [_], [_]) => {
+                    return self.lower_static_cast(args, type_args, hint, env, *expr_span);
+                }
+                // legacy syntax
+                ("NameOf", [], [(ast::Expr::Ident(name), name_span)]) => {
+                    self.reporter.report(Error::DeprecatedNameOf(call_span));
+
+                    return self.lower_call(
+                        expr,
+                        &[(ast::Type::plain(name), *name_span)],
+                        &[],
+                        hint,
+                        env,
+                        call_span,
+                    );
+                }
+                _ => {}
+            }
 
             let mut candidates = env.query_free_functions(name, self.symbols).peekable();
             if candidates.peek().is_none() {
@@ -2674,6 +2690,8 @@ pub enum Error<'ctx> {
     InvalidTemporary(Span),
     #[error("only constants can be used here")]
     UnexpectedNonConstant(Span),
+    #[error("the `NameOf(Type)` syntax is deprecated, use `NameOf<Type>()` instead")]
+    DeprecatedNameOf(Span),
 }
 
 impl Error<'_> {
@@ -2703,6 +2721,7 @@ impl Error<'_> {
             | Self::InvalidPlaceExpr(span)
             | Self::InvalidTemporary(span)
             | Self::UnexpectedNonConstant(span) => *span,
+            Self::DeprecatedNameOf(span) => *span,
         }
     }
 
@@ -2732,7 +2751,12 @@ impl Error<'_> {
             Self::InvalidPlaceExpr(_) => "INVALID_PLACE",
             Self::InvalidTemporary(_) => "INVALID_TEMP",
             Self::UnexpectedNonConstant(_) => "INVALID_CONSTANT",
+            Self::DeprecatedNameOf(_) => "DEPRECATED_SYNTAX",
         }
+    }
+
+    pub fn is_fatal(&self) -> bool {
+        !matches!(self, Self::DeprecatedNameOf(_))
     }
 }
 

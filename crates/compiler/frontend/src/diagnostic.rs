@@ -93,12 +93,13 @@ pub enum Diagnostic<'ctx> {
 
 impl<'ctx> Diagnostic<'ctx> {
     pub fn is_fatal(&self) -> bool {
-        !matches!(
-            self,
+        match self {
+            Self::TypeError(err) => err.is_fatal(),
             Self::UnusedItemQualifiers(_, _)
-                | Self::DuplicateVariantValue(_)
-                | Self::FinalMethodOverride(_, _)
-        )
+            | Self::DuplicateVariantValue(_)
+            | Self::FinalMethodOverride(_, _) => false,
+            _ => true,
+        }
     }
 
     pub fn span(&self) -> Span {

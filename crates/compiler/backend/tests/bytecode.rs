@@ -3,7 +3,7 @@ use std::fmt;
 
 use indexmap::IndexSet;
 use redscript_compiler_api::ast::SourceMap;
-use redscript_compiler_api::{Diagnostics, SourceMapExt, TypeInterner};
+use redscript_compiler_api::{Diagnostic, Diagnostics, SourceMapExt, TypeInterner};
 use redscript_compiler_backend::CompilationInputs;
 use redscript_compiler_frontend::infer_from_sources;
 use redscript_io::{
@@ -29,7 +29,7 @@ fn bytecode() {
             .into_inner();
         let (unit, symbols, diagnostics) = infer_from_sources(&sources, &interner, symbols);
         assert_eq!(
-            diagnostics.len(),
+            diagnostics.iter().filter(|d| d.is_fatal()).count(),
             0,
             "{}: {}",
             Diagnostics::from(diagnostics),

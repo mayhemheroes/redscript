@@ -8,10 +8,13 @@ snapshot_kind: text
 assign
 local 0
 cname.const 0
-invoke.static j16 l4 f1 0000000000000000
+assign
+local 1
+cname.const 0
+invoke.static j16 l6 f1 0000000000000000
 param.end
 
 // Generic<Int32>; (f1)
 assign
-local 1
+local 2
 cname.const 0

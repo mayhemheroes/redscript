@@ -1,6 +1,8 @@
 
 func Test() {
   let _ = NameOf<Int32>();
+  // legacy syntax
+  let _ = NameOf(Int32);
   Generic<Int32>();
 }
 
