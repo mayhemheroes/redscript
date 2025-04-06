@@ -2720,8 +2720,8 @@ impl Error<'_> {
             | Self::NonExistentSuperType(span)
             | Self::InvalidPlaceExpr(span)
             | Self::InvalidTemporary(span)
-            | Self::UnexpectedNonConstant(span) => *span,
-            Self::DeprecatedNameOf(span) => *span,
+            | Self::UnexpectedNonConstant(span)
+            | Self::DeprecatedNameOf(span) => *span,
         }
     }
 
