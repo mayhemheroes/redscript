@@ -113,7 +113,7 @@ impl<'ctx> CompilationInputs<'ctx> {
                             .with_is_persistent(field.flags().is_persistent());
 
                         fields
-                            .add(assert_borrowed(name), Field::new(flags, typ, [], None))
+                            .add(assert_borrowed(name), Field::new(flags, typ, [], [], None))
                             .map_err(|_| Error::DuplicateField(field_idx.into()))?;
                     }
 

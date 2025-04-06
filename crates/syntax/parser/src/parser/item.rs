@@ -119,11 +119,16 @@ fn field<'tok, 'src: 'tok>(
 }
 
 fn enum_<'tok, 'src: 'tok>() -> impl Parse<'tok, 'src, SourceEnum<'src>> {
-    let int = select! { Token::Int(i) => i };
+    let int = just(Token::Minus)
+        .or_not()
+        .then(select! { Token::Int(i) => i });
 
     let variants = extended_ident()
         .then(just(Token::Assign).ignore_then(int).or_not())
-        .map_with(|(name, value), e| (EnumVariant::new(name, value), e.span()))
+        .map_with(|(name, value), e| {
+            let val = value.map(|(minus, val)| if minus.is_some() { -val } else { val });
+            (EnumVariant::new(name, val), e.span())
+        })
         .separated_by(just(Token::Comma))
         .allow_trailing()
         .collect::<Vec<_>>()

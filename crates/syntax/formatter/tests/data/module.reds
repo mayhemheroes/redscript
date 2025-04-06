@@ -2,6 +2,12 @@ module Test.Module
 
 import Dummy.*
 
+enum Enum {
+  A = -1,
+  B = 0,
+  C = 1,
+}
+
 /// A class doc comment.
 private native class NativeClass extends IScriptable {
   let a: Int32 = 0;

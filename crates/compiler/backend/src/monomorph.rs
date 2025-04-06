@@ -765,7 +765,14 @@ impl<'ctx> Monomorphizer<'ctx> {
             .with_is_inline(field.flags().is_inline())
             .with_is_const(field.flags().is_const())
             .with_is_persistent(field.flags().is_persistent());
-        bundle.define(PoolField::new(cname, class, Visibility::Public, typ, flags))
+        let attrs = field
+            .properties()
+            .iter()
+            .map(|(k, v)| Property::new(k.clone(), v.clone()))
+            .collect::<Vec<_>>();
+        let def =
+            PoolField::new(cname, class, Visibility::Public, typ, flags).with_attributes(attrs);
+        bundle.define(def)
     }
 
     #[inline]

@@ -30,6 +30,7 @@ pub(super) const ADD_FIELD_ANNOTATION: &str = "addField";
 pub(super) const INTRINSIC_ANNOTATION: &str = "intrinsic";
 pub(super) const NEVER_REF_ANNOTATION: &str = "neverRef";
 pub(super) const NAME_IMPLEMENTATION_ANNOTATION: &str = "nameImplementation";
+pub(super) const RUNTIME_PROPERTY_ANNOTATION: &str = "runtimeProperty";
 
 pub(super) const THIS_IDENT: &str = "this";
 pub(super) const WRAPPED_METHOD_IDENT: &str = "wrappedMethod";
@@ -479,8 +480,9 @@ impl<'ctx> NameResolution<'ctx> {
                     };
                     let flags =
                         self.process_field_flags(item.qualifiers, class_flags, &typ, name_span);
+                    let properties = self.process_field_properties(&item.annotations);
 
-                    let field = Field::new(flags, typ, item.doc, Some(name_span));
+                    let field = Field::new(flags, typ, properties, item.doc, Some(name_span));
                     let res = fields
                         .add(name, field)
                         .map_err(|_| Diagnostic::NameRedefinition(name_span));
@@ -749,7 +751,7 @@ impl<'ctx> NameResolution<'ctx> {
                     let flags =
                         self.process_field_flags(entry.meta.qualifiers, flags, &typ, name_span);
 
-                    let field = Field::new(flags, typ, mem::take(&mut doc), Some(name_span));
+                    let field = Field::new(flags, typ, [], mem::take(&mut doc), Some(name_span));
                     let res = self.symbols[parent_t]
                         .schema_mut()
                         .as_aggregate_mut()
@@ -847,6 +849,31 @@ impl<'ctx> NameResolution<'ctx> {
         }
 
         flags
+    }
+
+    fn process_field_properties(
+        &mut self,
+        anns: &[ast::Spanned<ast::SourceAnnotation<'ctx>>],
+    ) -> Vec<(Cow<'ctx, str>, Cow<'ctx, str>)> {
+        let mut results = vec![];
+        for (ann, span) in anns {
+            match (ann.name, &*ann.args) {
+                (
+                    RUNTIME_PROPERTY_ANNOTATION,
+                    [
+                        (ast::Expr::Constant(ast::Constant::String(key)), _),
+                        (ast::Expr::Constant(ast::Constant::String(val)), _),
+                    ],
+                ) => {
+                    results.push((key.clone(), val.clone()));
+                }
+                _ => {
+                    self.reporter
+                        .report(Diagnostic::UnknownAnnotation(ann.name, *span));
+                }
+            }
+        }
+        results
     }
 
     fn validate_module(&mut self, module: &InferStageModule<'_, 'ctx>) {

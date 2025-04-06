@@ -1122,6 +1122,7 @@ impl<K: TypeKind> fmt::Display for Param<'_, K> {
 pub struct Field<'ctx> {
     flags: FieldFlags,
     typ: Type<'ctx>,
+    properties: Box<[(Cow<'ctx, str>, Cow<'ctx, str>)]>,
     span: Option<Span>,
     doc: Box<[&'ctx str]>,
 }
@@ -1131,12 +1132,14 @@ impl<'ctx> Field<'ctx> {
     pub fn new(
         flags: FieldFlags,
         typ: Type<'ctx>,
+        properties: impl Into<Box<[(Cow<'ctx, str>, Cow<'ctx, str>)]>>,
         doc: impl Into<Box<[&'ctx str]>>,
         span: Option<Span>,
     ) -> Self {
         Self {
             flags,
             typ,
+            properties: properties.into(),
             doc: doc.into(),
             span,
         }
@@ -1150,6 +1153,11 @@ impl<'ctx> Field<'ctx> {
     #[inline]
     pub fn type_(&self) -> &Type<'ctx> {
         &self.typ
+    }
+
+    #[inline]
+    pub fn properties(&self) -> &[(Cow<'ctx, str>, Cow<'ctx, str>)] {
+        &self.properties
     }
 
     #[inline]
