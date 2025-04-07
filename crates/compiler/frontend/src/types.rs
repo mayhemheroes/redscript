@@ -604,7 +604,7 @@ pub mod predef {
     types! {
         STRING => "String",
         CNAME => "CName",
-        RESOURCE => "ResRef",
+        RES_REF => "ResRef",
         TWEAK_DB_ID => "TweakDBID",
         FLOAT => "Float",
         DOUBLE => "Double",

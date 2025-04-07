@@ -824,7 +824,7 @@ impl<'ctx> NameResolution<'ctx> {
                 (_, args) if !args.is_empty() => args
                     .iter()
                     .all(|arg| matches!(arg, Type::Data(app) if can_be_persisted(app))),
-                (id, _) => id != predef::STRING && id != predef::VARIANT && id != predef::RESOURCE,
+                (id, _) => id != predef::STRING && id != predef::VARIANT && id != predef::RES_REF,
             }
         }
 

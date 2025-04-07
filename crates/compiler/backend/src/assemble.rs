@@ -579,7 +579,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 let name = self.bundle.cnames_mut().add(name.clone());
                 self.emit(Instr::CNameConst(name));
             }
-            ir::Const::Resource(res) => {
+            ir::Const::ResRef(res) => {
                 let res = self.bundle.resources_mut().add(res.clone());
                 self.emit(Instr::ResourceConst(res));
             }
@@ -827,7 +827,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                         let cname = self.bundle.cnames_mut().add("");
                         Some(Instr::CNameConst(cname))
                     }
-                    id if id == predef::RESOURCE => {
+                    id if id == predef::RES_REF => {
                         let res = self.bundle.resources_mut().add("");
                         Some(Instr::ResourceConst(res))
                     }

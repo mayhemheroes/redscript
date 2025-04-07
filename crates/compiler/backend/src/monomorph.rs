@@ -1070,7 +1070,7 @@ impl fmt::Display for MangledConstant<'_, '_> {
         match self.const_ {
             ir::Const::Str(cow)
             | ir::Const::CName(cow)
-            | ir::Const::Resource(cow)
+            | ir::Const::ResRef(cow)
             | ir::Const::TweakDbId(cow) => write!(f, "{cow}"),
             ir::Const::EnumVariant(field_id) => {
                 let (name, _) = self

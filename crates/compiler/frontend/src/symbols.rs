@@ -42,7 +42,7 @@ impl<'ctx> Symbols<'ctx> {
         let mut types = primitives! {
             type<> String;
             type<> Cname;
-            type<> Resource;
+            type<> ResRef;
             type<> TweakDbId;
             type<> Float;
             type<> Double;

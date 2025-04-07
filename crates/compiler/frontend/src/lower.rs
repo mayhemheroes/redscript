@@ -1081,7 +1081,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             (
                 ast::Constant::String(_) | ast::Constant::CName(_) | ast::Constant::TweakDbId(_),
                 id,
-            ) if id == predef::RESOURCE => {
+            ) if id == predef::RES_REF => {
                 self.reporter
                     .report(Error::WrongStringLiteral(id, 'r', span));
                 return ir::Const::from(cn);

@@ -404,7 +404,7 @@ impl<'ctx> Call<'ctx> {
 pub enum Const<'ctx> {
     Str(Cow<'ctx, str>),
     CName(Cow<'ctx, str>),
-    Resource(Cow<'ctx, str>),
+    ResRef(Cow<'ctx, str>),
     TweakDbId(Cow<'ctx, str>),
     EnumVariant(FieldId<'ctx>),
     F32(f32),
@@ -425,7 +425,7 @@ impl<'ctx> Const<'ctx> {
         match self {
             Self::Str(_) => predef::STRING,
             Self::CName(_) => predef::CNAME,
-            Self::Resource(_) => predef::RESOURCE,
+            Self::ResRef(_) => predef::RES_REF,
             Self::TweakDbId(_) => predef::TWEAK_DB_ID,
             Self::EnumVariant(variant) => variant.parent(),
             Self::F32(_) => predef::FLOAT,
@@ -448,7 +448,7 @@ impl<'ctx> From<&ast::Constant<'ctx>> for Const<'ctx> {
         match ast {
             ast::Constant::String(s) => Self::Str(s.clone()),
             ast::Constant::CName(s) => Self::CName(s.clone()),
-            ast::Constant::Resource(s) => Self::Resource(s.clone()),
+            ast::Constant::Resource(s) => Self::ResRef(s.clone()),
             ast::Constant::TweakDbId(s) => Self::TweakDbId(s.clone()),
             &ast::Constant::F32(f) => Self::F32(f),
             &ast::Constant::F64(f) => Self::F64(f),
