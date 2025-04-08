@@ -2,13 +2,16 @@ use std::fs::{self, File};
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::str::FromStr;
 
 use anyhow::Context;
 use argh::FromArgs;
 use hashbrown::HashMap;
 use mimalloc::MiMalloc;
 use redscript_compiler_api::ast::SourceMap;
-use redscript_compiler_api::{Compilation, FlushError, ScriptBundle, SourceMapExt, TypeInterner};
+use redscript_compiler_api::{
+    Compilation, FlushError, ScriptBundle, SourceMapExt, TypeInterner, pass,
+};
 use redscript_decompiler::{Settings, decompile_all};
 use redscript_dotfile::Dotfile;
 use redscript_formatter::{FormatCtx, FormatSettings, SyntaxOps, format_document};
@@ -82,6 +85,9 @@ struct CompileOpts {
     /// path to an output .redscripts file
     #[argh(option, short = 'o')]
     output: PathBuf,
+    /// enable specific warnings
+    #[argh(option, short = 'W')]
+    warn_on: Vec<WarnOn>,
 }
 
 /// lint redscript source code
@@ -94,6 +100,9 @@ struct LintOpts {
     /// path to a .redscripts file to use for incremental compilation
     #[argh(option, short = 'b')]
     bundle: PathBuf,
+    /// enable specific warnings
+    #[argh(option, short = 'W')]
+    warn_on: Vec<WarnOn>,
 }
 
 /// format redscript source code
@@ -132,6 +141,30 @@ struct FormatOpts {
     max_sig_digits: Option<u8>,
 }
 
+#[derive(Debug)]
+enum WarnOn {
+    UnusedLocals,
+}
+
+impl WarnOn {
+    pub fn to_pass<'ctx>(&self) -> Box<dyn pass::DiagnosticPass<'ctx>> {
+        match self {
+            Self::UnusedLocals => Box::new(pass::UnusedLocals),
+        }
+    }
+}
+
+impl FromStr for WarnOn {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "unused_locals" => Ok(Self::UnusedLocals),
+            _ => Err(format!("unknown warning: {s}")),
+        }
+    }
+}
+
 fn main() -> anyhow::Result<ExitCode> {
     let colors = fern::colors::ColoredLevelConfig::default();
     fern::Dispatch::new()
@@ -156,8 +189,13 @@ fn compile(opts: CompileOpts) -> anyhow::Result<ExitCode> {
     let (map, _f) = Map::with_options().open(opts.bundle)?;
     let interner = TypeInterner::default();
     let sources = load_sources(&opts.src)?;
+    let passes = opts
+        .warn_on
+        .into_iter()
+        .map(|w| w.to_pass())
+        .collect::<Vec<_>>();
 
-    match Compilation::new(&map, &sources, &interner)?.flush(opts.output) {
+    match Compilation::new(&map, &sources, &interner, &passes)?.flush(opts.output) {
         Ok((_, diagnostics)) => {
             diagnostics.dump(&sources)?;
             log::info!("Compilation successful");
@@ -176,8 +214,13 @@ fn lint(opts: LintOpts) -> anyhow::Result<ExitCode> {
     let (map, _f) = Map::with_options().open(opts.bundle)?;
     let interner = TypeInterner::default();
     let sources = load_sources(&opts.src)?;
+    let passes = opts
+        .warn_on
+        .into_iter()
+        .map(|w| w.to_pass())
+        .collect::<Vec<_>>();
 
-    let comp = Compilation::new(&map, &sources, &interner)?;
+    let comp = Compilation::new(&map, &sources, &interner, &passes)?;
     comp.diagnostics().dump(&sources)?;
     if comp.diagnostics().has_fatal_errors() {
         log::info!("Compilation failed");

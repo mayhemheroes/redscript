@@ -3,7 +3,7 @@ use std::fmt;
 
 use indexmap::IndexSet;
 use redscript_compiler_api::ast::SourceMap;
-use redscript_compiler_api::{Diagnostics, SourceMapExt, TypeInterner};
+use redscript_compiler_api::{CompileErrorReporter, Diagnostics, SourceMapExt, TypeInterner};
 use redscript_compiler_backend::CompilationInputs;
 use redscript_compiler_frontend::infer_from_sources;
 use redscript_io::{
@@ -27,7 +27,9 @@ fn bytecode() {
         let (symbols, mappings) = CompilationInputs::load(&bundle, &interner)
             .unwrap()
             .into_inner();
-        let (unit, symbols, diagnostics) = infer_from_sources(&sources, &interner, symbols);
+        let mut reporter = CompileErrorReporter::default();
+        let (unit, symbols) = infer_from_sources(&sources, symbols, &mut reporter, &interner);
+        let diagnostics = reporter.into_reported();
         assert_eq!(
             diagnostics.iter().filter(|d| d.is_fatal()).count(),
             0,

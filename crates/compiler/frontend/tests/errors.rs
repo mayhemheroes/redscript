@@ -1,7 +1,9 @@
 use std::env;
 
 use redscript_ast::SourceMap;
-use redscript_compiler_api::{Diagnostic, SourceMapExt, Symbols, TypeInterner};
+use redscript_compiler_api::{
+    CompileErrorReporter, Diagnostic, SourceMapExt, Symbols, TypeInterner,
+};
 use redscript_compiler_frontend::infer_from_sources;
 
 #[test]
@@ -18,9 +20,10 @@ fn compilation_errors() {
 
         let interner = TypeInterner::default();
         let symbols = Symbols::with_default_types();
+        let mut reporter = CompileErrorReporter::default();
 
-        let (_, _, diagnostics) = infer_from_sources(&sources, &interner, symbols);
-        insta::assert_snapshot!(DisplayDiagnostics(diagnostics, &sources));
+        let (_, _) = infer_from_sources(&sources, symbols, &mut reporter, &interner);
+        insta::assert_snapshot!(DisplayDiagnostics(reporter.into_reported(), &sources));
     });
 }
 

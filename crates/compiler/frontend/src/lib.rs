@@ -7,8 +7,10 @@ mod stages;
 mod symbols;
 pub mod types;
 pub mod utils;
+mod visitor;
 
 pub use cte::Evaluator;
+pub use diagnostic::pass;
 pub use diagnostic::{Diagnostic, Reporter, UnknownSource};
 pub use lower::{CoalesceError, Error as LowerError, PolyType, TypeRef};
 pub use redscript_ast as ast;
@@ -36,17 +38,14 @@ type LowerReporter<'id> = Reporter<LowerError<'id>>;
 
 pub fn infer_from_sources<'ctx>(
     sources: &'ctx ast::SourceMap,
-    interner: &'ctx TypeInterner,
     symbols: Symbols<'ctx>,
-) -> (
-    LoweredCompilationUnit<'ctx>,
-    Symbols<'ctx>,
-    Vec<Diagnostic<'ctx>>,
-) {
-    let mut reporter = CompileErrorReporter::default();
-    let mods = parse_files(sources, &mut reporter);
+    reporter: &mut CompileErrorReporter<'ctx>,
+    interner: &'ctx TypeInterner,
+) -> (LoweredCompilationUnit<'ctx>, Symbols<'ctx>) {
+    let mods = parse_files(sources, reporter);
     let evaluator = Evaluator::from_modules(&mods);
-    process_sources(mods, evaluator, interner, symbols, reporter)
+    let (unit, symbols) = process_sources(mods, symbols, evaluator, reporter, interner);
+    (unit, symbols)
 }
 
 pub fn parse_files<'ctx>(
@@ -70,18 +69,14 @@ pub fn parse_file<'ctx>(
 
 pub fn process_sources<'ctx>(
     modules: impl IntoIterator<Item = ast::SourceModule<'ctx>>,
-    evaluator: Evaluator<'ctx>,
-    interner: &'ctx TypeInterner,
     symbols: Symbols<'ctx>,
-    reporter: CompileErrorReporter<'ctx>,
-) -> (
-    LoweredCompilationUnit<'ctx>,
-    Symbols<'ctx>,
-    Vec<Diagnostic<'ctx>>,
-) {
+    evaluator: Evaluator<'ctx>,
+    reporter: &mut CompileErrorReporter<'ctx>,
+    interner: &'ctx TypeInterner,
+) -> (LoweredCompilationUnit<'ctx>, Symbols<'ctx>) {
     let mut scope = Scope::new(&symbols);
     let mut resolution = NameResolution::new(modules, evaluator, symbols, reporter, interner);
 
     resolution.populate_globals(&mut scope);
-    resolution.progress(&scope).finish(&scope)
+    resolution.progress(&scope).finish(&scope, reporter)
 }

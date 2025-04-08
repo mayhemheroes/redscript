@@ -90,21 +90,10 @@ pub fn emit_closure<'ctx>(
         create_apply_method(idx, func, class, &func_t, symbols, bundle, monomorph)
     });
 
-    let locals = closure
-        .locals
-        .iter()
-        .map(|loc| {
-            let typ = loc
-                .typ
-                .coalesce(symbols)
-                .map_err(|e| AssembleError::Coalesce(e.into(), span))?;
-            Ok((loc.id, typ))
-        })
-        .collect::<Result<Vec<_>, AssembleError<'ctx>>>()?;
     let captures = closure.captures.iter().copied().zip(fields.iter().copied());
     let code = assemble_block(
         call,
-        locals,
+        closure.locals.iter().cloned(),
         captures,
         &closure.block,
         symbols,

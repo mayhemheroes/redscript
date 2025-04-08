@@ -5,12 +5,13 @@ pub use redscript_ast as ast;
 use redscript_ast::SourceMap;
 pub use redscript_compiler_backend::CompilationInputs;
 use redscript_compiler_backend::{AssembleError, PoolError, PoolMappings};
-use redscript_compiler_frontend::UnknownSource;
 pub use redscript_compiler_frontend::{
     Aggregate, CompileErrorReporter, Diagnostic, Enum, Evaluator, Field, FunctionType,
     LoweredCompilationUnit, LoweredFunction, PolyType, Symbols, TypeId, TypeIndex, TypeInterner,
-    TypeSchema, TypeScope, infer_from_sources, ir, parse_file, parse_files, process_sources, types,
+    TypeSchema, TypeScope, infer_from_sources, ir, parse_file, parse_files, pass, process_sources,
+    types,
 };
+use redscript_compiler_frontend::{UnknownSource, pass::DiagnosticPass};
 use redscript_io::byte;
 pub use redscript_io::{SaveError, ScriptBundle};
 use thiserror::Error;
@@ -29,11 +30,15 @@ impl<'ctx> Compilation<'ctx> {
         bundle: &'ctx [u8],
         sources: &'ctx SourceMap,
         interner: &'ctx TypeInterner,
+        passes: &[Box<dyn DiagnosticPass<'ctx>>],
     ) -> Result<Self, Error> {
+        let mut reporter = CompileErrorReporter::default();
         let bundle = ScriptBundle::from_bytes(bundle)?;
         let (symbols, mappings) = CompilationInputs::load(&bundle, interner)?.into_inner();
-        let (unit, symbols, mut diagnostics) = infer_from_sources(sources, interner, symbols);
+        let (unit, symbols) = infer_from_sources(sources, symbols, &mut reporter, interner);
+        unit.run_diagnostics(passes, &mut reporter);
 
+        let mut diagnostics = reporter.into_reported();
         diagnostics.sort_by_key(Diagnostic::is_fatal);
 
         Ok(Self {

@@ -36,21 +36,21 @@ pub(super) const THIS_IDENT: &str = "this";
 pub(super) const WRAPPED_METHOD_IDENT: &str = "wrappedMethod";
 
 #[derive(Debug)]
-pub struct NameResolution<'ctx> {
+pub struct NameResolution<'scope, 'ctx> {
     modules: HashMap<Option<ast::Path<'ctx>>, Vec<ResolutionStageModule<'ctx>>>,
 
     symbols: Symbols<'ctx>,
     module_map: ModuleMap<'ctx>,
     evaluator: Evaluator<'ctx>,
-    reporter: CompileErrorReporter<'ctx>,
+    reporter: &'scope mut CompileErrorReporter<'ctx>,
 }
 
-impl<'ctx> NameResolution<'ctx> {
+impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
     pub fn new(
         modules: impl IntoIterator<Item = ast::SourceModule<'ctx>>,
         evaluator: Evaluator<'ctx>,
         symbols: Symbols<'ctx>,
-        reporter: CompileErrorReporter<'ctx>,
+        reporter: &'scope mut CompileErrorReporter<'ctx>,
         interner: &'ctx TypeInterner,
     ) -> Self {
         let mut this = Self {
@@ -258,10 +258,7 @@ impl<'ctx> NameResolution<'ctx> {
         }
     }
 
-    pub fn progress<'scope>(
-        mut self,
-        scope: &'scope Scope<'_, 'ctx>,
-    ) -> TypeInference<'scope, 'ctx> {
+    pub fn progress<'a>(mut self, scope: &'a Scope<'_, 'ctx>) -> TypeInference<'a, 'ctx> {
         let mut results = vec![];
         for (path, modules) in mem::take(&mut self.modules) {
             let mut type_scope = scope.types.introduce_scope();
@@ -351,16 +348,16 @@ impl<'ctx> NameResolution<'ctx> {
             .for_each(|module| self.validate_module(module));
         self.process_inheritance(results.iter().flat_map(InferStageModule::classes));
 
-        TypeInference::new(results, self.symbols, self.reporter)
+        TypeInference::new(results, self.symbols)
     }
 
-    fn process_aggregate<'scope>(
+    fn process_aggregate<'a>(
         &mut self,
         entry: ParsedAggregate<'ctx>,
         path: Option<&ast::Path<'ctx>>,
-        types: &TypeEnv<'scope, 'ctx>,
+        types: &TypeEnv<'a, 'ctx>,
         is_struct: bool,
-    ) -> ClassItem<'scope, 'ctx> {
+    ) -> ClassItem<'a, 'ctx> {
         let aggregate = entry.aggregate;
         let (_, name_span) = aggregate.name;
         let span = entry.meta.span;
@@ -583,11 +580,11 @@ impl<'ctx> NameResolution<'ctx> {
             .add_type(entry.id, TypeDef::new([], schema, entry.meta.doc));
     }
 
-    fn process_free_function<'scope>(
+    fn process_free_function<'a>(
         &mut self,
         entry: ParsedFunction<'ctx>,
-        types: &TypeEnv<'scope, 'ctx>,
-    ) -> Option<FuncItemKind<'scope, 'ctx>> {
+        types: &TypeEnv<'a, 'ctx>,
+    ) -> Option<FuncItemKind<'a, 'ctx>> {
         let func = entry.function;
         let (name, name_span) = func.name;
         let (func_t, type_scope) = self.create_function_env(&func, types);
@@ -720,10 +717,10 @@ impl<'ctx> NameResolution<'ctx> {
         })
     }
 
-    fn process_free_field<'scope>(
+    fn process_free_field<'a>(
         &mut self,
         entry: ParsedLet<'ctx>,
-        types: &TypeEnv<'scope, 'ctx>,
+        types: &TypeEnv<'a, 'ctx>,
     ) -> Option<FieldItem<'ctx, FieldId<'ctx>>> {
         let field = entry.let_;
         let mut doc = entry.meta.doc;
@@ -1115,11 +1112,11 @@ impl<'ctx> NameResolution<'ctx> {
         }
     }
 
-    fn create_function_env<'scope>(
+    fn create_function_env<'a>(
         &mut self,
         func: &ast::SourceFunction<'ctx>,
         types: &TypeEnv<'_, 'ctx>,
-    ) -> (FunctionType<'ctx>, TypeScope<'scope, 'ctx>) {
+    ) -> (FunctionType<'ctx>, TypeScope<'a, 'ctx>) {
         for param in &func.type_params {
             if param.variance != ast::Variance::Invariant {
                 let (_, span) = param.name;
@@ -1164,11 +1161,11 @@ impl<'ctx> NameResolution<'ctx> {
         (func_t, type_scope)
     }
 
-    fn create_scope_env<'scope>(
+    fn create_scope_env<'a>(
         &mut self,
-        types: &'scope TypeEnv<'scope, 'ctx>,
-        params: &'scope [ast::SourceTypeParam<'ctx>],
-    ) -> (TypeEnv<'scope, 'ctx>, Box<[Rc<CtxVar<'ctx>>]>) {
+        types: &'a TypeEnv<'a, 'ctx>,
+        params: &'a [ast::SourceTypeParam<'ctx>],
+    ) -> (TypeEnv<'a, 'ctx>, Box<[Rc<CtxVar<'ctx>>]>) {
         let mut types = types.introduce_scope();
 
         for param in params {

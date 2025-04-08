@@ -187,8 +187,8 @@ pub enum Expr<'ctx> {
         span: Span,
     },
     NewStruct {
-        values: Box<[Self]>,
         struct_type: TypeApp<'ctx>,
+        args: Box<[Self]>,
         span: Span,
     },
     NewClosure {
@@ -282,7 +282,7 @@ impl<'ctx> Expr<'ctx> {
 
     pub fn find_at(&self, pos: u32) -> &Expr<'ctx> {
         match self {
-            Expr::NewStruct { values, .. } => values
+            Expr::NewStruct { args: values, .. } => values
                 .binary_search_by(|v| v.span().cmp_pos(pos))
                 .ok()
                 .map(|i| values[i].find_at(pos))

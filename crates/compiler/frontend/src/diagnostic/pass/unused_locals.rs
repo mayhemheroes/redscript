@@ -1,0 +1,67 @@
+use hashbrown::{HashMap, HashSet};
+use redscript_ast::Span;
+
+use crate::{CompileErrorReporter, Diagnostic, LoweredFunction, ir, visitor::Visitor};
+
+use super::DiagnosticPass;
+
+#[derive(Debug, Default)]
+pub struct UnusedLocals;
+
+impl<'ctx> DiagnosticPass<'ctx> for UnusedLocals {
+    fn run(&self, func: &LoweredFunction<'ctx>, reporter: &mut CompileErrorReporter<'ctx>) {
+        let mut visitor = UnusedLocalVisitor::new(func);
+        visitor.visit_block(&func.block);
+
+        for (_, span) in visitor.unused_locals() {
+            reporter.report(Diagnostic::UnusedLocal(span));
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+struct UnusedLocalVisitor {
+    spans: HashMap<ir::Local, Span>,
+    used: HashSet<ir::Local>,
+}
+
+impl UnusedLocalVisitor {
+    fn new<'ctx>(func: &LoweredFunction<'ctx>) -> Self {
+        let mut this = Self::default();
+        for local in &func.locals {
+            this.register_local(local);
+        }
+        this
+    }
+
+    fn register_local(&mut self, local: &ir::LocalInfo<'_>) {
+        if let Some(span) = local.span {
+            self.spans.insert(local.id, span);
+        }
+    }
+
+    fn unused_locals(&self) -> impl Iterator<Item = (ir::Local, Span)> {
+        self.spans
+            .iter()
+            .filter(|&(local, _)| !self.used.contains(local))
+            .map(|(&local, &span)| (local, span))
+    }
+}
+
+impl<'ctx> Visitor<'ctx> for UnusedLocalVisitor {
+    fn visit_init_default(&mut self, _local: ir::Local, _typ: &ir::Type<'ctx>, _span: Span) {}
+
+    fn visit_assign(&mut self, _place: &ir::Expr<'ctx>, value: &ir::Expr<'ctx>, _span: Span) {
+        self.visit_expr(value);
+    }
+
+    fn visit_new_closure(&mut self, closure: &ir::Closure<'ctx>, _span: Span) {
+        for local in &closure.locals {
+            self.register_local(local);
+        }
+    }
+
+    fn visit_local(&mut self, local: ir::Local, _span: Span) {
+        self.used.insert(local);
+    }
+}

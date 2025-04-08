@@ -453,7 +453,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                             .collect::<Result<_, _>>()?;
                         ir::Expr::NewStruct {
                             struct_type: typ.into(),
-                            values: args,
+                            args,
                             span: *span,
                         }
                     }

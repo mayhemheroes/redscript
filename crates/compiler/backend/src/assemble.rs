@@ -2,7 +2,7 @@ use closure::{CALL_METHOD, emit_closure};
 use redscript_compiler_frontend::ast::Span;
 use redscript_compiler_frontend::utils::ScopedMap;
 use redscript_compiler_frontend::{
-    CoalesceError, MonoType, RefType, Symbols, Type, TypeSchema, ir, predef,
+    CoalesceError, MonoType, RefType, Symbols, TypeSchema, ir, predef,
 };
 use redscript_io::{
     Conditional, FieldIndex as PoolFieldIndex, FunctionIndex as PoolFunctionIndex, Instr,
@@ -21,7 +21,7 @@ mod closure;
 #[allow(clippy::too_many_arguments)]
 pub fn assemble_block<'ctx>(
     index: PoolFunctionIndex,
-    locals: impl IntoIterator<Item = (ir::Local, Type<'ctx>)>,
+    locals: impl IntoIterator<Item = ir::LocalInfo<'ctx>>,
     captures: impl IntoIterator<Item = (ir::Local, PoolFieldIndex)>,
     block: &ir::Block<'ctx>,
     symbols: &Symbols<'ctx>,
@@ -31,7 +31,7 @@ pub fn assemble_block<'ctx>(
 ) -> Result<Vec<Instr>, AssembleError<'ctx>> {
     let mut assembler = Assembler::new(
         index, locals, captures, symbols, type_env, bundle, monomorph,
-    );
+    )?;
     assembler.assemble_block(block, None)?;
     assembler.into_code()
 }
@@ -55,28 +55,38 @@ struct Assembler<'scope, 'ctx> {
 impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
     fn new(
         index: PoolFunctionIndex,
-        locals: impl IntoIterator<Item = (ir::Local, Type<'ctx>)>,
+        locals: impl IntoIterator<Item = ir::LocalInfo<'ctx>>,
         captures: impl IntoIterator<Item = (ir::Local, PoolFieldIndex)>,
         symbols: &'scope Symbols<'ctx>,
         type_env: &'scope ScopedMap<'scope, &'ctx str, MonoType<'ctx>>,
         bundle: &'scope mut ScriptBundle<'ctx>,
         monomorph: &'scope mut Monomorphizer<'ctx>,
-    ) -> Self {
+    ) -> Result<Self, AssembleError<'ctx>> {
         let mut local_indices = vec![];
         let mut param_indices = vec![];
 
-        for (local, typ) in locals {
-            match local {
+        for local in locals {
+            match local.id {
                 ir::Local::Var(i) => {
                     let name = bundle.cnames_mut().add(format!("var{i}"));
-                    let typ = monomorph.type_(&typ.assume_mono(type_env), symbols, bundle);
+                    let typ = local
+                        .typ
+                        .coalesce(symbols)
+                        .map_err(|e| {
+                            AssembleError::Coalesce(
+                                e.into(),
+                                local.span.expect("non-spanned local should coalesce"),
+                            )
+                        })?
+                        .assume_mono(type_env);
+                    let typ = monomorph.type_(&typ, symbols, bundle);
                     let flags = PoolLocalFlags::default();
                     let idx = bundle.define(PoolLocal::new(name, index, typ, flags));
-                    local_indices.push((local, idx));
+                    local_indices.push((local.id, idx));
                 }
                 ir::Local::Param(_) => {
                     let idx = bundle[index].parameters()[param_indices.len()];
-                    param_indices.push((local, idx));
+                    param_indices.push((local.id, idx));
                 }
                 ir::Local::This => {}
             }
@@ -93,7 +103,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
         let mut capture_indices = captures.into_iter().collect::<Vec<_>>();
         capture_indices.sort_by_key(|&(l, _)| l);
 
-        Self {
+        Ok(Self {
             code: Vec::new(),
             locals: local_indices,
             params: param_indices,
@@ -107,7 +117,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
             bundle,
             monomorph,
             type_env,
-        }
+        })
     }
 
     #[inline]
@@ -315,7 +325,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 self.emit(Instr::New(class_t));
             }
             ir::Expr::NewStruct {
-                values,
+                args: values,
                 struct_type,
                 span,
             } => {

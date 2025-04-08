@@ -9,6 +9,8 @@ use crate::stages::FunctionAnnotation;
 use crate::utils::fmt::{DisplayFn, lowercase, sep_by};
 use crate::{CoalesceError, LowerError, Param, PolyType, Type, TypeId, Variance, cte, predef};
 
+pub mod pass;
+
 #[derive(Debug, Error)]
 pub enum Diagnostic<'ctx> {
     #[error("{0}")]
@@ -87,6 +89,8 @@ pub enum Diagnostic<'ctx> {
     InvalidImplType(Span),
     #[error("this implementation is a duplicate of a previous one")]
     DuplicateImpl(Span),
+    #[error("unused variable")]
+    UnusedLocal(Span),
     #[error("{0}")]
     Other(Box<dyn std::error::Error + 'ctx>, Span),
 }
@@ -97,7 +101,8 @@ impl<'ctx> Diagnostic<'ctx> {
             Self::TypeError(err) => err.is_fatal(),
             Self::UnusedItemQualifiers(_, _)
             | Self::DuplicateVariantValue(_)
-            | Self::FinalMethodOverride(_, _) => false,
+            | Self::FinalMethodOverride(_, _)
+            | Self::UnusedLocal(_) => false,
             _ => true,
         }
     }
@@ -142,6 +147,7 @@ impl<'ctx> Diagnostic<'ctx> {
             | Self::InvalidImplName(span)
             | Self::InvalidImplType(span)
             | Self::DuplicateImpl(span)
+            | Self::UnusedLocal(span)
             | Self::Other(_, span) => *span,
         }
     }
@@ -186,6 +192,7 @@ impl<'ctx> Diagnostic<'ctx> {
             Self::InvalidImplName(_) => "INVALID_IMPL_NAME",
             Self::InvalidImplType(_) => "INVALID_IMPL_TYPE",
             Self::DuplicateImpl(_) => "DUP_IMPL",
+            Self::UnusedLocal(_) => "UNUSED_LOCAL",
             Self::Other(_, _) => "OTHER",
         }
     }

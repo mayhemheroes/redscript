@@ -7,41 +7,30 @@ use redscript_ast::{self as ast, FileId, Span, Spanned};
 use smallvec::smallvec;
 
 use super::resolution::{Scope, THIS_IDENT, WRAPPED_METHOD_IDENT};
+use crate::diagnostic::pass::DiagnosticPass;
 use crate::lower::{Env, FreeFunctionIndexes, Lower};
 use crate::{
-    CompileErrorReporter, Diagnostic, FieldId, FieldIndex, FreeFunction, FreeFunctionIndex,
-    FunctionIndex, FunctionType, IndexMap, IndexSet, MethodId, PolyType, Symbols, Type, TypeId,
-    TypeRef, TypeScope, ir,
+    CompileErrorReporter, FieldId, FieldIndex, FreeFunction, FreeFunctionIndex, FunctionIndex,
+    FunctionType, IndexMap, IndexSet, MethodId, PolyType, Symbols, Type, TypeId, TypeRef,
+    TypeScope, ir,
 };
 
 #[derive(Debug)]
 pub struct TypeInference<'scope, 'ctx> {
     modules: Vec<InferStageModule<'scope, 'ctx>>,
     symbols: Symbols<'ctx>,
-    reporter: CompileErrorReporter<'ctx>,
 }
 
 impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
-    pub fn new(
-        modules: Vec<InferStageModule<'scope, 'ctx>>,
-        symbols: Symbols<'ctx>,
-        reporter: CompileErrorReporter<'ctx>,
-    ) -> Self {
-        Self {
-            symbols,
-            reporter,
-            modules,
-        }
+    pub fn new(modules: Vec<InferStageModule<'scope, 'ctx>>, symbols: Symbols<'ctx>) -> Self {
+        Self { symbols, modules }
     }
 
     pub fn finish(
         mut self,
         scope: &'scope Scope<'_, 'ctx>,
-    ) -> (
-        LoweredCompilationUnit<'ctx>,
-        Symbols<'ctx>,
-        Vec<Diagnostic<'ctx>>,
-    ) {
+        reporter: &mut CompileErrorReporter<'ctx>,
+    ) -> (LoweredCompilationUnit<'ctx>, Symbols<'ctx>) {
         let mut compiled = LoweredCompilationUnit::default();
 
         for mod_ in mem::take(&mut self.modules) {
@@ -69,7 +58,7 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                         method.flags().is_static().not().then(|| this_t.clone()),
                         Env::new(&types.push_scope(item.scope), &scope.funcs),
                         &self.symbols,
-                        &mut self.reporter,
+                        reporter,
                         item.span,
                     );
                     methods.insert(item.id, func);
@@ -80,7 +69,7 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                     if let Some(expr) = item.default.and_then(|default| {
                         let env = Env::new(&types, &scope.funcs);
                         let id = FieldId::new(class.id, item.id);
-                        lower_constant(id, &default, &env, &self.symbols, &mut self.reporter)
+                        lower_constant(id, &default, &env, &self.symbols, reporter)
                     }) {
                         fields.insert(item.id, expr);
                     }
@@ -110,7 +99,7 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                             None,
                             Env::new(&scope.types.push_scope(func.scope), &scope.funcs),
                             &self.symbols,
-                            &mut self.reporter,
+                            reporter,
                             func.span,
                         );
                         compiled.functions.insert(func.id, value);
@@ -127,7 +116,7 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                                 .then(|| PolyType::nullary(func.id.parent())),
                             Env::new(&scope.types.push_scope(func.scope), &scope.funcs),
                             &self.symbols,
-                            &mut self.reporter,
+                            reporter,
                             func.span,
                         );
                         compiled.method_replacements.insert(func.id, lowered);
@@ -145,7 +134,7 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                                     .then(|| PolyType::nullary(func.id.parent())),
                                 Env::new(&scope.types.push_scope(func.scope), &scope.funcs),
                                 &self.symbols,
-                                &mut self.reporter,
+                                reporter,
                                 func.span,
                             )
                         });
@@ -172,7 +161,7 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                                 .then(|| PolyType::nullary(func.id.parent())),
                             Env::new(&scope.types.push_scope(func.scope), &funcs),
                             &self.symbols,
-                            &mut self.reporter,
+                            reporter,
                             func.span,
                         );
                         compiled
@@ -189,7 +178,7 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                     .default
                     .and_then(|default| {
                         let env = Env::new(&scope.types, &scope.funcs);
-                        lower_constant(item.id, &default, &env, &self.symbols, &mut self.reporter)
+                        lower_constant(item.id, &default, &env, &self.symbols, reporter)
                     })
                     .map(Box::new);
 
@@ -207,7 +196,7 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
             }
         }
 
-        (compiled, self.symbols, self.reporter.into_reported())
+        (compiled, self.symbols)
     }
 }
 
@@ -237,17 +226,7 @@ fn lower_function<'ctx>(
     let (block, output, errors) = Lower::function(body, params, env, return_t, symbols);
     reporter.report_many(errors);
 
-    let mut locals = vec![];
-
-    for local in this.iter().chain(output.locals()) {
-        match local.typ.coalesce(symbols) {
-            Ok(typ) => locals.push((local.id, typ)),
-            Err(err) => {
-                let span = local.span.expect("local span should be present");
-                reporter.report(Diagnostic::CoalesceError(err.into(), span));
-            }
-        }
-    }
+    let locals = this.iter().chain(output.locals()).cloned().collect();
 
     LoweredFunction {
         block,
@@ -425,16 +404,16 @@ pub enum FuncItemKind<'scope, 'ctx> {
 #[derive(Debug)]
 pub struct LoweredFunction<'ctx> {
     pub block: ir::Block<'ctx>,
-    pub locals: Vec<(ir::Local, Type<'ctx>)>,
+    pub locals: Box<[ir::LocalInfo<'ctx>]>,
     pub span: Span,
 }
 
 impl<'ctx> LoweredFunction<'ctx> {
-    pub fn find_local(&self, loc: ir::Local) -> Option<&Type<'ctx>> {
+    pub fn find_local(&self, loc: ir::Local) -> Option<&PolyType<'ctx>> {
         self.locals
-            .binary_search_by_key(&loc, |&(local, _)| local)
+            .binary_search_by_key(&loc, |l| l.id)
             .ok()
-            .map(|idx| &self.locals[idx].1)
+            .map(|idx| &self.locals[idx].typ)
     }
 }
 
@@ -461,6 +440,22 @@ impl<'ctx> LoweredCompilationUnit<'ctx> {
             .chain(self.added_methods.values().flatten())
             .chain(self.method_replacements.values())
             .chain(self.method_wrappers.values().flatten())
+    }
+
+    pub fn run_diagnostics(
+        &self,
+        passes: &[Box<dyn DiagnosticPass<'ctx>>],
+        reporter: &mut CompileErrorReporter<'ctx>,
+    ) {
+        if passes.is_empty() {
+            return;
+        }
+
+        for func in self.all_functions() {
+            for pass in passes {
+                pass.run(func, reporter);
+            }
+        }
     }
 }
 
