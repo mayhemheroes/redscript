@@ -88,7 +88,7 @@ pub trait Visitor<'ctx> {
                 span,
             } => self.visit_init_array(*local, elements, element_type, *span),
             ir::Stmt::InitDefault { local, typ, span } => {
-                self.visit_init_default(*local, typ, *span)
+                self.visit_init_default(*local, typ, *span);
             }
             ir::Stmt::Break(span) => self.visit_break(*span),
             ir::Stmt::Continue(span) => self.visit_continue(*span),

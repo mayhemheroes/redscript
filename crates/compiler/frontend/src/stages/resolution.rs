@@ -93,7 +93,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
             item_span,
         ) in module.items.into_vec()
         {
-            if !process_conditionals(&mut annotations, &self.evaluator, &mut self.reporter) {
+            if !process_conditionals(&mut annotations, &self.evaluator, self.reporter) {
                 continue;
             }
 
@@ -113,11 +113,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                 }
                 ast::Item::Class(ref mut aggregate) | ast::Item::Struct(ref mut aggregate) => {
                     aggregate.items.retain_mut(|(item, _)| {
-                        process_conditionals(
-                            &mut item.annotations,
-                            &self.evaluator,
-                            &mut self.reporter,
-                        )
+                        process_conditionals(&mut item.annotations, &self.evaluator, self.reporter)
                     });
 
                     let (name, name_span) = aggregate.name;

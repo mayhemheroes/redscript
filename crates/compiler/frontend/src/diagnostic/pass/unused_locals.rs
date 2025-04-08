@@ -1,9 +1,9 @@
 use hashbrown::{HashMap, HashSet};
 use redscript_ast::Span;
 
-use crate::{CompileErrorReporter, Diagnostic, LoweredFunction, ir, visitor::Visitor};
-
 use super::DiagnosticPass;
+use crate::visitor::Visitor;
+use crate::{CompileErrorReporter, Diagnostic, LoweredFunction, ir};
 
 #[derive(Debug, Default)]
 pub struct UnusedLocals;
@@ -26,7 +26,7 @@ struct UnusedLocalVisitor {
 }
 
 impl UnusedLocalVisitor {
-    fn new<'ctx>(func: &LoweredFunction<'ctx>) -> Self {
+    fn new(func: &LoweredFunction<'_>) -> Self {
         let mut this = Self::default();
         for local in &func.locals {
             this.register_local(local);
