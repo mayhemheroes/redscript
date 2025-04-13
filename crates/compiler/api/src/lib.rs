@@ -5,7 +5,6 @@ pub use redscript_ast as ast;
 use redscript_ast::SourceMap;
 pub use redscript_compiler_backend::CompilationInputs;
 use redscript_compiler_backend::{AssembleError, PoolError, PoolMappings};
-use redscript_compiler_frontend::UnknownSource;
 use redscript_compiler_frontend::pass::DiagnosticPass;
 pub use redscript_compiler_frontend::{
     Aggregate, CompileErrorReporter, Diagnostic, Enum, Evaluator, Field, FunctionType,
@@ -13,6 +12,7 @@ pub use redscript_compiler_frontend::{
     TypeSchema, TypeScope, infer_from_sources, ir, parse_file, parse_files, pass, process_sources,
     types,
 };
+use redscript_compiler_frontend::{UnknownSource, pass::UnusedLocals};
 use redscript_io::byte;
 pub use redscript_io::{SaveError, ScriptBundle};
 use thiserror::Error;
@@ -27,7 +27,7 @@ pub struct Compilation<'ctx> {
 }
 
 impl<'ctx> Compilation<'ctx> {
-    pub fn new(
+    pub fn new_with(
         bundle: &'ctx [u8],
         sources: &'ctx SourceMap,
         interner: &'ctx TypeInterner,
@@ -50,6 +50,14 @@ impl<'ctx> Compilation<'ctx> {
             bundle,
             diagnostics: Diagnostics(diagnostics),
         })
+    }
+
+    pub fn new(
+        bundle: &'ctx [u8],
+        sources: &'ctx SourceMap,
+        interner: &'ctx TypeInterner,
+    ) -> Result<Self, Error> {
+        Self::new_with(bundle, sources, interner, &default_diagnostics())
     }
 
     pub fn flush(
@@ -185,4 +193,8 @@ impl SourceMapExt for SourceMap {
             include_str!("../../../../assets/reds/boot.reds"),
         );
     }
+}
+
+fn default_diagnostics<'ctx>() -> Vec<Box<dyn DiagnosticPass<'ctx>>> {
+    vec![Box::new(UnusedLocals)]
 }

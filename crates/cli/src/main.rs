@@ -195,7 +195,7 @@ fn compile(opts: CompileOpts) -> anyhow::Result<ExitCode> {
         .map(|w| w.to_pass())
         .collect::<Vec<_>>();
 
-    match Compilation::new(&map, &sources, &interner, &passes)?.flush(opts.output) {
+    match Compilation::new_with(&map, &sources, &interner, &passes)?.flush(opts.output) {
         Ok((_, diagnostics)) => {
             diagnostics.dump(&sources)?;
             log::info!("Compilation successful");
@@ -220,7 +220,7 @@ fn lint(opts: LintOpts) -> anyhow::Result<ExitCode> {
         .map(|w| w.to_pass())
         .collect::<Vec<_>>();
 
-    let comp = Compilation::new(&map, &sources, &interner, &passes)?;
+    let comp = Compilation::new_with(&map, &sources, &interner, &passes)?;
     comp.diagnostics().dump(&sources)?;
     if comp.diagnostics().has_fatal_errors() {
         log::info!("Compilation failed");
