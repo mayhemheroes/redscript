@@ -4,7 +4,7 @@ expression: "DisplayDiagnostics(reporter.into_reported(), &sources)"
 input_file: crates/compiler/frontend/tests/data/inference.reds
 snapshot_kind: text
 ---
-[TYPE_ERR] At tests/data/inference.reds:12:10
+[TYPE_ERR] At tests/data/inference.reds:11:10
   return i;
          ^
 type mismatch: found String when expected Int32

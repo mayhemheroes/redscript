@@ -105,8 +105,9 @@ fn lex_internal(
     let output = tokens
         .into_iter()
         .map(|(tok, span)| {
-            let tok = tok.map_span(|s| Span::from((file_id, s)));
-            (tok, Span::from((file_id, span)))
+            let span = Span::from((file_id, span));
+            let tok = tok.map_span(span, |s| Span::from((file_id, s)));
+            (tok, span)
         })
         .collect();
     (Some(output), errors)

@@ -1,5 +1,5 @@
 use std::borrow::Cow;
-use std::{fmt, mem};
+use std::{fmt, mem, ops};
 
 use chumsky::container::Container;
 use chumsky::input::InputRef;
@@ -315,12 +315,18 @@ impl<'src, S1> Token<'src, S1> {
         )
     }
 
-    pub fn map_span<S2>(self, f: impl Fn(S1) -> S2 + Clone) -> Token<'src, S2> {
+    pub fn map_span<S2>(self, base: S2, f: impl Fn(S1) -> S2 + Clone) -> Token<'src, S2>
+    where
+        S2: Copy + ops::Add<S2, Output = S2>,
+    {
         match self {
             Self::Group(s) => Token::Group(
                 s.into_vec()
                     .into_iter()
-                    .map(|(tok, span)| (tok.map_span(f.clone()), f(span)))
+                    .map(|(tok, nested)| {
+                        let span = f(nested);
+                        (tok.map_span(span, f.clone()), base + span)
+                    })
                     .collect(),
             ),
             Self::Ident(s) => Token::Ident(s),
@@ -338,7 +344,10 @@ impl<'src, S1> Token<'src, S1> {
             Self::InterpStr(s) => Token::InterpStr(
                 s.into_vec()
                     .into_iter()
-                    .map(|(tok, span)| (tok.map_span(f.clone()), f(span)))
+                    .map(|(tok, nested)| {
+                        let span = f(nested);
+                        (tok.map_span(span, f.clone()), base + span)
+                    })
                     .collect(),
             ),
             Self::LineComment(s) => Token::LineComment(s),

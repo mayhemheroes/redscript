@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, ops};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Span {
@@ -32,6 +32,19 @@ impl Span {
         Self {
             start: self.start.min(other.start),
             end: self.end.max(other.end),
+            file: self.file,
+        }
+    }
+}
+
+impl ops::Add<Span> for Span {
+    type Output = Span;
+
+    fn add(self, other: Span) -> Self::Output {
+        assert_eq!(self.file, other.file);
+        Self {
+            start: self.start + other.start,
+            end: self.start + other.end,
             file: self.file,
         }
     }
