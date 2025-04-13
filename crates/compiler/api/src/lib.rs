@@ -5,14 +5,14 @@ pub use redscript_ast as ast;
 use redscript_ast::SourceMap;
 pub use redscript_compiler_backend::CompilationInputs;
 use redscript_compiler_backend::{AssembleError, PoolError, PoolMappings};
-use redscript_compiler_frontend::pass::DiagnosticPass;
+use redscript_compiler_frontend::UnknownSource;
+use redscript_compiler_frontend::pass::{DiagnosticPass, UnusedLocals};
 pub use redscript_compiler_frontend::{
     Aggregate, CompileErrorReporter, Diagnostic, Enum, Evaluator, Field, FunctionType,
     LoweredCompilationUnit, LoweredFunction, PolyType, Symbols, TypeId, TypeIndex, TypeInterner,
     TypeSchema, TypeScope, infer_from_sources, ir, parse_file, parse_files, pass, process_sources,
     types,
 };
-use redscript_compiler_frontend::{UnknownSource, pass::UnusedLocals};
 use redscript_io::byte;
 pub use redscript_io::{SaveError, ScriptBundle};
 use thiserror::Error;
