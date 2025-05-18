@@ -89,6 +89,7 @@ nonstandard-style = "warn"
 rust-2018-compatibility = "warn"
 rust-2018-idioms = "warn"
 rust-2021-compatibility = "warn"
+rust-2024-compatibility = "warn"
 
 [workspace.lints.clippy]
 all = "warn"
