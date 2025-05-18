@@ -232,10 +232,20 @@ pub enum Expr<'ctx> {
     Local(Local, Span),
     Capture(Local, Span),
     Const(Const<'ctx>, Span),
-    Null(Span),
+    Null {
+        is_weak: bool,
+        span: Span,
+    },
 }
 
 impl<'ctx> Expr<'ctx> {
+    pub fn null(span: Span) -> Self {
+        Self::Null {
+            is_weak: false,
+            span,
+        }
+    }
+
     pub fn span(&self) -> Span {
         match self {
             Self::NewClass { span, .. }
@@ -250,7 +260,7 @@ impl<'ctx> Expr<'ctx> {
             | Self::Local(_, span)
             | Self::Capture(_, span)
             | Self::Const(_, span)
-            | Self::Null(span) => *span,
+            | Self::Null { span, .. } => *span,
         }
     }
 
@@ -486,6 +496,7 @@ pub enum Intrinsic {
     IntEnum,
     ToVariant,
     FromVariant,
+    VariantIsDefined,
     VariantIsRef,
     VariantIsArray,
     VariantTypeName,
@@ -523,6 +534,7 @@ impl From<Intrinsic> for &'static str {
             Intrinsic::IntEnum => "IntEnum",
             Intrinsic::ToVariant => "ToVariant",
             Intrinsic::FromVariant => "FromVariant",
+            Intrinsic::VariantIsDefined => "VariantIsDefined",
             Intrinsic::VariantIsRef => "VariantIsRef",
             Intrinsic::VariantIsArray => "VariantIsArray",
             Intrinsic::VariantTypeName => "VariantTypeName",
@@ -564,6 +576,7 @@ impl<'a> TryFrom<&'a str> for Intrinsic {
             "IntEnum" => Intrinsic::IntEnum,
             "ToVariant" => Intrinsic::ToVariant,
             "FromVariant" => Intrinsic::FromVariant,
+            "VariantIsDefined" => Intrinsic::VariantIsDefined,
             "VariantIsRef" => Intrinsic::VariantIsRef,
             "VariantIsArray" => Intrinsic::VariantIsArray,
             "VariantTypeName" => Intrinsic::VariantTypeName,

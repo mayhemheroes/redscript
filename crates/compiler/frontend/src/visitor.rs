@@ -172,7 +172,7 @@ pub trait Visitor<'ctx> {
 
     fn visit_const(&mut self, _constant: &ir::Const<'ctx>) {}
 
-    fn visit_null(&mut self, _span: Span) {}
+    fn visit_null(&mut self, _is_weak: bool, _span: Span) {}
 
     fn visit_expr(&mut self, expr: &ir::Expr<'ctx>) {
         match expr {
@@ -213,7 +213,7 @@ pub trait Visitor<'ctx> {
             ir::Expr::Local(local, span) => self.visit_local(*local, *span),
             ir::Expr::Capture(local, span) => self.visit_capture(*local, *span),
             ir::Expr::Const(const_, _) => self.visit_const(const_),
-            ir::Expr::Null(span) => self.visit_null(*span),
+            ir::Expr::Null { is_weak, span } => self.visit_null(*is_weak, *span),
         }
     }
 }

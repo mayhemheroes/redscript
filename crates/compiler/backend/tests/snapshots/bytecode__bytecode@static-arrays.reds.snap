@@ -1,0 +1,13 @@
+---
+source: crates/compiler/backend/tests/bytecode.rs
+expression: "BytecodePrinter::new(&bundle, bundle_len)"
+input_file: crates/compiler/backend/tests/data/static-arrays.reds
+---
+// Test; (f0)
+assign
+local 0
+assign
+static_array.element 0
+local 0
+i32.zero
+i32.one

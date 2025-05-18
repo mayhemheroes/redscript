@@ -318,7 +318,8 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
         match expr {
             ir::Expr::Call { call, span } => self.assemble_call(call, *span)?,
             ir::Expr::Const(const_, _) => self.assemble_const(const_)?,
-            ir::Expr::Null(_) => self.emit(Instr::Null),
+            ir::Expr::Null { is_weak: false, .. } => self.emit(Instr::Null),
+            ir::Expr::Null { is_weak: true, .. } => self.emit(Instr::WeakRefNull),
             ir::Expr::NewClass { class_type, span } => {
                 let class_t = self.mono_type_app(class_type, *span)?;
                 let class_t = self.monomorph.class(&class_t, self.symbols, self.bundle);
@@ -383,8 +384,13 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 span,
             } => {
                 let array_t = self.mono_type(array_type, *span)?;
+                let is_dynarray = array_t.id() == predef::ARRAY;
                 let array_t = self.monomorph.type_(&array_t, self.symbols, self.bundle);
-                self.emit(Instr::ArrayElement(array_t));
+                if is_dynarray {
+                    self.emit(Instr::ArrayElement(array_t));
+                } else {
+                    self.emit(Instr::StaticArrayElement(array_t));
+                }
                 self.assemble_expr(array)?;
                 self.assemble_expr(index)?;
             }
@@ -719,6 +725,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
             }
             (ir::Intrinsic::ToVariant, [arg]) => emit_typed(self, arg, Instr::ToVariant),
             (ir::Intrinsic::FromVariant, [arg]) => emit_typed(self, arg, Instr::FromVariant),
+            (ir::Intrinsic::VariantIsDefined, []) => self.emit(Instr::VariantIsDefined),
             (ir::Intrinsic::VariantIsRef, []) => self.emit(Instr::VariantIsRef),
             (ir::Intrinsic::VariantIsArray, []) => self.emit(Instr::VariantIsArray),
             (ir::Intrinsic::VariantTypeName, []) => self.emit(Instr::VariantTypeName),

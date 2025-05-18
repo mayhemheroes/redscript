@@ -14,6 +14,7 @@ use crate::cte::{self, Evaluator};
 use crate::diagnostic::MissingMethod;
 use crate::lower::{FreeFunctionIndexes, InferredTypeApp, TypeEnv};
 use crate::modules::{Export, ModuleMap};
+use crate::symbols::FunctionEntry;
 use crate::utils::{Lazy, ScopedMap};
 use crate::{
     Aggregate, AggregateFlags, CompileErrorReporter, CtxVar, Diagnostic, Enum, Field, FieldFlags,
@@ -601,21 +602,32 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     replaced = Some(id);
                 }
             }
-            &Some(FunctionAnnotation::Add(class)) => {
+            &Some(FunctionAnnotation::Add((cls_name, cls_span))) => {
+                let id = self.resolve_annotated_type(cls_name, types, cls_span)?;
+
                 if !func_t.type_params().is_empty() {
                     self.reporter
                         .report(Diagnostic::GenericMethodAnnotation(name_span));
                 }
 
-                if self
-                    .resolve_annotated_method(name, class, &func_t, types)
-                    .is_some()
-                {
+                let base = self.symbols.query_methods_by_name(id, name).find(|entry| {
+                    entry.func().type_().param_types().eq(func_t.param_types())
+                        && entry.func().type_().return_type() == func_t.return_type()
+                });
+                let base = base.as_ref().map(FunctionEntry::key).copied();
+
+                if base.is_some_and(|base| base.parent() == id) {
                     self.reporter
                         .report(Diagnostic::DuplicateMethodAnnotation(name_span));
+                    return None;
                 }
 
-                let (id, agg) = self.resolve_annotated_type(class, types)?;
+                let TypeSchema::Aggregate(agg) = self.symbols[id].schema() else {
+                    self.reporter
+                        .report(Diagnostic::InvalidAnnotationType(cls_name, cls_span));
+                    return None;
+                };
+
                 let parent_flags = agg.flags();
                 if agg.is_user_defined() {
                     self.reporter
@@ -630,7 +642,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     return None;
                 };
 
-                let member = Method::new(flags, func_t, None, entry.meta.doc, Some(name_span));
+                let member = Method::new(flags, func_t, base, entry.meta.doc, Some(name_span));
                 let idx = self.symbols[id]
                     .schema_mut()
                     .as_aggregate_mut()
@@ -726,7 +738,8 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         for (ann, ann_span) in &entry.meta.annotations {
             match (ann.name, &ann.args[..]) {
                 (ADD_FIELD_ANNOTATION, &[(ast::Expr::Ident(type_name), span)]) => {
-                    let (parent_t, agg) = self.resolve_annotated_type((type_name, span), types)?;
+                    let (parent_t, agg) =
+                        self.resolve_annotated_aggregate(type_name, types, span)?;
                     let flags = agg.flags();
 
                     if agg.is_user_defined() {
@@ -1196,11 +1209,27 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         (types, vars)
     }
 
+    fn resolve_annotated_aggregate(
+        &mut self,
+        cls_name: &'ctx str,
+        types: &TypeEnv<'_, 'ctx>,
+        cls_span: Span,
+    ) -> Option<(TypeId<'ctx>, &Aggregate<'ctx>)> {
+        let id = self.resolve_annotated_type(cls_name, types, cls_span)?;
+        let TypeSchema::Aggregate(agg) = self.symbols[id].schema() else {
+            self.reporter
+                .report(Diagnostic::InvalidAnnotationType(cls_name, cls_span));
+            return None;
+        };
+        Some((id, agg))
+    }
+
     fn resolve_annotated_type(
         &mut self,
-        (cls_name, cls_span): ast::Spanned<&'ctx str>,
+        cls_name: &'ctx str,
         types: &TypeEnv<'_, 'ctx>,
-    ) -> Option<(TypeId<'ctx>, &Aggregate<'ctx>)> {
+        cls_span: Span,
+    ) -> Option<TypeId<'ctx>> {
         let target = types
             .get(cls_name)
             .ok_or(LowerError::UnresolvedType(cls_name, cls_span));
@@ -1210,12 +1239,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                 .report(Diagnostic::InvalidAnnotationType(cls_name, cls_span));
             return None;
         };
-        let TypeSchema::Aggregate(agg) = self.symbols[id].schema() else {
-            self.reporter
-                .report(Diagnostic::InvalidAnnotationType(cls_name, cls_span));
-            return None;
-        };
-        Some((id, agg))
+        Some(id)
     }
 
     fn resolve_existing_annotated_method(
@@ -1227,7 +1251,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         types: &TypeEnv<'_, 'ctx>,
     ) -> Option<MethodId<'ctx>> {
         let Some((id, method)) =
-            self.resolve_annotated_method(func_name, (cls_name, cls_span), func_type, types)
+            self.resolve_annotated_method(func_name, cls_name, func_type, types, cls_span)
         else {
             self.reporter.report(Diagnostic::AnnotatedMethodNotFound(
                 annotation.clone(),
@@ -1246,11 +1270,12 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
     fn resolve_annotated_method(
         &mut self,
         func_name: &str,
-        (cls_name, cls_span): ast::Spanned<&'ctx str>,
+        cls_name: &'ctx str,
         func_type: &FunctionType<'ctx>,
         types: &TypeEnv<'_, 'ctx>,
+        cls_span: Span,
     ) -> Option<(MethodId<'ctx>, &Method<'ctx>)> {
-        let (id, agg) = self.resolve_annotated_type((cls_name, cls_span), types)?;
+        let (id, agg) = self.resolve_annotated_aggregate(cls_name, types, cls_span)?;
         let entry = agg.methods().by_name(func_name).find(|entry| {
             entry
                 .func()

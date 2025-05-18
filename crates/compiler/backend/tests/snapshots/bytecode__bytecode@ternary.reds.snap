@@ -2,9 +2,8 @@
 source: crates/compiler/backend/tests/bytecode.rs
 expression: "BytecodePrinter::new(&bundle, bundle_len)"
 input_file: crates/compiler/backend/tests/data/ternary.reds
-snapshot_kind: text
 ---
-// Test;Int32 (f0)
+// Test1;Int32 (f0)
 return
 cond 50 49
 invoke.static j47 l2 f1 0000000000000000
@@ -16,6 +15,15 @@ i32.zero
 param.end
 true.const
 false.const
+
+// Test2;Dummy (f3)
+return
+cond 22 21
+ref.to_bool
+wref.to_ref
+param 1
+param 1
+wref.null
 
 // OperatorEqual (f1)
 

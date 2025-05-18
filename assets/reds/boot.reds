@@ -237,6 +237,16 @@ func WeakRefToRef<A>(weak: wref<A>) -> A
 @intrinsic(IsDefined)
 func IsDefined(a: IScriptable) -> Bool
 
+/// Tests if a variant is defined.
+///
+/// ### Example
+/// ```
+/// let variant = ToVariant(1);
+/// IsDefined(variant); // true
+/// ```
+@intrinsic(VariantIsDefined)
+func IsDefined(a: Variant) -> Bool
+
 /// Returns the fully qualified name of a type including its full module path.
 ///
 /// ### Example

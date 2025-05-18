@@ -441,6 +441,10 @@ impl TypeId<'_> {
         predef::FN_BY_ARITY.contains(self)
     }
 
+    pub fn is_static_array(&self) -> bool {
+        predef::STATIC_ARRAY_TYPES.contains(self)
+    }
+
     #[inline]
     pub fn fn_with_arity(arity: usize) -> Option<Self> {
         predef::FN_BY_ARITY.get(arity).copied()

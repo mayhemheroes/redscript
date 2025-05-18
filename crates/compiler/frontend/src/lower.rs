@@ -331,6 +331,14 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 (ir, typ)
             }
             ast::Expr::UnOp { op, expr } => {
+                if let (ast::UnOp::Neg, &(ast::Expr::Constant(ast::Constant::I32(i)), span)) =
+                    (op, &**expr)
+                {
+                    let const_ = self.lower_constant(&ast::Constant::I32(-i), hint, span);
+                    let typ = PolyType::nullary(const_.type_id());
+                    return Ok((ir::Expr::Const(const_, span), typ));
+                }
+
                 let arg = self.lower_expr(expr, env)?;
                 let (call, typ) = self.free_function_call(op.name(), [arg], env, *span)?;
                 let ir = ir::Expr::Call {
@@ -355,9 +363,18 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             ast::Expr::Index { expr, index } => {
                 let expr @ (_, expr_span) = &**expr;
                 let elem_t = PolyType::fresh();
-                let array_t = Type::app(predef::ARRAY, [elem_t.clone()]).into_poly();
 
                 let (mut expr, expr_t) = self.lower_expr(expr, env)?;
+                let id = if let Some(typ) = expr_t
+                    .upper_bound(self.symbols)
+                    .filter(|typ| typ.id().is_static_array())
+                {
+                    typ.id()
+                } else {
+                    predef::ARRAY
+                };
+
+                let array_t = Type::app(id, [elem_t.clone()]).into_poly();
                 self.coerce(&mut expr, expr_t, array_t.clone(), env, *expr_span)?;
 
                 let index @ (_, index_span) = &**index;
@@ -478,8 +495,8 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                     .constrain(&PolyType::nullary(predef::BOOL), self.symbols)
                     .with_span(*cond_span)?;
 
-                let (then, then_t) = self.lower_expr(then, env)?;
-                let (else_, else_t) = self.lower_expr(else_, env)?;
+                let (then, then_t) = self.lower_expr_with(then, hint, env)?;
+                let (else_, else_t) = self.lower_expr_with(else_, hint.or(Some(&then_t)), env)?;
 
                 let ir = ir::Expr::Conditional {
                     condition: cond.into(),
@@ -495,13 +512,26 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             }
             ast::Expr::This => self.resolve_local("this", env, *span)?,
             ast::Expr::Super => self.resolve_local("this", env, *span)?,
+
             ast::Expr::Null => {
                 let typ =
                     PolyType::with_bounds(Type::Nothing, Some(Type::nullary(predef::ISCRIPTABLE)));
-                (ir::Expr::Null(*span), typ)
+                let is_weak = hint
+                    .and_then(|typ| typ.ref_type(self.symbols))
+                    .is_some_and(|ref_t| ref_t == RefType::Weak);
+                let typ = if is_weak {
+                    Type::app(predef::WREF, [typ]).into_poly()
+                } else {
+                    typ
+                };
+                let ir = ir::Expr::Null {
+                    is_weak,
+                    span: *span,
+                };
+                (ir, typ)
             }
 
-            ast::Expr::Error => (ir::Expr::Null(*span), PolyType::fresh()),
+            ast::Expr::Error => (ir::Expr::null(*span), PolyType::fresh()),
         };
         Ok(result)
     }
@@ -1366,7 +1396,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             Some(Coercion::IntoVariant) => ir::Intrinsic::ToVariant,
             None => return Ok(()),
         };
-        let arg = mem::replace(expr, ir::Expr::Null(span));
+        let arg = mem::replace(expr, ir::Expr::null(span));
         let (res, _) = self.free_function_call(name.into(), [(arg, lhs)], env, span)?;
         *expr = ir::Expr::Call {
             call: res.into(),
@@ -1775,6 +1805,11 @@ impl<'ctx> InferredType<'ctx> {
     fn is_subtype_compatible(&self, other: &Type<'ctx>, symbols: &Symbols<'ctx>) -> bool {
         match (self, other) {
             (Self::Nothing, _) | (_, Type::Ctx(_)) => true,
+            (Self::Data(lhs), Type::Data(rhs)) if lhs.id() == rhs.id() => lhs
+                .args()
+                .iter()
+                .zip(rhs.args())
+                .all(|(l, r)| l.is_subtype_compatible(r, symbols)),
             (Self::Data(lhs), Type::Data(rhs)) => symbols.is_subtype(lhs.id(), rhs.id()),
             (Self::Ctx(lhs), Type::Data(rhs)) => lhs
                 .upper()
@@ -1978,6 +2013,12 @@ impl<'ctx> PolyType<'ctx> {
             .as_deref()
             .and_then(TypeApp::strip_ref)
             .map(|(rt, typ)| (rt, typ.clone()))
+    }
+
+    pub fn ref_type(&self, symbols: &Symbols<'ctx>) -> Option<RefType> {
+        self.upper_bound(symbols)
+            .as_deref()
+            .and_then(TypeApp::ref_type)
     }
 
     fn is_subtype_compatible(&self, other: &Type<'ctx>, symbols: &Symbols<'ctx>) -> bool {

@@ -124,14 +124,16 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                     FuncItemKind::AddMethod(func) => {
                         let lowered = func.body.as_ref().map(|body| {
                             let sym = &self.symbols[func.id];
+                            let this = sym
+                                .flags()
+                                .is_static()
+                                .not()
+                                .then(|| PolyType::nullary(func.id.parent()));
                             lower_function(
                                 sym.type_(),
                                 &func.params,
                                 body,
-                                sym.flags()
-                                    .is_static()
-                                    .not()
-                                    .then(|| PolyType::nullary(func.id.parent())),
+                                this,
                                 Env::new(&scope.types.push_scope(func.scope), &scope.funcs),
                                 &self.symbols,
                                 reporter,

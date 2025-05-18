@@ -2,7 +2,6 @@
 source: crates/compiler/backend/tests/bytecode.rs
 expression: "BytecodePrinter::new(&bundle, bundle_len)"
 input_file: crates/compiler/backend/tests/data/variant.reds
-snapshot_kind: text
 ---
 // Test; (f0)
 assign
@@ -11,13 +10,17 @@ variant.new 0
 i32.one
 assign
 local 1
-variant.extract 0
+variant.is_defined
 local 0
 assign
 local 2
+variant.extract 0
+local 0
+assign
+local 3
 variant.type_name
 local 0
-invoke.static j30 l9 f1 0000000000000000
+invoke.static j30 l10 f1 0000000000000000
 variant.new 0
 i32.const 2
 param.end
