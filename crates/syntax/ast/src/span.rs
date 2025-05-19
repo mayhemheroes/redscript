@@ -50,6 +50,18 @@ impl ops::Add<Span> for Span {
     }
 }
 
+impl ops::Add<u8> for Span {
+    type Output = Span;
+
+    fn add(self, other: u8) -> Self::Output {
+        Self {
+            start: self.start + other as u32,
+            end: self.end + other as u32,
+            file: self.file,
+        }
+    }
+}
+
 #[cfg(feature = "chumsky")]
 impl From<(FileId, chumsky::span::SimpleSpan)> for Span {
     #[inline]

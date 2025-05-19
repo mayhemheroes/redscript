@@ -317,7 +317,7 @@ impl<'src, S1> Token<'src, S1> {
 
     pub fn map_span<S2>(self, base: S2, f: impl Fn(S1) -> S2 + Clone) -> Token<'src, S2>
     where
-        S2: Copy + ops::Add<S2, Output = S2>,
+        S2: Copy + ops::Add<u8, Output = S2> + ops::Add<S2, Output = S2>,
     {
         match self {
             Self::Group(s) => Token::Group(
@@ -325,7 +325,7 @@ impl<'src, S1> Token<'src, S1> {
                     .into_iter()
                     .map(|(tok, nested)| {
                         let span = f(nested);
-                        (tok.map_span(span, f.clone()), base + span)
+                        (tok.map_span(span, f.clone()), base + 1u8 + span)
                     })
                     .collect(),
             ),
