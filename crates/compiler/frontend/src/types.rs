@@ -474,13 +474,15 @@ impl TypeId<'_> {
             30 => Some(predef::ARRAY30),
             32 => Some(predef::ARRAY32),
             45 => Some(predef::ARRAY45),
+            64 => Some(predef::ARRAY64),
             100 => Some(predef::ARRAY100),
             128 => Some(predef::ARRAY128),
+            4096 => Some(predef::ARRAY4096),
             _ => None,
         }
     }
 
-    pub fn static_array_size(&self) -> Option<u8> {
+    pub fn static_array_size(&self) -> Option<u16> {
         match *self {
             id if id == predef::ARRAY0 => Some(0),
             id if id == predef::ARRAY1 => Some(1),
@@ -502,8 +504,10 @@ impl TypeId<'_> {
             id if id == predef::ARRAY30 => Some(30),
             id if id == predef::ARRAY32 => Some(32),
             id if id == predef::ARRAY45 => Some(45),
+            id if id == predef::ARRAY64 => Some(64),
             id if id == predef::ARRAY100 => Some(100),
             id if id == predef::ARRAY128 => Some(128),
+            id if id == predef::ARRAY4096 => Some(4096),
             _ => None,
         }
     }
@@ -655,8 +659,10 @@ pub mod predef {
         ARRAY30 => "array30",
         ARRAY32 => "array32",
         ARRAY45 => "array45",
+        ARRAY64 => "array64",
         ARRAY100 => "array100",
         ARRAY128 => "array128",
+        ARRAY4096 => "array4096",
 
         FUNCTION0 => "Function0",
         FUNCTION1 => "Function1",
@@ -702,7 +708,9 @@ pub mod predef {
         predef::ARRAY30,
         predef::ARRAY32,
         predef::ARRAY45,
+        predef::ARRAY64,
         predef::ARRAY100,
         predef::ARRAY128,
+        predef::ARRAY4096,
     ];
 }
