@@ -1,5 +1,6 @@
 mod assemble;
 mod inputs;
+mod known_types;
 mod monomorph;
 
 pub use assemble::AssembleError;

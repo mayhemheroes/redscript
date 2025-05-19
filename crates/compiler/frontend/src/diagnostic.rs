@@ -79,8 +79,8 @@ pub enum Diagnostic<'ctx> {
     NativeMemberOfScriptedType(Span),
     #[error("Strings, Variants and Resources cannot be persisted")]
     InvalidPersistentField(Span),
-    #[error("fields cannot be added to structs")]
-    StructFieldAddition(Span),
+    #[error("fields cannot be added to sealed types")]
+    SealedTypeFieldAddition(Span),
     #[error("{0}")]
     EvalFailed(#[from] cte::Error),
     #[error("the name of an implementation must be a valid identifier")]
@@ -143,7 +143,7 @@ impl<'ctx> Diagnostic<'ctx> {
             | Self::NonStaticStructMethod(span)
             | Self::NativeMemberOfScriptedType(span)
             | Self::InvalidPersistentField(span)
-            | Self::StructFieldAddition(span)
+            | Self::SealedTypeFieldAddition(span)
             | Self::InvalidImplName(span)
             | Self::InvalidImplType(span)
             | Self::DuplicateImpl(span)
@@ -187,7 +187,7 @@ impl<'ctx> Diagnostic<'ctx> {
             Self::NonStaticStructMethod(_) => "NON_STATIC_STRUCT_FN",
             Self::NativeMemberOfScriptedType(_) => "UNEXPECTED_NATIVE",
             Self::InvalidPersistentField(_) => "INVALID_PERSISTENT",
-            Self::StructFieldAddition(_) => "STRUCT_FIELD_ADDITION",
+            Self::SealedTypeFieldAddition(_) => "SEALED_TYPE_FIELD_ADDITION",
             Self::EvalFailed(_) => "CTE_ERR",
             Self::InvalidImplName(_) => "INVALID_IMPL_NAME",
             Self::InvalidImplType(_) => "INVALID_IMPL_TYPE",

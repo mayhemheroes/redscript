@@ -747,9 +747,9 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                             .report(Diagnostic::UserSymbolAnnotation(name_span));
                     }
 
-                    if flags.is_struct() {
+                    if flags.is_sealed() {
                         self.reporter
-                            .report(Diagnostic::StructFieldAddition(name_span));
+                            .report(Diagnostic::SealedTypeFieldAddition(name_span));
                     }
 
                     let (typ, span) = field.typ.as_ref();

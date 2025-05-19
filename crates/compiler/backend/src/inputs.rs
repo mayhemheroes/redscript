@@ -20,9 +20,8 @@ use redscript_io::{
 use thiserror::Error;
 
 use crate::IndexMap;
+use crate::known_types::KnownTypes;
 use crate::monomorph::Monomorphizer;
-
-const NEVER_REF_WHITELIST: [&str; 1] = ["ReactionData"];
 
 #[derive(Debug)]
 pub struct CompilationInputs<'ctx> {
@@ -46,6 +45,8 @@ impl<'ctx> CompilationInputs<'ctx> {
         bundle: &ScriptBundle<'ctx>,
         interner: &'ctx TypeInterner,
     ) -> Result<Self, Error> {
+        let known_types = KnownTypes::get();
+
         let mut inputs = CompilationInputs::default();
         let mut virtual_map: HashMap<
             TypeId<'ctx>,
@@ -156,7 +157,8 @@ impl<'ctx> CompilationInputs<'ctx> {
                         .with_is_final(cls.flags().is_final())
                         .with_is_import_only(cls.flags().is_import_only())
                         .with_is_struct(cls.flags().is_struct())
-                        .with_is_never_ref(NEVER_REF_WHITELIST.contains(&class_name.as_ref()));
+                        .with_is_never_ref(known_types.is_never_ref(class_name.as_ref()))
+                        .with_is_sealed(known_types.is_sealed(class_name.as_ref()));
                     let agg =
                         Aggregate::new(flags, base, fields, methods, HashMap::default(), None);
                     let def = TypeDef::new([], TypeSchema::Aggregate(agg.into()), []);

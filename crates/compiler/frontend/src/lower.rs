@@ -451,9 +451,15 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 let ir = match def.schema() {
                     TypeSchema::Aggregate(aggregate) if aggregate.flags().is_struct() => {
                         let field_count = aggregate.fields().len();
-                        if args.len() != field_count {
+
+                        if aggregate.flags().is_native() && !aggregate.flags().is_sealed() {
+                            if !args.is_empty() {
+                                return Err(Error::NonSealedStructConstruction(typ.id(), *span));
+                            }
+                        } else if args.len() != field_count {
                             return Err(Error::InvalidArgCount(field_count..=field_count, *span));
                         }
+
                         let type_env = typ.type_env(self.symbols);
                         let args = args
                             .iter()
@@ -2732,6 +2738,12 @@ pub enum Error<'ctx> {
     UnexpectedNonConstant(Span),
     #[error("the `NameOf(Type)` syntax is deprecated, use `NameOf<Type>()` instead")]
     DeprecatedNameOf(Span),
+    #[error(
+        "'{0}' is a native struct with an incomplete script definition, passing arguments to its \
+        constructor might result in undefined behavior, it can however still be safely \
+        constructed without arguments: 'new {0}()'"
+    )]
+    NonSealedStructConstruction(TypeId<'ctx>, Span),
 }
 
 impl Error<'_> {
@@ -2761,7 +2773,8 @@ impl Error<'_> {
             | Self::InvalidPlaceExpr(span)
             | Self::InvalidTemporary(span)
             | Self::UnexpectedNonConstant(span)
-            | Self::DeprecatedNameOf(span) => *span,
+            | Self::DeprecatedNameOf(span)
+            | Self::NonSealedStructConstruction(_, span) => *span,
         }
     }
 
@@ -2792,6 +2805,7 @@ impl Error<'_> {
             Self::InvalidTemporary(_) => "INVALID_TEMP",
             Self::UnexpectedNonConstant(_) => "INVALID_CONSTANT",
             Self::DeprecatedNameOf(_) => "DEPRECATED_SYNTAX",
+            Self::NonSealedStructConstruction(_, _) => "NON_SEALED_CTR",
         }
     }
 

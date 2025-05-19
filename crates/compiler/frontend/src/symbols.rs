@@ -1160,7 +1160,8 @@ pub struct AggregateFlags {
     pub is_import_only: bool,
     pub is_struct: bool,
     pub is_never_ref: bool,
-    #[bits(2)]
+    pub is_sealed: bool,
+    #[bits(1)]
     __: u8,
 }
 
