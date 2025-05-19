@@ -81,6 +81,8 @@ pub enum Diagnostic<'ctx> {
     InvalidPersistentField(Span),
     #[error("fields cannot be added to sealed types")]
     SealedTypeFieldAddition(Span),
+    #[error("fields cannot be added to scripted structs")]
+    ScriptedStructFieldAddition(Span),
     #[error("{0}")]
     EvalFailed(#[from] cte::Error),
     #[error("the name of an implementation must be a valid identifier")]
@@ -101,6 +103,7 @@ impl<'ctx> Diagnostic<'ctx> {
             Self::TypeError(err) => err.is_fatal(),
             Self::UnusedItemQualifiers(_, _)
             | Self::DuplicateVariantValue(_)
+            | Self::DuplicateVariantName(_)
             | Self::FinalMethodOverride(_, _)
             | Self::UnusedLocal(_) => false,
             _ => true,
@@ -144,6 +147,7 @@ impl<'ctx> Diagnostic<'ctx> {
             | Self::NativeMemberOfScriptedType(span)
             | Self::InvalidPersistentField(span)
             | Self::SealedTypeFieldAddition(span)
+            | Self::ScriptedStructFieldAddition(span)
             | Self::InvalidImplName(span)
             | Self::InvalidImplType(span)
             | Self::DuplicateImpl(span)
@@ -188,6 +192,7 @@ impl<'ctx> Diagnostic<'ctx> {
             Self::NativeMemberOfScriptedType(_) => "UNEXPECTED_NATIVE",
             Self::InvalidPersistentField(_) => "INVALID_PERSISTENT",
             Self::SealedTypeFieldAddition(_) => "SEALED_TYPE_FIELD_ADDITION",
+            Self::ScriptedStructFieldAddition(_) => "SCRIPTED_STRUCT_FIELD_ADDITION",
             Self::EvalFailed(_) => "CTE_ERR",
             Self::InvalidImplName(_) => "INVALID_IMPL_NAME",
             Self::InvalidImplType(_) => "INVALID_IMPL_TYPE",

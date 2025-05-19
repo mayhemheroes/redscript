@@ -750,6 +750,9 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     if flags.is_sealed() {
                         self.reporter
                             .report(Diagnostic::SealedTypeFieldAddition(name_span));
+                    } else if flags.is_struct() && !flags.is_native() {
+                        self.reporter
+                            .report(Diagnostic::ScriptedStructFieldAddition(name_span));
                     }
 
                     let (typ, span) = field.typ.as_ref();
