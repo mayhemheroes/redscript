@@ -245,10 +245,24 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 (ir::Expr::Const(const_, *span), const_t)
             }
             ast::Expr::ArrayLit(elems) => {
+                let elem_hint = hint.and_then(|typ| {
+                    let typ = typ.upper_bound(self.symbols)?;
+                    (typ.id() == predef::ARRAY)
+                        .then_some(typ.args().first().cloned())
+                        .flatten()
+                });
+
                 let (elems, elem_typ) = elems.iter().try_fold(
                     (vec![], PolyType::fresh()),
                     |(mut acc, elem_typ), elem| {
-                        let (elem, typ) = self.lower_expr(elem, env)?;
+                        let (mut elem, typ) = self.lower_expr(elem, env)?;
+                        let typ = if let Some(hint) = &elem_hint {
+                            let span = elem.span();
+                            self.coerce(&mut elem, typ.clone(), hint.clone(), env, span)?;
+                            hint.clone()
+                        } else {
+                            typ
+                        };
                         acc.push(elem);
                         Ok((acc, elem_typ.lub(&typ, self.symbols).with_span(*span)?))
                     },
