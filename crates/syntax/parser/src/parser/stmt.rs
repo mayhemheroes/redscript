@@ -1,7 +1,10 @@
 use std::iter;
 
 use chumsky::prelude::*;
-use redscript_ast::{Case, ConditionalBlock, SourceBlock, SourceExpr, SourceStmt, Span, Stmt};
+use redscript_ast::{
+    ArraySpread, Case, Condition, ConditionalBlock, LetCondition, Pattern, SourceBlock, SourceExpr,
+    SourcePattern, SourceStmt, SourceType, Span, Stmt,
+};
 
 use super::{Parse, ident_with_span, type_with_span};
 use crate::lexer::Token;
@@ -21,24 +24,103 @@ pub fn stmt_rec<'tok, 'src: 'tok>(
 
     let let_ = just(Token::Ident("let"))
         .ignore_then(ident_with_span())
-        .then(just(Token::Colon).ignore_then(typ).or_not())
+        .then(just(Token::Colon).ignore_then(typ.clone()).or_not())
         .then(just(Token::Assign).ignore_then(expr.clone()).or_not())
         .then_ignore(semicolon.clone())
         .map(|((name, typ), value)| {
             let value = value.map(Box::new);
             let typ = typ.map(Box::new);
             Stmt::Let { name, typ, value }
-        });
+        })
+        .erased();
+
+    let pattern = recursive(|this| {
+        let array = this
+            .clone()
+            .map(ArrayElemPattern::Elem)
+            .or(just(Token::Period)
+                .repeated()
+                .exactly(2)
+                .to(ArrayElemPattern::Spread))
+            .separated_by(just(Token::Comma))
+            .allow_trailing()
+            .collect::<Vec<_>>()
+            .delimited_by(just(Token::LBracket), just(Token::RBracket))
+            .try_map(|mut arr, span| {
+                let (elems, spread) = match &arr[..] {
+                    [ArrayElemPattern::Spread, ..] => (arr.drain(1..), ArraySpread::Start),
+                    [.., ArrayElemPattern::Spread] => {
+                        (arr.drain(..arr.len() - 1), ArraySpread::End)
+                    }
+                    _ => (arr.drain(..), ArraySpread::None),
+                };
+                let elems = elems
+                    .map(|elem| match elem {
+                        ArrayElemPattern::Spread => {
+                            Err(Rich::custom(span, "unexpected spread in array pattern"))
+                        }
+                        ArrayElemPattern::Elem(pat) => Ok(pat),
+                    })
+                    .collect::<Result<_, _>>()?;
+                Ok(Pattern::Array(spread, (elems, span)))
+            })
+            .erased();
+
+        let fields = ident_with_span()
+            .then(just(Token::Colon).ignore_then(this).or_not())
+            .map(|(name, pat)| (name, pat.unwrap_or(Pattern::Name(name))))
+            .separated_by(just(Token::Comma))
+            .allow_trailing()
+            .collect::<Vec<_>>()
+            .delimited_by(just(Token::LBrace), just(Token::RBrace));
+
+        let binding = ident_with_span()
+            .then(fields.or_not())
+            .map(|(name, fields)| match fields {
+                Some(fields) => Pattern::Aggregate(name, fields.into()),
+                None => Pattern::Name(name),
+            });
+        let atom = choice((array, binding));
+
+        atom.foldl_with(
+            just(Token::Ident("as"))
+                .ignore_then(typ)
+                .map(|(typ, span)| PatternSuffix::As(typ, span))
+                .or(just(Token::Question).to(PatternSuffix::Nullable))
+                .repeated(),
+            |inner, typ, e| match typ {
+                PatternSuffix::As(typ, span) => Pattern::As((inner, e.span()).into(), (typ, span)),
+                PatternSuffix::Nullable => Pattern::Nullable((inner, e.span()).into()),
+            },
+        )
+    })
+    .map_with(|stmt, e| (stmt, e.span()))
+    .erased();
+
+    let condition = just(Token::Ident("let"))
+        .ignore_then(pattern.clone())
+        .map(Condition::Pattern)
+        .or(expr.clone().map(Condition::Expr))
+        .erased();
+
+    let let_condition = just(Token::Ident("let"))
+        .ignore_then(pattern)
+        .then_ignore(just(Token::Assign))
+        .then(expr.clone())
+        .map(|(pat, expr)| LetCondition::LetPattern(pat, expr))
+        .or(expr.clone().map(LetCondition::Expr))
+        .erased();
 
     let case_body = stmt
         .map_with(|stmt, e| (stmt, e.span()))
         .repeated()
-        .collect::<Vec<_>>();
+        .collect::<Vec<_>>()
+        .erased();
     let cases = just(Token::Case)
-        .ignore_then(expr.clone())
+        .ignore_then(condition.clone())
         .then_ignore(just(Token::Colon))
         .then(case_body.clone())
-        .map(|(cond, body)| Case::new(cond, body))
+        .map(|(m, body)| Case::new(m, body))
         .repeated()
         .collect::<Vec<_>>()
         .then(
@@ -46,7 +128,8 @@ pub fn stmt_rec<'tok, 'src: 'tok>(
                 .ignore_then(just(Token::Colon).ignore_then(case_body))
                 .or_not(),
         )
-        .delimited_by(just(Token::LBrace), just(Token::RBrace));
+        .delimited_by(just(Token::LBrace), just(Token::RBrace))
+        .erased();
 
     let switch = just(Token::Ident("switch"))
         .ignore_then(expr.clone())
@@ -56,11 +139,13 @@ pub fn stmt_rec<'tok, 'src: 'tok>(
             expr: expr.into(),
             cases: cases.into(),
             default: default.map(Into::into),
-        });
+        })
+        .erased();
 
     let if_ = just(Token::Ident("if"))
-        .ignore_then(expr.clone().then(block.clone()))
-        .map(|(cond, body)| ConditionalBlock::new(cond, body));
+        .ignore_then(let_condition.clone().then(block.clone()))
+        .map(|(cond, body)| ConditionalBlock::new(cond, body))
+        .erased();
     let else_if = just(Token::Ident("else")).ignore_then(if_.clone());
     let else_ = just(Token::Ident("else")).ignore_then(block.clone());
     let if_stmt = if_
@@ -70,12 +155,14 @@ pub fn stmt_rec<'tok, 'src: 'tok>(
         .map(|((if_, else_ifs), else_)| Stmt::If {
             blocks: iter::once(if_).chain(else_ifs).collect(),
             else_,
-        });
+        })
+        .erased();
 
     let while_stmt = just(Token::Ident("while"))
-        .ignore_then(expr.clone().then(block.clone()))
+        .ignore_then(let_condition.then(block.clone()))
         .then_ignore(just(Token::Semicolon).or_not())
-        .map(|(cond, body)| Stmt::While(ConditionalBlock::new(cond, body).into()));
+        .map(|(cond, body)| Stmt::While(ConditionalBlock::new(cond, body).into()))
+        .erased();
 
     let for_stmt = just(Token::Ident("for"))
         .ignore_then(ident_with_span())
@@ -86,20 +173,24 @@ pub fn stmt_rec<'tok, 'src: 'tok>(
         .map(|((name, iter), body)| {
             let iter = Box::new(iter);
             Stmt::ForIn { name, iter, body }
-        });
+        })
+        .erased();
 
     let return_stmt = just(Token::Ident("return"))
         .ignore_then(expr.clone().or_not())
         .then_ignore(semicolon.clone())
-        .map(|e| Stmt::Return(e.map(Box::new)));
+        .map(|e| Stmt::Return(e.map(Box::new)))
+        .erased();
 
     let break_stmt = just(Token::Ident("break"))
         .ignore_then(semicolon.clone())
-        .map(|_| Stmt::Break);
+        .map(|_| Stmt::Break)
+        .erased();
 
     let continue_stmt = just(Token::Ident("continue"))
         .ignore_then(semicolon.clone())
-        .map(|_| Stmt::Continue);
+        .map(|_| Stmt::Continue)
+        .erased();
 
     let expr_stmt = expr.then_ignore(semicolon).map(|e| Stmt::Expr(e.into()));
 
@@ -119,9 +210,21 @@ pub fn stmt_rec<'tok, 'src: 'tok>(
     .erased()
 }
 
+#[derive(Debug, Clone)]
+enum PatternSuffix<'src> {
+    As(SourceType<'src>, Span),
+    Nullable,
+}
+
+#[derive(Debug, Clone)]
+enum ArrayElemPattern<'src> {
+    Spread,
+    Elem(SourcePattern<'src>),
+}
+
 #[cfg(test)]
 mod tests {
-    use redscript_ast::{BinOp, Block, Constant, Expr, FileId, Type};
+    use redscript_ast::{BinOp, Block, Condition, Constant, Expr, FileId, Type};
     use similar_asserts::assert_eq;
 
     use super::*;
@@ -144,11 +247,11 @@ mod tests {
             Stmt::If {
                 blocks: [
                     ConditionalBlock::new(
-                        Expr::Constant(Constant::Bool(true)),
+                        LetCondition::Expr(Expr::Constant(Constant::Bool(true))),
                         Block::single(Stmt::Return(Some(Expr::Constant(Constant::I32(1)).into())))
                     ),
                     ConditionalBlock::new(
-                        Expr::Constant(Constant::Bool(false)),
+                        LetCondition::Expr(Expr::Constant(Constant::Bool(false))),
                         Block::single(Stmt::Return(Some(Expr::Constant(Constant::I32(2)).into())))
                     ),
                 ]
@@ -178,9 +281,12 @@ mod tests {
             Stmt::Switch {
                 expr: Expr::Ident("a").into(),
                 cases: [
-                    Case::new(Expr::Constant(Constant::I32(0)), [Stmt::Break]),
                     Case::new(
-                        Expr::Constant(Constant::I32(1)),
+                        Condition::Expr(Expr::Constant(Constant::I32(0))),
+                        [Stmt::Break]
+                    ),
+                    Case::new(
+                        Condition::Expr(Expr::Constant(Constant::I32(1))),
                         [(Stmt::Return(Some(Expr::Constant(Constant::I32(0)).into())))]
                     ),
                 ]
@@ -202,11 +308,11 @@ mod tests {
             parse_stmt(code, FileId::from_i32(0)).0.unwrap().unwrapped(),
             Stmt::While(
                 ConditionalBlock::new(
-                    Expr::BinOp {
+                    LetCondition::Expr(Expr::BinOp {
                         op: BinOp::Gt,
                         lhs: Box::new(Expr::Ident("i")),
                         rhs: Box::new(Expr::Constant(Constant::I32(0))),
-                    },
+                    }),
                     Block::single(Stmt::Expr(
                         Expr::Assign {
                             lhs: Box::new(Expr::Ident("i")),

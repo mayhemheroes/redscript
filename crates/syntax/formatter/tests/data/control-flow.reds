@@ -62,6 +62,25 @@ func Test() {
       FTLog("h");
   }
 
+  let result;
+  switch [1, 2, 3] {
+    case let [.., a, b, c]:
+      result = a;
+      break;
+    case let [a, b, ..]:
+      result =  b;
+      break;
+    case let [a]:
+      result = a;
+      break;
+    default:
+      result = 0;
+  }
+
+  if let [.., a, b, c] = [1, 2, 3] {
+    result = a;
+  }
+
   for y in [1, 2, 3] {
     FTLog(s"f: \(y)");
   }

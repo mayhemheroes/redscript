@@ -2,7 +2,6 @@
 source: crates/compiler/backend/tests/bytecode.rs
 expression: "BytecodePrinter::new(&bundle, bundle_len)"
 input_file: crates/compiler/backend/tests/data/nested-for-loop.reds
-snapshot_kind: text
 ---
 // Test; (f0)
 array.resize 0
@@ -20,68 +19,62 @@ u64.const 1
 i32.one
 assign
 local 1
-local 0
-assign
-local 2
 i32.zero
-jump.if_not 395
+jump.if_not 376
 invoke.static j43 l8 f1 0000000000000000
-local 2
-array.size 0
 local 1
+array.size 0
+local 0
 param.end
 assign
-local 3
+local 2
 array.element 0
+local 0
 local 1
-local 2
 invoke.static j26 l8 f2 0000000000000000
-local 2
+local 1
 i32.one
 param.end
 array.resize 0
-local 4
+local 3
 u64.const 2
 assign
 array.element 0
-local 4
+local 3
 u64.const 0
 i32.zero
 assign
 array.element 0
-local 4
+local 3
 u64.const 1
 i32.one
 assign
-local 5
 local 4
-assign
-local 6
 i32.zero
 jump.if_not 168
 invoke.static j43 l9 f1 0000000000000000
-local 6
+local 4
 array.size 0
-local 5
+local 3
 param.end
 assign
-local 7
-array.element 0
 local 5
-local 6
+array.element 0
+local 3
+local 4
 invoke.static j26 l9 f2 0000000000000000
-local 6
+local 4
 i32.one
 param.end
 invoke.static j59 l10 f3 0000000000000000
 to_string 1
 invoke.static j34 l10 f4 0000000000000000
-local 3
-local 7
+local 2
+local 5
 param.end
 param.end
 jump -171
-jump -398
+jump -379
 
 // OperatorLess (f1)
 

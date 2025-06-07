@@ -2,7 +2,6 @@
 source: crates/compiler/backend/tests/bytecode.rs
 expression: "BytecodePrinter::new(&bundle, bundle_len)"
 input_file: crates/compiler/backend/tests/data/enum.reds
-snapshot_kind: text
 ---
 // Testing;Direction (f0)
 switch 10

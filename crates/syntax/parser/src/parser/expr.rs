@@ -100,13 +100,15 @@ fn expr_with_span_impl<'tok, 'src: 'tok>(
         .separated_by(just(Token::Comma))
         .allow_trailing()
         .collect::<Vec<_>>()
-        .delimited_by(just(Token::LParen), just(Token::RParen));
+        .delimited_by(just(Token::LParen), just(Token::RParen))
+        .erased();
     let type_arguments = typ
         .clone()
         .separated_by(just(Token::Comma))
         .allow_trailing()
         .collect::<Vec<_>>()
-        .delimited_by(just(Token::LAngle), just(Token::RAngle));
+        .delimited_by(just(Token::LAngle), just(Token::RAngle))
+        .erased();
 
     let new = just(Token::Ident("new"))
         .ignore_then(typ.clone())
@@ -149,7 +151,8 @@ fn expr_with_span_impl<'tok, 'src: 'tok>(
 
     let parens = expr
         .clone()
-        .delimited_by(just(Token::LParen), just(Token::RParen));
+        .delimited_by(just(Token::LParen), just(Token::RParen))
+        .erased();
 
     let atom = choice((
         array,
@@ -174,15 +177,18 @@ fn expr_with_span_impl<'tok, 'src: 'tok>(
 
     let member_access = just(Token::Period)
         .ignore_then(extended_ident())
-        .map(TopPrecedence::MemberAccess);
+        .map(TopPrecedence::MemberAccess)
+        .erased();
     let array_access = expr
         .clone()
         .delimited_by(just(Token::LBracket), just(Token::RBracket))
-        .map(|args| TopPrecedence::ArrayAccess(args.into()));
+        .map(|args| TopPrecedence::ArrayAccess(args.into()))
+        .erased();
     let call = type_arguments
         .or_not()
         .then(arguments)
-        .map(|(targs, args)| TopPrecedence::Call(targs.unwrap_or_default().into(), args.into()));
+        .map(|(targs, args)| TopPrecedence::Call(targs.unwrap_or_default().into(), args.into()))
+        .erased();
     let member = atom
         .foldl_with(
             choice((member_access, array_access, call)).repeated(),
@@ -211,19 +217,24 @@ fn expr_with_span_impl<'tok, 'src: 'tok>(
         )))
         .erased();
 
-    let unops = unop.repeated().foldr_with(member, |op, expr, e| {
-        let expr = Box::new(expr);
-        (Expr::UnOp { op, expr }, e.span())
-    });
-
-    let as_ = unops.foldl_with(
-        just(Token::Ident("as")).ignore_then(typ).repeated(),
-        |expr, typ, e| {
+    let unops = unop
+        .repeated()
+        .foldr_with(member, |op, expr, e| {
             let expr = Box::new(expr);
-            let typ = Box::new(typ);
-            (Expr::DynCast { expr, typ }, e.span())
-        },
-    );
+            (Expr::UnOp { op, expr }, e.span())
+        })
+        .erased();
+
+    let as_ = unops
+        .foldl_with(
+            just(Token::Ident("as")).ignore_then(typ).repeated(),
+            |expr, typ, e| {
+                let expr = Box::new(expr);
+                let typ = Box::new(typ);
+                (Expr::DynCast { expr, typ }, e.span())
+            },
+        )
+        .erased();
 
     let binops = as_
         .clone()
@@ -247,7 +258,8 @@ fn expr_with_span_impl<'tok, 'src: 'tok>(
                 (Expr::Conditional { cond, then, else_ }, e.span())
             }
             None => cond,
-        });
+        })
+        .erased();
 
     let assign = ternary
         .clone()
@@ -259,7 +271,8 @@ fn expr_with_span_impl<'tok, 'src: 'tok>(
                 (Expr::Assign { lhs, rhs }, e.span())
             }
             None => lhs,
-        });
+        })
+        .erased();
 
     assign.labelled("expression").as_context().erased()
 }

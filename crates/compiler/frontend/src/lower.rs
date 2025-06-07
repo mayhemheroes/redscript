@@ -3,7 +3,7 @@ use std::cell::{Cell, RefCell};
 use std::hash::BuildHasher;
 use std::ops::RangeInclusive;
 use std::rc::Rc;
-use std::{fmt, iter, mem, ptr};
+use std::{fmt, iter, mem, ptr, slice};
 
 use hashbrown::{HashMap, HashSet};
 use identity_hash::{BuildIdentityHasher, IdentityHashable};
@@ -164,6 +164,12 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         Ok((ir::Block::new(stmts), lower.into_output()))
     }
 
+    fn push_prefix(&mut self, stmt: impl Into<ir::Stmt<'ctx>>) {
+        let mut top = self.stmt_prefix.pop().unwrap_or_default();
+        top.push(stmt.into());
+        self.stmt_prefix.push(top);
+    }
+
     fn lower_block(
         &mut self,
         stmts: &[Spanned<ast::SourceStmt<'ctx>>],
@@ -195,31 +201,371 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         self.lower_block(block, &mut env.introduce_scope())
     }
 
-    fn lower_cond_block(
+    fn lower_conditional_block(
         &mut self,
         block: &ast::SourceConditionalBlock<'ctx>,
         env: &Env<'_, 'ctx>,
-    ) -> LowerResult<'ctx, ir::CondBlock<'ctx>> {
-        let cond @ (_, cond_span) = &block.cond;
-        let (cond, typ) = self.lower_expr(cond, env)?;
-        typ.constrain(&PolyType::nullary(predef::BOOL), self.symbols)
-            .with_span(*cond_span)?;
+    ) -> LowerResult<'ctx, (ir::ConditionalBlock<'ctx>, Option<ir::Stmt<'ctx>>)> {
+        match &block.condition {
+            ast::LetCondition::Expr(expr) => {
+                let (_, span) = expr;
+                let (condition, expr_t) = self.lower_expr(expr, env)?;
+                expr_t
+                    .constrain(&PolyType::nullary(predef::BOOL), self.symbols)
+                    .with_span(*span)?;
+                let block = self.lower_scoped_block(&block.body.stmts, env);
+                Ok((ir::ConditionalBlock::new(condition, block), None))
+            }
+            ast::LetCondition::LetPattern(pattern, val) => {
+                let (_, span) = pattern;
+                let (expr, expr_t) = self.lower_expr(val, env)?;
 
-        let ir = self.lower_scoped_block(&block.body.stmts, env);
-        Ok(ir::CondBlock::new(cond, ir))
+                let local = self.locals.add_var(expr_t.clone(), expr.span()).id;
+                let mut scope = env.introduce_scope();
+                let (prologue, condition) = self.lower_pattern_into_prologue_and_condition(
+                    local, &expr_t, &mut scope, pattern,
+                )?;
+                let mut block = self.lower_block(&block.body.stmts, &mut scope);
+                block.push_prologue(prologue);
+
+                Ok((
+                    ir::ConditionalBlock::new(condition, block),
+                    Some(
+                        ir::Expr::Assign {
+                            place: ir::Expr::Local(local, *span).into(),
+                            expr: expr.into(),
+                            span: *span,
+                        }
+                        .into(),
+                    ),
+                ))
+            }
+        }
+    }
+
+    fn lower_projection(
+        &mut self,
+        projection: &Projection<'_, 'ctx>,
+        env: &Env<'_, 'ctx>,
+        span: Span,
+    ) -> LowerResult<'ctx, ir::Expr<'ctx>> {
+        match projection {
+            Projection::Index {
+                array,
+                array_type,
+                index,
+            } if *index >= 0 => Ok(ir::Expr::Index {
+                array_type: array_type.clone().into(),
+                array: self.lower_projection(array, env, span)?.into(),
+                index: ir::Expr::Const(ir::Const::I32(*index), span).into(),
+                span,
+            }),
+            Projection::Index {
+                array,
+                array_type,
+                index,
+            } => {
+                let array_arg = self.lower_projection(array, env, span)?;
+                let (length, length_t) = self.new_free_function_call(
+                    ir::Intrinsic::ArraySize,
+                    [(array_arg, array_type.clone())],
+                    &[],
+                    env,
+                    span,
+                )?;
+                let index = ir::Expr::Const(ir::Const::I32(-index), span);
+                let (index, _) = self.new_free_function_call(
+                    ast::BinOp::Sub,
+                    [
+                        (ir::Expr::call(length, span), length_t),
+                        (index, PolyType::nullary(predef::INT32)),
+                    ],
+                    &[],
+                    env,
+                    span,
+                )?;
+                Ok(ir::Expr::Index {
+                    array_type: array_type.clone().into(),
+                    array: self.lower_projection(array, env, span)?.into(),
+                    index: ir::Expr::call(index, span).into(),
+                    span,
+                })
+            }
+            Projection::Field {
+                receiver,
+                receiver_type,
+                receiver_ref,
+                field,
+            } => Ok(ir::Expr::Field {
+                field: *field,
+                receiver_type: receiver_type.clone().into(),
+                receiver_ref: *receiver_ref,
+                receiver: self.lower_projection(receiver, env, span)?.into(),
+                span,
+            }),
+            Projection::Scrutinee(local) => Ok(ir::Expr::Local(*local, span)),
+        }
+    }
+
+    fn lower_pattern(
+        &mut self,
+        pattern: &ast::SourcePattern<'ctx>,
+        projection: &Projection<'_, 'ctx>,
+        projection_t: &PolyType<'ctx>,
+        env: &mut Env<'_, 'ctx>,
+    ) -> LowerResult<'ctx, Pattern<'ctx>> {
+        match pattern {
+            ast::Pattern::Name((name, name_span)) => {
+                let local = self.locals.add_var(projection_t.clone(), *name_span);
+                let local = env.define_local(name, local.clone());
+                let projected = self.lower_projection(projection, env, *name_span)?;
+                Ok(Pattern {
+                    conditions: vec![],
+                    prologue: vec![
+                        ir::Expr::Assign {
+                            place: ir::Expr::Local(local, *name_span).into(),
+                            expr: projected.into(),
+                            span: *name_span,
+                        }
+                        .into(),
+                    ],
+                })
+            }
+            ast::Pattern::As(pattern, (as_type, type_span)) => {
+                let (pattern, pattern_span) = &**pattern;
+
+                let (ref_type, unref_t) = projection_t.strip_ref(self.symbols).unzip();
+                let unref_t = unref_t.unwrap_or(projection_t.clone());
+
+                let as_type = self.resolve_type(as_type, env, *type_span)?;
+                as_type
+                    .constrain(&unref_t, self.symbols)
+                    .with_span(*pattern_span)?;
+
+                let Pattern {
+                    mut conditions,
+                    prologue,
+                } = self.lower_pattern(pattern, projection, &as_type, env)?;
+
+                let projected = self.lower_projection(projection, env, *type_span)?;
+                let type_check =
+                    self.new_runtime_type_check(projected, &as_type, ref_type, env, *pattern_span)?;
+                conditions.push(ir::Expr::call(type_check, *type_span));
+
+                Ok(Pattern {
+                    conditions,
+                    prologue,
+                })
+            }
+            ast::Pattern::Aggregate((name, span), fields) => {
+                let Some(TypeRef::Name(type_id)) = env.types.get(name) else {
+                    return Err(Error::UnresolvedType(name, *span));
+                };
+
+                let aggregate_t_app = TypeApp::from_id(*type_id, self.symbols);
+                let aggregate_t = aggregate_t_app.clone().into_type().into_poly();
+                let (receiver_ref, unref_t) = projection_t.strip_ref(self.symbols).unzip();
+                let unref_t = unref_t.unwrap_or(projection_t.clone());
+
+                aggregate_t
+                    .constrain(&unref_t, self.symbols)
+                    .with_span(*span)?;
+
+                let projected = self.lower_projection(projection, env, *span)?;
+                let type_check =
+                    self.new_runtime_type_check(projected, &aggregate_t, receiver_ref, env, *span)?;
+
+                let nested = fields
+                    .into_iter()
+                    .filter_map(|((field, field_span), pattern)| {
+                        let field_res =
+                            self.resolve_field(field, aggregate_t_app.clone(), *field_span);
+                        let (field, field_t, receiver_type) =
+                            self.reporter.unwrap_err(field_res)?;
+
+                        let project = Projection::Field {
+                            receiver: projection,
+                            receiver_type,
+                            receiver_ref,
+                            field,
+                        };
+
+                        let pattern = self.lower_pattern(pattern, &project, &field_t, env);
+                        self.reporter.unwrap_err(pattern)
+                    });
+
+                let mut accumulator = Pattern::from_conditions([ir::Expr::call(type_check, *span)]);
+                accumulator.extend(nested);
+                Ok(accumulator)
+            }
+            ast::Pattern::Nullable(pattern) => {
+                let (pattern, span) = &**pattern;
+                let Pattern {
+                    mut conditions,
+                    prologue,
+                } = self.lower_pattern(pattern, projection, projection_t, env)?;
+                let projected = self.lower_projection(projection, env, *span)?;
+                let (call, _) = self.new_free_function_call(
+                    ir::Intrinsic::IsDefined,
+                    [(projected, projection_t.clone())],
+                    &[],
+                    env,
+                    *span,
+                )?;
+                conditions.push(ir::Expr::call(call, *span));
+
+                Ok(Pattern {
+                    conditions,
+                    prologue,
+                })
+            }
+            ast::Pattern::Array(array_spread, patterns) => {
+                let (patterns, patterns_span) = patterns;
+
+                let pattern_count = i32::try_from(patterns.len()).expect("too many patterns");
+                let range = match array_spread {
+                    ast::ArraySpread::Start => -(pattern_count)..0,
+                    ast::ArraySpread::End | ast::ArraySpread::None => 0..pattern_count,
+                };
+                let operator = match array_spread {
+                    ast::ArraySpread::Start | ast::ArraySpread::End => ast::BinOp::Ge,
+                    ast::ArraySpread::None => ast::BinOp::Eq,
+                };
+
+                let elem_t = PolyType::fresh();
+                let expected = Type::app(predef::ARRAY, [elem_t.clone()]).into_poly();
+                projection_t
+                    .constrain(&expected, self.symbols)
+                    .with_span(*patterns_span)?;
+
+                let projected = self.lower_projection(projection, env, *patterns_span)?;
+                let (length, length_t) = self.new_free_function_call(
+                    ir::Intrinsic::ArraySize,
+                    [(projected, projection_t.clone())],
+                    &[],
+                    env,
+                    *patterns_span,
+                )?;
+                let (size_check, _) = self.new_free_function_call(
+                    operator.name(),
+                    [
+                        (ir::Expr::call(length, *patterns_span), length_t.clone()),
+                        (
+                            ir::Expr::Const(ir::Const::I32(pattern_count), *patterns_span),
+                            PolyType::nullary(predef::INT32),
+                        ),
+                    ],
+                    &[],
+                    env,
+                    *patterns_span,
+                )?;
+
+                let nested = patterns.iter().zip(range).filter_map(|(pattern, index)| {
+                    let projection = Projection::Index {
+                        array: projection,
+                        array_type: projection_t.clone(),
+                        index,
+                    };
+                    let result = self.lower_pattern(pattern, &projection, &elem_t, env);
+                    self.reporter.unwrap_err(result)
+                });
+                let mut pattern =
+                    Pattern::from_conditions([ir::Expr::call(size_check, *patterns_span)]);
+                pattern.extend(nested);
+                Ok(pattern)
+            }
+        }
     }
 
     fn lower_case(
         &mut self,
         case: &ast::SourceCase<'ctx>,
+        scrutinee_t: &PolyType<'ctx>,
         env: &Env<'_, 'ctx>,
-    ) -> LowerResult<'ctx, (ir::Case<'ctx>, PolyType<'ctx>)> {
-        let label @ (_, label_span) = &case.label;
-        let (ir::Expr::Const(const_, _), typ) = self.lower_expr(label, env)? else {
-            return Err(Error::InvalidCaseLabel(*label_span));
+    ) -> LowerResult<'ctx, ir::Case<'ctx>> {
+        let ast::Condition::Expr(expr) = &case.condition else {
+            unimplemented!("pattern matching in regular case statements");
         };
-        let ir = self.lower_scoped_block(&case.body, env);
-        Ok((ir::Case::new(const_, ir), typ))
+        let (expr, expr_t) = self.lower_expr(expr, env)?;
+        expr_t
+            .constrain(scrutinee_t, self.symbols)
+            .with_span(expr.span())?;
+        let block = self.lower_scoped_block(&case.body, env);
+        Ok(ir::Case::new(expr, block))
+    }
+
+    fn lower_pattern_case(
+        &mut self,
+        case: &ast::SourceCase<'ctx>,
+        scrutinee: ir::Local,
+        scrutinee_t: &PolyType<'ctx>,
+        env: &mut Env<'_, 'ctx>,
+    ) -> LowerResult<'ctx, ir::Case<'ctx>> {
+        let mut scope = env.introduce_scope();
+        let (prologue, condition) = match &case.condition {
+            ast::Condition::Expr(expr) => {
+                let (_, span) = expr;
+                let (expr, expr_t) = self.lower_expr_with(expr, Some(scrutinee_t), &scope)?;
+                scrutinee_t
+                    .constrain(&expr_t, self.symbols)
+                    .with_span(*span)?;
+
+                let local = ir::Expr::Local(scrutinee, *span);
+                let args = [(expr, expr_t), (local, scrutinee_t.clone())];
+                let (call, _) =
+                    self.new_free_function_call(ir::Intrinsic::Equals, args, &[], &scope, *span)?;
+                (vec![], ir::Expr::call(call, *span))
+            }
+            ast::Condition::Pattern(pattern) => self.lower_pattern_into_prologue_and_condition(
+                scrutinee,
+                scrutinee_t,
+                &mut scope,
+                pattern,
+            )?,
+        };
+
+        let mut block = self.lower_block(&case.body, &mut scope);
+
+        if matches!(case.condition, ast::Condition::Pattern(_))
+            && !matches!(
+                block.stmts.back(),
+                Some(ir::Stmt::Break(_) | ir::Stmt::Return(_, _))
+            )
+        {
+            self.reporter
+                .report(Error::MissingBreakInCaseLet(case.condition.span()));
+        }
+
+        block.push_prologue(prologue);
+        Ok(ir::Case::new(condition, block))
+    }
+
+    fn lower_pattern_into_prologue_and_condition(
+        &mut self,
+        scrutinee: ir::Local,
+        scrutinee_t: &PolyType<'ctx>,
+        scope: &mut Env<'_, 'ctx>,
+        (pattern, span): &Spanned<ast::SourcePattern<'ctx>>,
+    ) -> Result<(Vec<ir::Stmt<'ctx>>, ir::Expr<'ctx>), Error<'ctx>> {
+        let projection = Projection::Scrutinee(scrutinee);
+        let Pattern {
+            conditions,
+            prologue,
+        } = self.lower_pattern(pattern, &projection, scrutinee_t, scope)?;
+        let expr = conditions
+            .into_iter()
+            .try_fold(None, |acc, cond| {
+                let Some(acc) = acc else {
+                    return Ok(Some(cond));
+                };
+                let typ = PolyType::nullary(predef::BOOL);
+                let args = [(acc, typ.clone()), (cond, typ)];
+                let (call, _) =
+                    self.new_free_function_call(ast::BinOp::And, args, &[], scope, *span)?;
+                Ok(Some(ir::Expr::call(call, *span)))
+            })?
+            .unwrap_or(ir::Expr::Const(ir::Const::Bool(true), *span));
+        Ok((prologue, expr))
     }
 
     #[inline]
@@ -269,18 +615,16 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 )?;
 
                 let array_t = Type::app(predef::ARRAY, [elem_typ.clone()]).into_poly();
-                let local = self.locals.add_var(array_t.clone(), *span);
+                let local = self.locals.add_var(array_t.clone(), *span).id;
 
-                let mut top = self.stmt_prefix.pop().unwrap_or_default();
-                top.push(ir::Stmt::InitArray {
-                    local: local.id,
+                self.push_prefix(ir::Stmt::InitArray {
+                    local,
                     elements: elems.into(),
                     element_type: elem_typ.into(),
                     span: *span,
                 });
-                self.stmt_prefix.push(top);
 
-                (ir::Expr::Local(local.id, *span), array_t)
+                (ir::Expr::Local(local, *span), array_t)
             }
             ast::Expr::InterpolatedString(elems) => {
                 let str = elems
@@ -289,12 +633,14 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                         let elem = match elem {
                             ast::StrPart::Expr(expr @ (_, span)) => {
                                 let args = [self.lower_expr(expr, env)?];
-                                let (call, _) =
-                                    self.free_function_call("ToString", args, env, *span)?;
-                                ir::Expr::Call {
-                                    call: call.into(),
-                                    span: *span,
-                                }
+                                let (call, _) = self.new_free_function_call(
+                                    ir::Intrinsic::ToString,
+                                    args,
+                                    &[],
+                                    env,
+                                    *span,
+                                )?;
+                                ir::Expr::call(call, *span)
                             }
                             ast::StrPart::Str(str) => {
                                 ir::Expr::Const(ir::Const::Str(str.clone()), *span)
@@ -304,12 +650,14 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                             Some(lhs) => {
                                 let args =
                                     [lhs, elem].map(|e| (e, PolyType::nullary(predef::STRING)));
-                                let (call, _) =
-                                    self.free_function_call("OperatorAdd", args, env, *span)?;
-                                ir::Expr::Call {
-                                    call: call.into(),
-                                    span: *span,
-                                }
+                                let (call, _) = self.new_free_function_call(
+                                    ast::BinOp::Add,
+                                    args,
+                                    &[],
+                                    env,
+                                    *span,
+                                )?;
+                                ir::Expr::call(call, *span)
                             }
                             None => elem,
                         };
@@ -337,12 +685,9 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             ast::Expr::BinOp { lhs, op, rhs } => {
                 let lhs = self.lower_expr(lhs, env)?;
                 let rhs = self.lower_expr(rhs, env)?;
-                let (call, typ) = self.free_function_call(op.name(), [lhs, rhs], env, *span)?;
-                let ir = ir::Expr::Call {
-                    call: call.into(),
-                    span: *span,
-                };
-                (ir, typ)
+                let (call, typ) =
+                    self.new_free_function_call(op.name(), [lhs, rhs], &[], env, *span)?;
+                (ir::Expr::call(call, *span), typ)
             }
             ast::Expr::UnOp { op, expr } => {
                 if let (ast::UnOp::Neg, &(ast::Expr::Constant(ast::Constant::I32(i)), span)) =
@@ -354,12 +699,8 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 }
 
                 let arg = self.lower_expr(expr, env)?;
-                let (call, typ) = self.free_function_call(op.name(), [arg], env, *span)?;
-                let ir = ir::Expr::Call {
-                    call: call.into(),
-                    span: *span,
-                };
-                (ir, typ)
+                let (call, typ) = self.new_free_function_call(op.name(), [arg], &[], env, *span)?;
+                (ir::Expr::call(call, *span), typ)
             }
             ast::Expr::Call {
                 expr,
@@ -367,11 +708,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 args,
             } => {
                 let (call, typ) = self.lower_call(expr, type_args, args, hint, env, *span)?;
-                let ir = ir::Expr::Call {
-                    call: call.into(),
-                    span: *span,
-                };
-                (ir, typ)
+                (ir::Expr::call(call, *span), typ)
             }
             ast::Expr::Member { expr, member } => self.lower_member(expr, member, env, *span)?,
             ast::Expr::Index { expr, index } => {
@@ -578,14 +915,14 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                         value_t
                     };
                     let local = self.locals.add_var(typ, name_span);
-
                     let local = env.define_local(name, local.clone());
-                    let assign = ir::Expr::Assign {
+
+                    ir::Expr::Assign {
                         place: ir::Expr::Local(local, name_span).into(),
                         expr: value.into(),
                         span,
-                    };
-                    ir::Stmt::Expr(assign.into())
+                    }
+                    .into()
                 } else {
                     let typ = typ.unwrap_or_else(PolyType::fresh);
                     let local = self.locals.add_var(typ.clone(), name_span);
@@ -603,21 +940,36 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 default,
             } => {
                 let (expr, expr_t) = self.lower_expr(expr, env)?;
-                let branches = cases
-                    .iter()
-                    .map(|case| {
-                        let (_, span) = case.label;
-                        let (case, case_t) = self.lower_case(case, env)?;
-                        case_t.constrain(&expr_t, self.symbols).with_span(span)?;
-                        Ok(case)
-                    })
-                    .collect::<Result<_, _>>()?;
                 let default = default
                     .as_ref()
                     .map(|block| self.lower_scoped_block(block, env));
+
+                let (scrutinee, scrutinee_type, branches) = if cases
+                    .iter()
+                    .all(|case| matches!(case.condition, ast::Condition::Expr(_)))
+                {
+                    let branches = cases
+                        .iter()
+                        .map(|case| self.lower_case(case, &expr_t, env))
+                        .collect::<Result<_, _>>()?;
+                    (expr.into(), expr_t.into(), branches)
+                } else {
+                    let span = expr.span();
+                    let local = self.extract_local(expr, &expr_t, span);
+                    let branches = cases
+                        .iter()
+                        .map(|case| self.lower_pattern_case(case, local, &expr_t, env))
+                        .collect::<Result<_, _>>()?;
+                    (
+                        ir::Expr::Const(ir::Const::Bool(true), span).into(),
+                        PolyType::nullary(predef::BOOL).into(),
+                        branches,
+                    )
+                };
+
                 ir::Stmt::Switch {
-                    scrutinee: expr.into(),
-                    scrutinee_type: expr_t.into(),
+                    scrutinee,
+                    scrutinee_type,
                     branches,
                     default,
                     span,
@@ -626,7 +978,13 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             ast::Stmt::If { blocks, else_ } => {
                 let branches = blocks
                     .iter()
-                    .map(|block| self.lower_cond_block(block, env))
+                    .map(|block| {
+                        let (block, prefix) = self.lower_conditional_block(block, env)?;
+                        if let Some(prefix) = prefix {
+                            self.push_prefix(prefix);
+                        }
+                        Ok(block)
+                    })
                     .collect::<Result<_, _>>()?;
                 let default = else_
                     .as_ref()
@@ -638,8 +996,23 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 }
             }
             ast::Stmt::While(block) => {
-                let block = self.lower_cond_block(block, env)?;
-                ir::Stmt::While(block, span)
+                let (block, prefix) = self.lower_conditional_block(block, env)?;
+                let Some(prefix) = prefix else {
+                    return Ok(ir::Stmt::While(block, span));
+                };
+
+                let outer = ir::ConditionalBlock::new(
+                    ir::Expr::Const(ir::Const::Bool(true), span),
+                    ir::Block::new([
+                        prefix,
+                        ir::Stmt::Branches {
+                            branches: [block].into(),
+                            default: Some(ir::Block::new([ir::Stmt::Break(span)])),
+                            span,
+                        },
+                    ]),
+                );
+                ir::Stmt::While(outer, span)
             }
             ast::Stmt::ForIn { name, iter, body } => {
                 let block = self.lower_for_in(name, iter, body, env, span)?;
@@ -662,7 +1035,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             ast::Stmt::Continue => ir::Stmt::Continue(span),
             ast::Stmt::Expr(expr) => {
                 let (expr, _) = self.lower_expr(expr, env)?;
-                ir::Stmt::Expr(expr.into())
+                expr.into()
             }
         };
         Ok(res)
@@ -763,12 +1136,12 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             }
 
             let (ir, typ) = self.lower_expr(expr, env)?;
-            let (ref_t, stripped) = typ.strip_ref(self.symbols).unzip();
-            let upper_bound = stripped
+            let (ref_type, unref_t) = typ.strip_ref(self.symbols).unzip();
+            let upper_bound = unref_t
                 .unwrap_or(typ.clone())
                 .force_upper_bound(self.symbols)
                 .with_span(*expr_span)?
-                .ok_or(Error::CannotLookupMember(*expr_span))?
+                .ok_or(Error::InsufficientTypeInformation(*expr_span))?
                 .into_owned();
 
             let (upper_bound, mode) = if matches!(**expr, (ast::Expr::Super, _)) {
@@ -788,7 +1161,9 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 .filter(|entry| !entry.func().flags().is_static())
                 .peekable();
             if candidates.peek().is_none() {
-                break 'instance Some(self.field(ir, member, upper_bound, ref_t, *expr_span)?);
+                let (field_expr, field_t, _) =
+                    self.new_field_read(ir, member, upper_bound, ref_type, *expr_span)?;
+                break 'instance Some((field_expr, field_t));
             }
 
             let res = self
@@ -802,7 +1177,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                     env,
                     *expr_span,
                 )?
-                .into_instance_call(ir, upper_bound, ref_t, mode);
+                .into_instance_call(ir, upper_bound, ref_type, mode);
             return Ok(res);
         };
 
@@ -947,14 +1322,15 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         };
 
         let (ir, typ) = self.lower_expr(receiver, env)?;
-        let (ref_type, upper_bound) = typ.strip_ref(self.symbols).unzip();
-        let upper_bound = upper_bound
+        let (ref_type, unref_t) = typ.strip_ref(self.symbols).unzip();
+        let upper_bound = unref_t
             .unwrap_or(typ)
             .force_upper_bound(self.symbols)
             .with_span(receiver_span)?
-            .ok_or(Error::CannotLookupMember(receiver_span))?
+            .ok_or(Error::InsufficientTypeInformation(receiver_span))?
             .into_owned();
-        self.field(ir, member, upper_bound, ref_type, span)
+        let (expr, typ, _) = self.new_field_read(ir, member, upper_bound, ref_type, span)?;
+        Ok((expr, typ))
     }
 
     fn lower_for_in(
@@ -978,12 +1354,12 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         let mut env = env.introduce_scope();
         let counter_t = PolyType::nullary(predef::INT32);
         let counter = self.locals.add_var(counter_t.clone(), init_span).id;
-        let array_local = self.locals.add_var(array_t.clone(), init_span).id;
+        let array_local = self.extract_local(array, &array_t, init_span);
         let elem = env.define_local(name, self.locals.add_var(elem_t, name_span).clone());
 
         let loop_body = {
-            let (increment, _) = self.free_function_call(
-                "OperatorAssignAdd",
+            let (increment, _) = self.new_free_function_call(
+                ast::BinOp::AssignAdd,
                 [
                     (ir::Expr::Local(counter, init_end_span), counter_t.clone()),
                     (
@@ -991,87 +1367,58 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                         counter_t.clone(),
                     ),
                 ],
+                &[],
                 &env,
                 init_end_span,
             )?;
             let prologue = [
-                ir::Stmt::Expr(
-                    ir::Expr::Assign {
-                        place: ir::Expr::Local(elem, name_span).into(),
-                        expr: ir::Expr::Index {
-                            array_type: array_t.into(),
-                            array: ir::Expr::Local(array_local, iter_span).into(),
-                            index: ir::Expr::Local(counter, init_end_span).into(),
-                            span: iter_span,
-                        }
-                        .into(),
-                        span: name_span.merge(&iter_span),
+                ir::Expr::Assign {
+                    place: ir::Expr::Local(elem, name_span).into(),
+                    expr: ir::Expr::Index {
+                        array_type: array_t.into(),
+                        array: ir::Expr::Local(array_local, iter_span).into(),
+                        index: ir::Expr::Local(counter, init_end_span).into(),
+                        span: iter_span,
                     }
                     .into(),
-                ),
-                ir::Stmt::Expr(
-                    ir::Expr::Call {
-                        call: increment.into(),
-                        span: init_end_span,
-                    }
-                    .into(),
-                ),
+                    span: name_span.merge(&iter_span),
+                }
+                .into(),
+                ir::Expr::call(increment, init_end_span).into(),
             ];
 
             let mut body = self.lower_block(&body.stmts, &mut env);
-            for stmt in prologue.into_iter().rev() {
-                body.stmts.push_front(stmt);
-            }
+            body.push_prologue(prologue);
             body
         };
 
-        let (array_size, array_size_t) = self.free_function_call(
-            "ArraySize",
+        let (array_size, array_size_t) = self.new_free_function_call(
+            ir::Intrinsic::ArraySize,
             [(ir::Expr::Local(array_local, iter_span), expected_t.clone())],
+            &[],
             &env,
             iter_span,
         )?;
-        let (check, _) = self.free_function_call(
-            "OperatorLess",
+        let (check, _) = self.new_free_function_call(
+            ast::BinOp::Lt,
             [
                 (ir::Expr::Local(counter, init_span), counter_t.clone()),
-                (
-                    ir::Expr::Call {
-                        call: array_size.into(),
-                        span: init_span,
-                    },
-                    array_size_t,
-                ),
+                (ir::Expr::call(array_size, init_span), array_size_t),
             ],
+            &[],
             &env,
             init_span,
         )?;
 
         Ok(ir::Block::new([
-            ir::Stmt::Expr(
-                ir::Expr::Assign {
-                    place: ir::Expr::Local(array_local, init_span).into(),
-                    expr: array.into(),
-                    span: init_span,
-                }
-                .into(),
-            ),
-            ir::Stmt::Expr(
-                ir::Expr::Assign {
-                    place: ir::Expr::Local(counter, init_span).into(),
-                    expr: ir::Expr::Const(ir::Const::I32(0), init_span).into(),
-                    span: init_span,
-                }
-                .into(),
-            ),
+            ir::Expr::Assign {
+                place: ir::Expr::Local(counter, init_span).into(),
+                expr: ir::Expr::Const(ir::Const::I32(0), init_span).into(),
+                span: init_span,
+            }
+            .into(),
             ir::Stmt::While(
-                ir::CondBlock::new(
-                    ir::Expr::Call {
-                        call: check.into(),
-                        span: init_span,
-                    },
-                    loop_body,
-                ),
+                ir::ConditionalBlock::new(ir::Expr::call(check, init_span), loop_body),
                 span,
             ),
         ]))
@@ -1199,12 +1546,18 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             }
         };
 
+        let type_args = type_args
+            .iter()
+            .map(|(typ, span)| self.resolve_type(typ, env, *span))
+            .collect::<Result<Vec<_>, _>>()?;
+
         if filtered.peek().is_none() {
             let type_env = receiver
                 .and_then(|typ| typ.base_type_env(primary.key().parent()?, self.symbols))
                 .unwrap_or_default();
+
             let type_env = type_env.push_scope(
-                self.function_env(primary.func().type_(), type_args, env, span)?
+                self.new_function_env(primary.func().type_(), &type_args, span)?
                     .pop_scope(),
             );
 
@@ -1224,7 +1577,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 let Some((mut expr, typ)) = self.reporter.unwrap_err(res) else {
                     continue;
                 };
-                let res = self.arg(&mut expr, typ.clone(), expected, param, env, *span);
+                let res = self.new_arg(&mut expr, typ.clone(), expected, param, env, *span);
                 self.reporter.unwrap_err(res);
                 checked_args.push(expr);
             }
@@ -1254,6 +1607,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                     name,
                     &mut checked_args,
                     arg_types,
+                    &type_args,
                     matches,
                     fallback,
                     receiver,
@@ -1271,6 +1625,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         name: &'ctx str,
         args: &mut [ir::Expr<'ctx>],
         arg_types: Vec<PolyType<'ctx>>,
+        type_args: &[PolyType<'ctx>],
         candidates: impl IntoIterator<Item = FunctionEntry<Key, Name, Func>>,
         fallback: Option<FunctionEntry<Key, Name, Func>>,
         receiver: Option<InferredTypeApp<'ctx>>,
@@ -1281,7 +1636,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         Key: FunctionKey<'ctx> + Copy,
         Func: FunctionKind<'ctx> + Copy,
     {
-        fn matched_by_subtype<'a, 'ctx, It, Key, Name, Func>(
+        fn match_by_subtype<'a, 'ctx, It, Key, Name, Func>(
             it: It,
             arg_types: &'a [PolyType<'ctx>],
             symbols: &'a Symbols<'ctx>,
@@ -1301,7 +1656,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             })
         }
 
-        let mut matches = matched_by_subtype(candidates, &arg_types, self.symbols).peekable();
+        let mut matches = match_by_subtype(candidates, &arg_types, self.symbols).peekable();
         let selected = matches
             .next()
             .or(fallback)
@@ -1315,7 +1670,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 arg.force_upper_bound(self.symbols).with_span(span)?;
             }
             let candidates = iter::once(selected).chain(matches);
-            let mut matches = matched_by_subtype(candidates, &arg_types, self.symbols).peekable();
+            let mut matches = match_by_subtype(candidates, &arg_types, self.symbols).peekable();
 
             let primary = matches
                 .next()
@@ -1331,7 +1686,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             .and_then(|typ| typ.base_type_env(selected.key().parent()?, self.symbols))
             .unwrap_or_default();
         let type_env = type_env.push_scope(
-            self.function_env(selected.func().type_(), &[], env, span)?
+            self.new_function_env(selected.func().type_(), type_args, span)?
                 .pop_scope(),
         );
         for ((arg, typ), param) in args
@@ -1342,7 +1697,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             let span = arg.span();
             let expected = PolyType::from_type_with_env(param.type_(), &type_env)
                 .map_err(|var| Error::UnresolvedVar(var, span))?;
-            self.arg(&mut *arg, typ.clone(), expected, param, env, span)?;
+            self.new_arg(&mut *arg, typ.clone(), expected, param, env, span)?;
         }
 
         let return_t =
@@ -1358,6 +1713,28 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             type_args,
             return_t,
         ))
+    }
+
+    fn resolve_field(
+        &mut self,
+        member: &'ctx str,
+        receiver_t: TypeApp<'ctx, Poly>,
+        span: Span,
+    ) -> Result<(FieldId<'ctx>, PolyType<'ctx>, InferredTypeApp<'ctx>), Error<'ctx>> {
+        let (target_id, (field_idx, field)) = self
+            .symbols
+            .base_iter(receiver_t.id())
+            .find_map(|(id, typ)| {
+                Some((id, typ.schema().as_aggregate()?.fields().by_name(member)?))
+            })
+            .ok_or_else(|| Error::UnresolvedMember(receiver_t.id(), member, span))?;
+        let this_t = receiver_t
+            .instantiate_as(target_id, self.symbols)
+            .expect("should instantiate as base type");
+        let env = this_t.type_env(self.symbols);
+        let typ = PolyType::from_type_with_env(field.type_(), &env)
+            .map_err(|var| Error::UnresolvedVar(var, span))?;
+        Ok((FieldId::new(target_id, field_idx), typ, this_t))
     }
 
     fn resolve_local(
@@ -1381,7 +1758,29 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         Ok((ir, loc.typ.clone()))
     }
 
-    fn arg(
+    fn coerce(
+        &mut self,
+        expr: &mut ir::Expr<'ctx>,
+        lhs: PolyType<'ctx>,
+        rhs: PolyType<'ctx>,
+        env: &Env<'_, 'ctx>,
+        span: Span,
+    ) -> LowerResult<'ctx, ()> {
+        let name = match lhs.coerce(&rhs, self.symbols).with_span(span)? {
+            Some(Coercion::FromRef(RefType::Weak)) => ir::Intrinsic::WeakRefToRef,
+            Some(Coercion::IntoRef(RefType::Weak)) => ir::Intrinsic::RefToWeakRef,
+            Some(Coercion::FromRef(RefType::Script)) => ir::Intrinsic::Deref,
+            Some(Coercion::IntoRef(RefType::Script)) => ir::Intrinsic::AsRef,
+            Some(Coercion::IntoVariant) => ir::Intrinsic::ToVariant,
+            None => return Ok(()),
+        };
+        let arg = mem::replace(expr, ir::Expr::null(span));
+        let (call, _) = self.new_free_function_call(name, [(arg, lhs)], &[], env, span)?;
+        *expr = ir::Expr::call(call, span);
+        Ok(())
+    }
+
+    fn new_arg(
         &mut self,
         expr: &mut ir::Expr<'ctx>,
         lhs: PolyType<'ctx>,
@@ -1400,72 +1799,37 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         Ok(())
     }
 
-    fn coerce(
+    fn new_free_function_call<'name: 'ctx>(
         &mut self,
-        expr: &mut ir::Expr<'ctx>,
-        lhs: PolyType<'ctx>,
-        rhs: PolyType<'ctx>,
-        env: &Env<'_, 'ctx>,
-        span: Span,
-    ) -> LowerResult<'ctx, ()> {
-        let name = match lhs.coerce(&rhs, self.symbols).with_span(span)? {
-            Some(Coercion::FromRef(RefType::Weak)) => ir::Intrinsic::WeakRefToRef,
-            Some(Coercion::IntoRef(RefType::Weak)) => ir::Intrinsic::RefToWeakRef,
-            Some(Coercion::FromRef(RefType::Script)) => ir::Intrinsic::Deref,
-            Some(Coercion::IntoRef(RefType::Script)) => ir::Intrinsic::AsRef,
-            Some(Coercion::IntoVariant) => ir::Intrinsic::ToVariant,
-            None => return Ok(()),
-        };
-        let arg = mem::replace(expr, ir::Expr::null(span));
-        let (res, _) = self.free_function_call(name.into(), [(arg, lhs)], env, span)?;
-        *expr = ir::Expr::Call {
-            call: res.into(),
-            span,
-        };
-        Ok(())
-    }
-
-    fn free_function_call(
-        &mut self,
-        name: &'ctx str,
+        name: impl Into<&'name str>,
         args: impl IntoIterator<Item = (ir::Expr<'ctx>, PolyType<'ctx>)>,
+        type_args: &[PolyType<'ctx>],
         env: &Env<'_, 'ctx>,
         span: Span,
     ) -> LowerResult<'ctx, (ir::Call<'ctx>, PolyType<'ctx>)> {
+        let name = name.into();
         let (mut args, arg_types): (Vec<_>, Vec<_>) = args.into_iter().unzip();
         let candidates = env.query_free_functions(name, self.symbols);
         let res = self
             .resolve_overload_typed(
-                name, &mut args, arg_types, candidates, None, None, env, span,
+                name, &mut args, arg_types, type_args, candidates, None, None, env, span,
             )?
             .with_args(args)
             .into_call();
         Ok(res)
     }
 
-    fn field(
+    fn new_field_read(
         &mut self,
         ir: ir::Expr<'ctx>,
         member: &'ctx str,
         upper_t: InferredTypeApp<'ctx>,
         ref_t: Option<RefType>,
         span: Span,
-    ) -> LowerResult<'ctx, (ir::Expr<'ctx>, PolyType<'ctx>)> {
-        let (target_id, (field_idx, field)) = self
-            .symbols
-            .base_iter(upper_t.id())
-            .find_map(|(id, typ)| {
-                Some((id, typ.schema().as_aggregate()?.fields().by_name(member)?))
-            })
-            .ok_or_else(|| Error::UnresolvedMember(upper_t.id(), member, span))?;
-        let this_t = upper_t
-            .instantiate_as(target_id, self.symbols)
-            .expect("should instantiate as base type");
-        let env = this_t.type_env(self.symbols);
-        let typ = PolyType::from_type_with_env(field.type_(), &env)
-            .map_err(|var| Error::UnresolvedVar(var, span))?;
+    ) -> LowerResult<'ctx, (ir::Expr<'ctx>, PolyType<'ctx>, FieldId<'ctx>)> {
+        let (field, field_t, this_t) = self.resolve_field(member, upper_t, span)?;
 
-        if self.symbols[target_id]
+        if self.symbols[field.parent()]
             .schema()
             .as_aggregate()
             .is_some_and(|agg| agg.flags().is_struct())
@@ -1474,7 +1838,6 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             self.reporter.report(Error::InvalidTemporary(span));
         }
 
-        let field = FieldId::new(target_id, field_idx);
         let ir = ir::Expr::Field {
             receiver: ir.into(),
             receiver_type: this_t.into(),
@@ -1482,14 +1845,59 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             field,
             span,
         };
-        Ok((ir, typ))
+        Ok((ir, field_t, field))
     }
 
-    fn function_env(
+    fn new_runtime_type_check(
+        &mut self,
+        receiver: ir::Expr<'ctx>,
+        receiver_t: &PolyType<'ctx>,
+        ref_type: Option<RefType>,
+        env: &mut Env<'_, 'ctx>,
+        span: Span,
+    ) -> Result<ir::Call<'ctx>, Error<'ctx>> {
+        let upper_bound = receiver_t
+            .force_upper_bound(self.symbols)
+            .with_span(span)?
+            .ok_or(Error::InsufficientTypeInformation(span))?
+            .into_owned();
+        receiver_t
+            .constrain(&PolyType::nullary(predef::ISCRIPTABLE), self.symbols)
+            .with_span(span)?;
+
+        let (name_of, name_t) = self.new_free_function_call(
+            ir::Intrinsic::NameOf,
+            [],
+            slice::from_ref(receiver_t),
+            env,
+            span,
+        )?;
+        let candidates = self
+            .symbols
+            .query_methods_by_name(upper_bound.id(), "IsA")
+            .filter(|entry| !entry.func().flags().is_static());
+        let mut args = [ir::Expr::call(name_of, span)];
+        let (call, _) = self
+            .resolve_overload_typed(
+                "IsA",
+                &mut args,
+                vec![name_t],
+                &[],
+                candidates,
+                None,
+                Some(upper_bound.clone()),
+                env,
+                span,
+            )?
+            .with_args(args)
+            .into_instance_call(receiver, upper_bound, ref_type, ir::CallMode::Normal);
+        Ok(call)
+    }
+
+    fn new_function_env(
         &self,
         func_t: &FunctionType<'ctx>,
-        type_args: &[Spanned<ast::SourceType<'ctx>>],
-        env: &Env<'scope, 'ctx>,
+        type_args: &[PolyType<'ctx>],
         span: Span,
     ) -> LowerResult<'ctx, ScopedMap<'scope, &'ctx str, PolyType<'ctx>>> {
         let map: ScopedMap<'_, _, _> = func_t
@@ -1521,13 +1929,31 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             return Err(Error::InvalidTypeArgCount(expected, span));
         }
 
-        for ((_, var), (arg, span)) in map.top().iter().zip(type_args) {
-            self.resolve_type(arg, env, *span)?
-                .constrain(var, self.symbols)
-                .with_span(*span)?;
+        for ((_, var), arg) in map.top().iter().zip(type_args) {
+            arg.constrain(var, self.symbols).with_span(span)?;
         }
 
         Ok(map)
+    }
+
+    fn extract_local(
+        &mut self,
+        expr: ir::Expr<'ctx>,
+        expr_t: &PolyType<'ctx>,
+        span: Span,
+    ) -> ir::Local {
+        match expr {
+            ir::Expr::Local(local, _) => local,
+            _ => {
+                let local = self.locals.add_var(expr_t.clone(), span).id;
+                self.push_prefix(ir::Expr::Assign {
+                    place: ir::Expr::Local(local, span).into(),
+                    expr: expr.into(),
+                    span,
+                });
+                local
+            }
+        }
     }
 
     fn resolve_type(
@@ -1667,6 +2093,16 @@ impl<'ctx> InferredTypeApp<'ctx> {
     #[inline]
     pub fn coalesce(&self, symbols: &Symbols<'ctx>) -> Result<TypeApp<'ctx>, CoalesceError<'ctx>> {
         Simplifier::coalesce_app(self, symbols)
+    }
+
+    pub fn from_id(id: TypeId<'ctx>, symbols: &Symbols<'ctx>) -> Self {
+        let class = &symbols[id];
+        let args = class
+            .params()
+            .iter()
+            .map(|_| PolyType::fresh())
+            .collect::<Rc<_>>();
+        TypeApp::new(id, args)
     }
 
     pub fn instantiate_as(
@@ -2452,9 +2888,7 @@ impl<'sym, 'ctx> Simplifier<'sym, 'ctx> {
 
                 let typ = match (var.lower(), var.upper()) {
                     (lower, Some(upper)) if lower == upper => self.simplify(&lower, variance)?,
-                    (bound, None) | (Type::Nothing, Some(bound))
-                        if bound.is_primitive(self.symbols) =>
-                    {
+                    (bound, None) | (Type::Nothing, Some(bound)) => {
                         self.simplify(&bound, variance)?
                     }
                     (lower, _)
@@ -2468,9 +2902,6 @@ impl<'sym, 'ctx> Simplifier<'sym, 'ctx> {
                             && !self.covariant.contains(&key) =>
                     {
                         self.simplify(&upper, variance)?
-                    }
-                    (bound, None) | (Type::Nothing, Some(bound)) => {
-                        self.simplify(&bound, variance)?
                     }
                     (lower, Some(upper))
                         if upper.constrain_invariant(&lower, self.symbols).is_ok() =>
@@ -2687,6 +3118,33 @@ impl fmt::Display for CoalesceError<'_> {
 
 impl std::error::Error for CoalesceError<'_> {}
 
+struct Pattern<'ctx> {
+    conditions: Vec<ir::Expr<'ctx>>,
+    prologue: Vec<ir::Stmt<'ctx>>,
+}
+
+impl<'ctx> Pattern<'ctx> {
+    pub fn from_conditions(conditions: impl IntoIterator<Item = ir::Expr<'ctx>>) -> Self {
+        Self {
+            conditions: conditions.into_iter().collect(),
+            prologue: Vec::new(),
+        }
+    }
+
+    pub fn merge(&mut self, other: Pattern<'ctx>) {
+        self.conditions.extend(other.conditions);
+        self.prologue.extend(other.prologue);
+    }
+}
+
+impl<'ctx> Extend<Pattern<'ctx>> for Pattern<'ctx> {
+    fn extend<T: IntoIterator<Item = Pattern<'ctx>>>(&mut self, iter: T) {
+        for pattern in iter {
+            self.merge(pattern);
+        }
+    }
+}
+
 pub type LowerResult<'id, A, E = Error<'id>> = Result<A, E>;
 
 #[derive(Debug, Clone, Error)]
@@ -2709,7 +3167,7 @@ pub enum Error<'ctx> {
         "insufficient type information available for member lookup, consider adding \
          type annotations"
     )]
-    CannotLookupMember(Span),
+    InsufficientTypeInformation(Span),
     #[error("this type cannot be constructed with the 'new' operator")]
     InvalidNewType(Span),
     #[error("this type cannot be casted with the 'as' operator")]
@@ -2758,6 +3216,8 @@ pub enum Error<'ctx> {
         constructed without arguments: 'new {0}()'"
     )]
     NonSealedStructConstruction(TypeId<'ctx>, Span),
+    #[error("`case let` block must end with a `break` or `return` statement")]
+    MissingBreakInCaseLet(Span),
 }
 
 impl Error<'_> {
@@ -2770,7 +3230,7 @@ impl Error<'_> {
             | Self::MultipleMatchingOverloads(_, _, span)
             | Self::UnresolvedFunction(_, span)
             | Self::InvalidArgCount(_, span)
-            | Self::CannotLookupMember(span)
+            | Self::InsufficientTypeInformation(span)
             | Self::InvalidNewType(span)
             | Self::InvalidDynCastType(span)
             | Self::UnknownStaticCastType(span)
@@ -2788,7 +3248,8 @@ impl Error<'_> {
             | Self::InvalidTemporary(span)
             | Self::UnexpectedNonConstant(span)
             | Self::DeprecatedNameOf(span)
-            | Self::NonSealedStructConstruction(_, span) => *span,
+            | Self::NonSealedStructConstruction(_, span)
+            | Self::MissingBreakInCaseLet(span) => *span,
         }
     }
 
@@ -2801,7 +3262,7 @@ impl Error<'_> {
             Self::MultipleMatchingOverloads(_, _, _) => "MULTIPLE_MATCHING_OVERLOADS",
             Self::UnresolvedFunction(_, _) => "UNRESOLVED_FN",
             Self::InvalidArgCount(_, _) => "INVALID_ARG_COUNT",
-            Self::CannotLookupMember(_) => "CANNOT_LOOKUP_MEMBER",
+            Self::InsufficientTypeInformation(_) => "CANNOT_LOOKUP_MEMBER",
             Self::InvalidNewType(_)
             | Self::ClassConstructorHasArguments(_)
             | Self::InstantiatingAbstract(_, _) => "INVALID_NEW_USE",
@@ -2820,6 +3281,7 @@ impl Error<'_> {
             Self::UnexpectedNonConstant(_) => "INVALID_CONSTANT",
             Self::DeprecatedNameOf(_) => "DEPRECATED_SYNTAX",
             Self::NonSealedStructConstruction(_, _) => "NON_SEALED_CTR",
+            Self::MissingBreakInCaseLet(_) => "MISSING_BREAK",
         }
     }
 
@@ -2861,4 +3323,20 @@ impl<T: fmt::Display + PartialEq> fmt::Display for DisplayRangeInclusive<'_, T> 
             write!(f, "between {} and {}", start, end)
         }
     }
+}
+
+#[derive(Clone)]
+enum Projection<'scope, 'ctx> {
+    Field {
+        receiver: &'scope Self,
+        receiver_type: InferredTypeApp<'ctx>,
+        receiver_ref: Option<RefType>,
+        field: FieldId<'ctx>,
+    },
+    Index {
+        array: &'scope Self,
+        array_type: PolyType<'ctx>,
+        index: i32,
+    },
+    Scrutinee(ir::Local),
 }

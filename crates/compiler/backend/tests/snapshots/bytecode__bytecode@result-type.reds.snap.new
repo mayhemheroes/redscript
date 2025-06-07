@@ -1,0 +1,98 @@
+---
+source: crates/compiler/backend/tests/bytecode.rs
+assertion_line: 47
+expression: "BytecodePrinter::new(&bundle, bundle_len)"
+input_file: crates/compiler/backend/tests/data/result-type.reds
+---
+// Scriptable::IsA;CName (f0)
+
+// Test; (f1)
+return
+ctx 49
+invoke.static j17 l3 f2 0000000000000000
+i32.one
+param.end
+invoke.virtual j32 l3 f0 0000000000000000
+invoke.static j16 l0 f3 0000000000000000
+param.end
+param.end
+
+// Ok<Int32,String>::New;Int32 (f2)
+assign
+local 0
+object.new 0
+assign
+ctx 18
+local 0
+object.field 0
+param 0
+return
+local 0
+
+// Result<Int32,String>::Map<Int32>;Function1<Int32,Int32> (f4)
+switch 5
+true.const
+switch.label 108 29
+ctx 26
+this
+invoke.virtual j25 l13 f1 0000000000000000
+cname.const 2
+param.end
+assign
+local 1
+ctx 10
+this
+object.field 0
+return
+invoke.static j53 l14 f2 0000000000000000
+ctx 9
+param 1
+invoke.virtual j25 l14 f3 0000000000000000
+local 1
+param.end
+param.end
+switch.label 80 29
+ctx 26
+this
+invoke.virtual j25 l15 f1 0000000000000000
+cname.const 4
+param.end
+assign
+local 2
+ctx 10
+this
+object.field 1
+return
+invoke.static j25 l16 f5 0000000000000000
+local 2
+param.end
+
+// Function1<Int32,Int32>::Call;Int32 (f6)
+
+// lambda$23::Instantiate (f3)
+assign
+local 3
+object.new 1
+return
+local 3
+
+// lambda$23::Call;Int32 (f7)
+return
+invoke.static j26 l3 f8 0000000000000000
+param 2
+i32.one
+param.end
+
+// OperatorAdd (f8)
+
+// Err<Int32,String>::New;String (f5)
+assign
+local 4
+object.new 2
+assign
+ctx 18
+local 4
+object.field 1
+param 3
+return
+local 4

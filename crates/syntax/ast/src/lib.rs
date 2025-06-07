@@ -4,10 +4,10 @@ mod span;
 mod visitor;
 
 pub use ast::{
-    Aggregate, Annotation, Assoc, AstKind, BinOp, Block, Case, ConditionalBlock, Constant, Enum,
-    EnumVariant, Expr, Field, Function, FunctionBody, Import, Item, ItemDecl, ItemQualifiers,
-    Module, Param, ParamQualifiers, Path, QueryResult, Stmt, StrPart, Type, TypeParam, UnOp,
-    Variance, Visibility, WithSpan, Wrapper,
+    Aggregate, Annotation, ArraySpread, Assoc, AstKind, BinOp, Block, Case, Condition,
+    ConditionalBlock, Constant, Enum, EnumVariant, Expr, Field, Function, FunctionBody, Import,
+    Item, ItemDecl, ItemQualifiers, LetCondition, Module, Param, ParamQualifiers, Path, Pattern,
+    QueryResult, Stmt, StrPart, Type, TypeParam, UnOp, Variance, Visibility, WithSpan, Wrapper,
 };
 pub use files::{File, SourceLoc, SourceMap};
 pub use span::{FileId, Span};
@@ -20,6 +20,7 @@ pub type SourceAnnotation<'src> = Annotation<'src, WithSpan>;
 pub type SourceBlock<'src> = Block<'src, WithSpan>;
 pub type SourceConditionalBlock<'src> = ConditionalBlock<'src, WithSpan>;
 pub type SourceCase<'src> = Case<'src, WithSpan>;
+pub type SourcePattern<'src> = Pattern<'src, WithSpan>;
 pub type SourceEnum<'src> = Enum<'src, WithSpan>;
 pub type SourceExpr<'src> = Expr<'src, WithSpan>;
 pub type SourceField<'src> = Field<'src, WithSpan>;

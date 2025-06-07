@@ -220,7 +220,8 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
 
                         let switch_label = SwitchLabel::new(next_label, body_label);
                         self.emit(Instr::SwitchLabel(switch_label));
-                        self.assemble_const(&case.constant)?;
+                        self.assemble_expr(&case.matcher)?;
+
                         self.mark_label(body_label);
                         if !case.block.stmts.is_empty() {
                             self.assemble_block(&case.block, Some(BlockSpan::Switch { end }))?;
@@ -498,6 +499,7 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                         .map(|typ| self.mono_type(typ, span))
                         .collect::<Result<Box<_>, AssembleError<'ctx>>>()?;
                     let sig = Signature::new(id, types);
+
                     self.monomorph.method(sig, self.symbols, self.bundle)
                 };
 

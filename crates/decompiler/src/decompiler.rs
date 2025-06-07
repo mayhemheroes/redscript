@@ -137,7 +137,7 @@ impl<'scope, 'ctx: 'i, 'i> Decompiler<'scope, 'ctx, 'i> {
                             }
 
                             let block = self.consume_block(nested, exit)?;
-                            cases.push(ast::Case::new(label, block.stmts));
+                            cases.push(ast::Case::new(ast::Condition::Expr(label), block.stmts));
                         }
                         (Some(Instr::SwitchDefault), Some(exit)) => {
                             self.consume_instr()?;
@@ -196,7 +196,7 @@ impl<'scope, 'ctx: 'i, 'i> Decompiler<'scope, 'ctx, 'i> {
                     let cond = self.consume_expr()?.into_expr();
                     let body = self.consume_block(nested, end)?;
                     return Ok(Some(ast::Stmt::While(
-                        ast::ConditionalBlock::new(cond, body).into(),
+                        ast::ConditionalBlock::new(ast::LetCondition::Expr(cond), body).into(),
                     )));
                 }
 
@@ -217,7 +217,10 @@ impl<'scope, 'ctx: 'i, 'i> Decompiler<'scope, 'ctx, 'i> {
                             self.consume_instr()?;
                             let cond = self.consume_expr()?.into_expr();
                             let then = self.consume_block(nested, if_end)?;
-                            blocks.push(ast::ConditionalBlock::new(cond, then));
+                            blocks.push(ast::ConditionalBlock::new(
+                                ast::LetCondition::Expr(cond),
+                                then,
+                            ));
                         }
                         (_, Some(exit)) => {
                             let nested = nested.get_block(Bounds::new(if_start, exit));

@@ -7,14 +7,14 @@ pub trait Visitor<'ctx> {
         block.stmts.iter().for_each(|stmt| self.visit_stmt(stmt));
     }
 
-    fn visit_while(&mut self, while_loop: &ir::CondBlock<'ctx>, _span: Span) {
+    fn visit_while(&mut self, while_loop: &ir::ConditionalBlock<'ctx>, _span: Span) {
         self.visit_expr(&while_loop.condition);
         self.visit_block(&while_loop.block);
     }
 
     fn visit_branches(
         &mut self,
-        branches: &[ir::CondBlock<'ctx>],
+        branches: &[ir::ConditionalBlock<'ctx>],
         default: Option<&ir::Block<'ctx>>,
         _span: Span,
     ) {
@@ -35,7 +35,7 @@ pub trait Visitor<'ctx> {
     ) {
         self.visit_expr(scrutinee);
         branches.iter().for_each(|branch| {
-            self.visit_const(&branch.constant);
+            self.visit_expr(&branch.matcher);
             self.visit_block(&branch.block);
         });
         default.inspect(|block| self.visit_block(block));

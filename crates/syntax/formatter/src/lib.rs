@@ -3,11 +3,11 @@ use std::{fmt, mem};
 use hashbrown::HashMap;
 use pretty_dtoa::{FmtFloatConfig, dtoa, ftoa};
 use redscript_ast::{
-    Aggregate, Annotation, Assoc, AstKind, AstNode, AstVisitor, BinOp, Block, Constant, Enum,
-    EnumVariant, Expr, Field, FileId, Function, FunctionBody, Import, Item, ItemDecl,
-    ItemQualifiers, Module, NodeId, Param, ParamQualifiers, Path, SourceAstNode, SourceBlock,
-    SourceStmt, Span, Spanned, Stmt, StrPart, Type, TypeParam, UnOp, Variance, Visibility,
-    WithSpan, Wrapper,
+    Aggregate, Annotation, ArraySpread, Assoc, AstKind, AstNode, AstVisitor, BinOp, Block,
+    Condition, Constant, Enum, EnumVariant, Expr, Field, FileId, Function, FunctionBody, Import,
+    Item, ItemDecl, ItemQualifiers, LetCondition, Module, NodeId, Param, ParamQualifiers, Path,
+    Pattern, SourceAstNode, SourceBlock, SourceStmt, Span, Spanned, Stmt, StrPart, Type, TypeParam,
+    UnOp, Variance, Visibility, WithSpan, Wrapper,
 };
 use redscript_parser::{ParseResult, Token, lex_with_lf_and_comments, parse, parser};
 
@@ -169,6 +169,31 @@ pub trait Formattable: Sized {
     fn format(&self, f: &mut fmt::Formatter<'_>, ctx: FormatCtx<'_>) -> fmt::Result;
 }
 
+impl<A: Formattable, B: Formattable> Formattable for (A, B) {
+    fn format(&self, f: &mut fmt::Formatter<'_>, ctx: FormatCtx<'_>) -> fmt::Result {
+        self.0.format(f, ctx)?;
+        self.1.format(f, ctx)
+    }
+}
+
+impl<A: Formattable, B: Formattable, C: Formattable> Formattable for (A, B, C) {
+    fn format(&self, f: &mut fmt::Formatter<'_>, ctx: FormatCtx<'_>) -> fmt::Result {
+        self.0.format(f, ctx)?;
+        self.1.format(f, ctx)?;
+        self.2.format(f, ctx)
+    }
+}
+
+impl<A: Formattable> Formattable for Option<A> {
+    fn format(&self, f: &mut fmt::Formatter<'_>, ctx: FormatCtx<'_>) -> fmt::Result {
+        if let Some(value) = self {
+            value.format(f, ctx)
+        } else {
+            Ok(())
+        }
+    }
+}
+
 impl<K: AstKind> Formattable for Module<'_, K> {
     fn format(&self, f: &mut fmt::Formatter<'_>, ctx: FormatCtx<'_>) -> fmt::Result {
         if let Some(path) = &self.path {
@@ -281,7 +306,7 @@ impl<K: AstKind> Formattable for Function<'_, K> {
         write!(
             f,
             "({})",
-            SepByMultiline(self.params.iter().map(Wrapper::as_wrapped), ", ", ctx)
+            SepByMultiline::new(self.params.iter().map(Wrapper::as_wrapped), ", ", ctx)
         )?;
         if let Some(typ) = &self.return_type {
             write!(f, " -> {}", (**typ).as_wrapped().as_fmt(ctx))?;
@@ -359,7 +384,7 @@ impl<K: AstKind> Formattable for Stmt<'_, K> {
                         f,
                         "{}case {}:",
                         ctx.ws(),
-                        case.label.as_wrapped().as_fmt(ctx)
+                        case.condition.as_wrapped().as_fmt(ctx)
                     )?;
                     for stmt in &case.body[..] {
                         writeln!(f, "{}", stmt.as_wrapped().as_fmt(ctx.bump(1)))?;
@@ -381,7 +406,7 @@ impl<K: AstKind> Formattable for Stmt<'_, K> {
                     write!(
                         f,
                         "if {} {}",
-                        block.cond.as_wrapped().as_fmt(ctx),
+                        block.condition.as_wrapped().as_fmt(ctx),
                         block.body.as_fmt(ctx)
                     )?;
                 }
@@ -389,7 +414,7 @@ impl<K: AstKind> Formattable for Stmt<'_, K> {
                     write!(
                         f,
                         " else if {} {}",
-                        block.cond.as_wrapped().as_fmt(ctx),
+                        block.condition.as_wrapped().as_fmt(ctx),
                         block.body.as_fmt(ctx)
                     )?;
                 }
@@ -403,7 +428,7 @@ impl<K: AstKind> Formattable for Stmt<'_, K> {
                     f,
                     "{}while {} ",
                     ctx.ws(),
-                    block.cond.as_wrapped().as_fmt(ctx)
+                    block.condition.as_wrapped().as_fmt(ctx)
                 )?;
                 write!(f, "{}", block.body.as_fmt(ctx))
             }
@@ -479,7 +504,7 @@ impl<K: AstKind> Formattable for Expr<'_, K> {
                 write!(
                     f,
                     "[{}]",
-                    SepByMultiline(elems.iter().map(Wrapper::as_wrapped), ", ", ctx)
+                    SepByMultiline::new(elems.iter().map(Wrapper::as_wrapped), ", ", ctx)
                 )
             }
             Expr::InterpolatedString(parts) => {
@@ -559,7 +584,7 @@ impl<K: AstKind> Formattable for Expr<'_, K> {
                     f,
                     "new {}({})",
                     (**typ).as_wrapped().as_fmt(ctx),
-                    SepByMultiline(args.iter().map(Wrapper::as_wrapped), ", ", ctx)
+                    SepByMultiline::new(args.iter().map(Wrapper::as_wrapped), ", ", ctx)
                 )
             }
             Expr::Conditional { cond, then, else_ } => {
@@ -673,6 +698,76 @@ impl Formattable for Path<'_> {
             "{}",
             SepBy(self.segments.iter().map(Wrapper::as_wrapped), ".", ctx)
         )
+    }
+}
+
+impl<K: AstKind> Formattable for Condition<'_, K> {
+    fn format(&self, f: &mut fmt::Formatter<'_>, ctx: FormatCtx<'_>) -> fmt::Result {
+        match self {
+            Self::Expr(expr) => write!(f, "{}", (*expr).as_wrapped().as_fmt(ctx)),
+            Self::Pattern(pattern) => write!(f, "let {}", pattern.as_wrapped().as_fmt(ctx)),
+        }
+    }
+}
+
+impl<K: AstKind> Formattable for LetCondition<'_, K> {
+    fn format(&self, f: &mut fmt::Formatter<'_>, ctx: FormatCtx<'_>) -> fmt::Result {
+        match self {
+            Self::Expr(expr) => write!(f, "{}", (*expr).as_wrapped().as_fmt(ctx)),
+            Self::LetPattern(pattern, val) => write!(
+                f,
+                "let {} = {}",
+                pattern.as_wrapped().as_fmt(ctx),
+                val.as_wrapped().as_fmt(ctx)
+            ),
+        }
+    }
+}
+
+impl<K: AstKind> Formattable for Pattern<'_, K> {
+    fn format(&self, f: &mut fmt::Formatter<'_>, ctx: FormatCtx<'_>) -> fmt::Result {
+        match self {
+            Self::Name(name) => write!(f, "{}", name.as_wrapped()),
+            Self::As(inner, typ) => write!(
+                f,
+                "{} as {}",
+                (**inner).as_wrapped().as_fmt(ctx),
+                typ.as_wrapped().as_fmt(ctx)
+            ),
+            Self::Aggregate(name, items) => {
+                let items = items.iter().map(|(name, pat)| {
+                    if matches!(pat, Pattern::Name(n) if name == n) {
+                        (name.as_wrapped(), Some((": ", pat.as_wrapped())))
+                    } else {
+                        (name.as_wrapped(), None)
+                    }
+                });
+                write!(
+                    f,
+                    "{} {{{}}}",
+                    name.as_wrapped(),
+                    SepByMultiline::new(items, ", ", ctx.bump(1)).with_padding(" ")
+                )
+            }
+            Self::Nullable(nullable) => {
+                write!(f, "{}?", (**nullable).as_wrapped().as_fmt(ctx))
+            }
+            Self::Array(spread, elems) => {
+                write!(f, "[")?;
+                if matches!(spread, ArraySpread::Start) {
+                    write!(f, "..,")?;
+                }
+                write!(
+                    f,
+                    "{}",
+                    SepByMultiline::new(elems.as_wrapped().iter(), ", ", ctx).with_padding("")
+                )?;
+                if matches!(spread, ArraySpread::End) {
+                    write!(f, ", ..")?;
+                }
+                write!(f, "]")
+            }
+        }
     }
 }
 
@@ -816,19 +911,45 @@ where
     }
 }
 
-struct SepByMultiline<'s, I>(I, &'static str, FormatCtx<'s>);
+struct SepByMultiline<'s, I> {
+    iter: I,
+    separator: &'static str,
+    ctx: FormatCtx<'s>,
+    padding: &'static str,
+}
 
-impl<'a, I: ExactSizeIterator<Item = &'a E> + Clone, E> fmt::Display for SepByMultiline<'_, I>
+impl<'s, I> SepByMultiline<'s, I> {
+    fn new(iter: I, separator: &'static str, ctx: FormatCtx<'s>) -> Self {
+        Self {
+            iter,
+            separator,
+            ctx,
+            padding: "",
+        }
+    }
+
+    fn with_padding(mut self, padding: &'static str) -> Self {
+        self.padding = padding;
+        self
+    }
+}
+
+impl<I: ExactSizeIterator<Item = E> + Clone, E> fmt::Display for SepByMultiline<'_, I>
 where
-    E: ApproxWidth + Formattable + 'a,
+    E: ApproxWidth + Formattable,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let Self(iter, sep, ctx) = self;
-        let width = iter.clone().map(ApproxWidth::approx_width).sum::<u16>()
-            + (sep.len() * (iter.len().max(1) - 1)) as u16;
+        let Self {
+            iter,
+            separator,
+            ctx,
+            padding,
+        } = self;
+        let width = iter.clone().map(|e| e.approx_width()).sum::<u16>()
+            + (separator.len() * (iter.len().max(1) - 1)) as u16;
 
         if ctx.current_indent() + width > ctx.settings.max_width {
-            let sep = sep.trim_end();
+            let sep = separator.trim_end();
             let ctx = ctx.bump(1);
             for (i, elem) in iter.clone().enumerate() {
                 if i > 0 {
@@ -840,7 +961,7 @@ where
             writeln!(f)?;
             write!(f, "{}", ctx.decrement().ws())
         } else {
-            write!(f, "{}", SepBy(iter.clone(), ", ", *ctx))
+            write!(f, "{padding}{}{padding}", SepBy(iter.clone(), ", ", *ctx))
         }
     }
 }
@@ -1047,7 +1168,7 @@ fn format_call_args<K: AstKind>(
     write!(
         f,
         "({})",
-        SepByMultiline(args.iter().map(Wrapper::as_wrapped), ", ", ctx)
+        SepByMultiline::new(args.iter().map(Wrapper::as_wrapped), ", ", ctx)
     )
 }
 
@@ -1080,6 +1201,39 @@ impl ParentOp {
 
 trait ApproxWidth {
     fn approx_width(&self) -> u16;
+}
+
+impl<A: ApproxWidth, B: ApproxWidth> ApproxWidth for (A, B) {
+    fn approx_width(&self) -> u16 {
+        self.0.approx_width() + self.1.approx_width()
+    }
+}
+
+impl<A: ApproxWidth, B: ApproxWidth, C: ApproxWidth> ApproxWidth for (A, B, C) {
+    fn approx_width(&self) -> u16 {
+        self.0.approx_width() + self.1.approx_width() + self.2.approx_width()
+    }
+}
+
+impl<A: ?Sized + ApproxWidth> ApproxWidth for &A {
+    fn approx_width(&self) -> u16 {
+        (**self).approx_width()
+    }
+}
+
+impl<A: ApproxWidth> ApproxWidth for Option<A> {
+    fn approx_width(&self) -> u16 {
+        match self {
+            Some(value) => value.approx_width(),
+            None => 0,
+        }
+    }
+}
+
+impl ApproxWidth for str {
+    fn approx_width(&self) -> u16 {
+        self.len() as u16
+    }
 }
 
 impl<K> ApproxWidth for Expr<'_, K>
@@ -1229,6 +1383,59 @@ impl<K: AstKind> ApproxWidth for Type<'_, K> {
                     .sum::<u16>()
                     + (**return_type).as_wrapped().approx_width()
                     + 6
+            }
+        }
+    }
+}
+
+impl<K: AstKind> ApproxWidth for Condition<'_, K> {
+    fn approx_width(&self) -> u16 {
+        match self {
+            Self::Expr(expr) => expr.as_wrapped().approx_width(),
+            Self::Pattern(pattern) => pattern.as_wrapped().approx_width() + 4,
+        }
+    }
+}
+
+impl<K: AstKind> ApproxWidth for LetCondition<'_, K> {
+    fn approx_width(&self) -> u16 {
+        match self {
+            Self::Expr(expr) => expr.as_wrapped().approx_width(),
+            Self::LetPattern(pattern, val) => {
+                pattern.as_wrapped().approx_width() + val.as_wrapped().approx_width() + 6
+            }
+        }
+    }
+}
+
+impl<K: AstKind> ApproxWidth for Pattern<'_, K> {
+    fn approx_width(&self) -> u16 {
+        match self {
+            Pattern::Name(name) => name.as_wrapped().len() as u16,
+            Pattern::As(inner, typ) => {
+                (**inner).as_wrapped().approx_width() + typ.as_wrapped().approx_width() + 2
+            }
+            Pattern::Aggregate(name, items) => {
+                name.as_wrapped().len() as u16
+                    + items
+                        .iter()
+                        .map(|(name, pat)| {
+                            (*name).as_wrapped().len() as u16 + pat.as_wrapped().approx_width() + 2
+                        })
+                        .sum::<u16>()
+                    + 4
+            }
+            Pattern::Nullable(inner) => (**inner).as_wrapped().approx_width() + 1,
+            Pattern::Array(spread, elems) => {
+                elems
+                    .as_wrapped()
+                    .iter()
+                    .map(|el| el.approx_width() + 2)
+                    .sum::<u16>()
+                    + match spread {
+                        ArraySpread::End | ArraySpread::Start => 4,
+                        ArraySpread::None => 0,
+                    }
             }
         }
     }

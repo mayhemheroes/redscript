@@ -1,10 +1,10 @@
 use std::ptr;
 
-use crate::ast::{ExprT, ItemDeclT, ParamT, StmtT, TypeT};
+use crate::ast::{Condition, ExprT, ItemDeclT, LetCondition, ParamT, PatternT, StmtT, TypeT};
 use crate::{
     Aggregate, AstKind, BinOp, Block, Case, ConditionalBlock, Constant, Enum, Expr, Field,
-    Function, FunctionBody, Import, Item, ItemDecl, Module, Span, Stmt, StrPart, UnOp, WithSpan,
-    Wrapper,
+    Function, FunctionBody, Import, Item, ItemDecl, Module, Pattern, Span, Stmt, StrPart, UnOp,
+    WithSpan, Wrapper,
 };
 
 pub trait AstVisitor<'src, K: AstKind> {
@@ -79,7 +79,7 @@ pub trait AstVisitor<'src, K: AstKind> {
     }
 
     fn visit_case(&mut self, case: &Case<'src, K>) -> Result<(), Self::Error> {
-        self.visit_expr(&case.label)?;
+        self.visit_condition(&case.condition)?;
         case.body.iter().try_for_each(|stmt| self.visit_stmt(stmt))
     }
 
@@ -93,14 +93,14 @@ pub trait AstVisitor<'src, K: AstKind> {
         else_: &Option<Block<'src, K>>,
     ) -> Result<(), Self::Error> {
         for block in blocks {
-            self.visit_expr(&block.cond)?;
+            self.visit_let_condition(&block.condition)?;
             self.visit_block(&block.body)?;
         }
         else_.iter().try_for_each(|block| self.visit_block(block))
     }
 
     fn visit_while(&mut self, block: &ConditionalBlock<'src, K>) -> Result<(), Self::Error> {
-        self.visit_expr(&block.cond)?;
+        self.visit_let_condition(&block.condition)?;
         self.visit_block(&block.body)
     }
 
@@ -264,6 +264,31 @@ pub trait AstVisitor<'src, K: AstKind> {
             .try_for_each(|item| self.visit_item_decl(item))
     }
 
+    fn visit_condition(&mut self, condition: &Condition<'src, K>) -> Result<(), Self::Error> {
+        match condition {
+            Condition::Expr(expr) => self.visit_expr(expr),
+            Condition::Pattern(pat) => self.visit_pattern(pat),
+        }
+    }
+
+    fn visit_let_condition(
+        &mut self,
+        condition: &LetCondition<'src, K>,
+    ) -> Result<(), Self::Error> {
+        match condition {
+            LetCondition::Expr(expr) => self.visit_expr(expr),
+            LetCondition::LetPattern(pat, val) => {
+                self.visit_pattern(pat)?;
+                self.visit_expr(val)
+            }
+        }
+    }
+
+    fn visit_pattern(&mut self, condition: &PatternT<'src, K>) -> Result<(), Self::Error> {
+        self.visit_node(AstNode::Pattern(condition))?;
+        self.post_visit_node(AstNode::Pattern(condition))
+    }
+
     fn visit_item_decl(&mut self, item_decl: &ItemDeclT<'src, K>) -> Result<(), Self::Error> {
         self.visit_node(AstNode::ItemDecl(item_decl))?;
         let inner = item_decl.as_wrapped();
@@ -345,6 +370,7 @@ pub enum AstNode<'a, 'src, K: AstKind> {
     ItemDecl(&'a ItemDeclT<'src, K>),
     Stmt(&'a StmtT<'src, K>),
     Expr(&'a ExprT<'src, K>),
+    Pattern(&'a PatternT<'src, K>),
 }
 
 impl<K: AstKind> AstNode<'_, '_, K> {
@@ -352,7 +378,8 @@ impl<K: AstKind> AstNode<'_, '_, K> {
         match self {
             Self::ItemDecl(item_decl) => NodeId::item_decl::<K>(item_decl.as_wrapped()),
             Self::Stmt(stmt) => NodeId::stmt::<K>(stmt.as_wrapped()),
-            Self::Expr(expr) => NodeId::expr::<K>(expr.as_wrapped()),
+            Self::Expr(stmt) => NodeId::expr::<K>(stmt.as_wrapped()),
+            Self::Pattern(pat) => NodeId::condition::<K>(pat.as_wrapped()),
         }
     }
 }
@@ -360,7 +387,10 @@ impl<K: AstKind> AstNode<'_, '_, K> {
 impl AstNode<'_, '_, WithSpan> {
     pub fn span(&self) -> Span {
         match self {
-            Self::ItemDecl((_, span)) | Self::Stmt((_, span)) | Self::Expr((_, span)) => *span,
+            Self::ItemDecl((_, span))
+            | Self::Stmt((_, span))
+            | Self::Expr((_, span))
+            | Self::Pattern((_, span)) => *span,
         }
     }
 }
@@ -382,5 +412,10 @@ impl NodeId {
     #[inline]
     pub fn expr<K: AstKind>(expr: &Expr<'_, K>) -> Self {
         Self(ptr::from_ref(expr).cast())
+    }
+
+    #[inline]
+    pub fn condition<K: AstKind>(condition: &Pattern<'_, K>) -> Self {
+        Self(ptr::from_ref(condition).cast())
     }
 }

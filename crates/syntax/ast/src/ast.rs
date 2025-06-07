@@ -12,6 +12,7 @@ pub(super) type ItemDeclT<'src, A> = <A as AstKind>::Inner<ItemDecl<'src, A>>;
 pub(super) type ParamT<'src, A> = <A as AstKind>::Inner<Param<'src, A>>;
 pub(super) type StmtT<'src, A> = <A as AstKind>::Inner<Stmt<'src, A>>;
 pub(super) type TypeT<'src, A> = <A as AstKind>::Inner<Type<'src, A>>;
+pub(super) type PatternT<'src, A> = <A as AstKind>::Inner<Pattern<'src, A>>;
 
 #[derive_where(Debug, Clone, PartialEq)]
 pub struct Module<'src, K: AstKind = Identity> {
@@ -761,19 +762,19 @@ impl<'src> Stmt<'src, WithSpan> {
 
 #[derive_where(Debug, Clone, PartialEq)]
 pub struct ConditionalBlock<'src, K: AstKind = Identity> {
-    pub cond: ExprT<'src, K>,
+    pub condition: LetCondition<'src, K>,
     pub body: Block<'src, K>,
 }
 
 impl<'src, K: AstKind> ConditionalBlock<'src, K> {
     #[inline]
-    pub fn new(cond: ExprT<'src, K>, body: Block<'src, K>) -> Self {
-        Self { cond, body }
+    pub fn new(condition: LetCondition<'src, K>, body: Block<'src, K>) -> Self {
+        Self { condition, body }
     }
 
     pub fn unwrapped(self) -> ConditionalBlock<'src> {
         ConditionalBlock {
-            cond: self.cond.into_wrapped().unwrapped(),
+            condition: self.condition.into_wrapped().unwrapped(),
             body: self.body.into_wrapped().unwrapped(),
         }
     }
@@ -781,32 +782,30 @@ impl<'src, K: AstKind> ConditionalBlock<'src, K> {
 
 impl<'src> ConditionalBlock<'src, WithSpan> {
     pub fn find_at(&self, pos: u32) -> Option<QueryResult<'_, 'src>> {
-        let (cond, span) = &self.cond;
-        if span.contains(pos) {
-            return Some(cond.find_at(pos));
-        }
-        self.body.find_at(pos)
+        self.condition
+            .find_at(pos)
+            .or_else(|| self.body.find_at(pos))
     }
 }
 
 #[derive_where(Debug, Clone, PartialEq)]
 pub struct Case<'src, K: AstKind = Identity> {
-    pub label: ExprT<'src, K>,
+    pub condition: Condition<'src, K>,
     pub body: Box<[StmtT<'src, K>]>,
 }
 
 impl<'src, K: AstKind> Case<'src, K> {
     #[inline]
-    pub fn new(label: ExprT<'src, K>, body: impl Into<Box<[StmtT<'src, K>]>>) -> Self {
+    pub fn new(condition: Condition<'src, K>, body: impl Into<Box<[StmtT<'src, K>]>>) -> Self {
         Self {
-            label,
+            condition,
             body: body.into(),
         }
     }
 
     pub fn unwrapped(self) -> Case<'src> {
         Case {
-            label: self.label.into_wrapped().unwrapped(),
+            condition: self.condition.into_wrapped().unwrapped(),
             body: self
                 .body
                 .into_vec()
@@ -819,13 +818,73 @@ impl<'src, K: AstKind> Case<'src, K> {
 
 impl<'src> Case<'src, WithSpan> {
     pub fn find_at(&self, pos: u32) -> Option<QueryResult<'_, 'src>> {
-        let (label, span) = &self.label;
-        if span.contains(pos) {
-            return Some(label.find_at(pos));
-        }
         self.body
             .iter()
             .find_map(|(s, span)| span.contains(pos).then_some(s.find_at(pos)))
+    }
+}
+
+#[derive_where(Debug, Clone, PartialEq)]
+pub enum Condition<'src, K: AstKind = Identity> {
+    Expr(ExprT<'src, K>),
+    Pattern(PatternT<'src, K>),
+}
+
+impl<'src, K: AstKind> Condition<'src, K> {
+    pub fn unwrapped(self) -> Condition<'src> {
+        match self {
+            Self::Expr(e) => Condition::Expr(e.into_wrapped().unwrapped()),
+            Self::Pattern(p) => Condition::Pattern(p.into_wrapped().unwrapped()),
+        }
+    }
+}
+
+impl<'src> Condition<'src, WithSpan> {
+    pub fn find_at(&self, pos: u32) -> Option<QueryResult<'_, 'src>> {
+        match self {
+            Self::Expr((e, span)) => span.contains(pos).then(|| e.find_at(pos)),
+            Self::Pattern((p, span)) => span.contains(pos).then(|| p.find_at(pos)).flatten(),
+        }
+    }
+
+    pub fn span(&self) -> Span {
+        match self {
+            Self::Expr((_, span)) | Self::Pattern((_, span)) => *span,
+        }
+    }
+}
+
+#[derive_where(Debug, Clone, PartialEq)]
+pub enum LetCondition<'src, K: AstKind = Identity> {
+    Expr(ExprT<'src, K>),
+    LetPattern(PatternT<'src, K>, ExprT<'src, K>),
+}
+
+impl<'src, K: AstKind> LetCondition<'src, K> {
+    pub fn unwrapped(self) -> LetCondition<'src> {
+        match self {
+            Self::Expr(e) => LetCondition::Expr(e.into_wrapped().unwrapped()),
+            Self::LetPattern(pat, e) => LetCondition::LetPattern(
+                pat.into_wrapped().unwrapped(),
+                e.into_wrapped().unwrapped(),
+            ),
+        }
+    }
+}
+
+impl<'src> LetCondition<'src, WithSpan> {
+    pub fn find_at(&self, pos: u32) -> Option<QueryResult<'_, 'src>> {
+        match self {
+            Self::Expr((e, span)) => span.contains(pos).then(|| e.find_at(pos)),
+            Self::LetPattern(pat, e) => {
+                let (pat, pat_span) = pat;
+                if pat_span.contains(pos) {
+                    return pat.find_at(pos);
+                }
+                let (e, e_span) = e;
+                e_span.contains(pos).then(|| e.find_at(pos))
+            }
+        }
     }
 }
 
@@ -1120,6 +1179,76 @@ impl<'src, K: AstKind> StrPart<'src, K> {
     }
 }
 
+#[derive_where(Debug, Clone, PartialEq)]
+pub enum Pattern<'src, K: AstKind = Identity> {
+    Name(K::Inner<&'src str>),
+    As(Box<K::Inner<Self>>, TypeT<'src, K>),
+    Aggregate(K::Inner<&'src str>, Box<[(K::Inner<&'src str>, Self)]>),
+    Nullable(Box<K::Inner<Self>>),
+    Array(ArraySpread, K::Inner<Box<[Self]>>),
+}
+
+impl<'src, K: AstKind> Pattern<'src, K> {
+    pub fn unwrapped(self) -> Pattern<'src> {
+        match self {
+            Self::Name(name) => Pattern::Name(name.into_wrapped()),
+            Self::As(pat, typ) => Pattern::As(
+                Box::new((*pat).into_wrapped().unwrapped()),
+                typ.into_wrapped().unwrapped(),
+            ),
+            Self::Aggregate(name, fields) => Pattern::Aggregate(
+                name.into_wrapped(),
+                fields
+                    .into_vec()
+                    .into_iter()
+                    .map(|(n, p)| (n.into_wrapped(), p.into_wrapped().unwrapped()))
+                    .collect(),
+            ),
+            Self::Nullable(pat) => Pattern::Nullable((*pat).into_wrapped().unwrapped().into()),
+            Self::Array(spread, pats) => Pattern::Array(
+                spread,
+                pats.into_wrapped()
+                    .into_vec()
+                    .into_iter()
+                    .map(|p| p.into_wrapped().unwrapped())
+                    .collect::<Box<_>>(),
+            ),
+        }
+    }
+}
+
+impl<'src> Pattern<'src, WithSpan> {
+    pub fn find_at(&self, pos: u32) -> Option<QueryResult<'_, 'src>> {
+        match self {
+            Pattern::Name(_) => None,
+            Pattern::Nullable(pat) => {
+                let (pat, pat_span) = &**pat;
+                pat_span.contains(pos).then(|| pat.find_at(pos)).flatten()
+            }
+            Pattern::As(pat, typ) => {
+                let (pat, pat_span) = &**pat;
+                let (typ, typ_span) = &typ;
+                if pat_span.contains(pos) {
+                    pat.find_at(pos)
+                } else if typ_span.contains(pos) {
+                    Some(typ.find_at(pos))
+                } else {
+                    None
+                }
+            }
+            Pattern::Aggregate((_, _), fields) => fields.iter().find_map(|(_, p)| p.find_at(pos)),
+            Pattern::Array(_, (pats, _)) => pats.iter().find_map(|p| p.find_at(pos)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ArraySpread {
+    Start,
+    End,
+    None,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnOp {
     BitNot,
@@ -1273,6 +1402,12 @@ impl BinOp {
             "OperatorModulo" => Some(Self::Mod),
             _ => None,
         }
+    }
+}
+
+impl From<BinOp> for &'static str {
+    fn from(op: BinOp) -> Self {
+        op.name()
     }
 }
 

@@ -13,9 +13,9 @@ use crate::{CoalesceError, RefType, Symbols};
 pub enum Stmt<'ctx> {
     Expr(Box<Expr<'ctx>>),
     Block(Block<'ctx>, Span),
-    While(CondBlock<'ctx>, Span),
+    While(ConditionalBlock<'ctx>, Span),
     Branches {
-        branches: Box<[CondBlock<'ctx>]>,
+        branches: Box<[ConditionalBlock<'ctx>]>,
         default: Option<Block<'ctx>>,
         span: Span,
     },
@@ -115,13 +115,20 @@ impl<'ctx> Stmt<'ctx> {
     }
 }
 
+impl<'ctx> From<Expr<'ctx>> for Stmt<'ctx> {
+    #[inline]
+    fn from(expr: Expr<'ctx>) -> Self {
+        Self::Expr(Box::new(expr))
+    }
+}
+
 #[derive(Debug)]
-pub struct CondBlock<'ctx> {
+pub struct ConditionalBlock<'ctx> {
     pub condition: Box<Expr<'ctx>>,
     pub block: Block<'ctx>,
 }
 
-impl<'ctx> CondBlock<'ctx> {
+impl<'ctx> ConditionalBlock<'ctx> {
     #[inline]
     pub fn new(condition: impl Into<Box<Expr<'ctx>>>, block: Block<'ctx>) -> Self {
         Self {
@@ -165,18 +172,27 @@ impl<'ctx> Block<'ctx> {
             .ok()?;
         self.stmts[idx].find_at(pos)
     }
+
+    pub(crate) fn push_prologue(
+        &mut self,
+        iter: impl IntoIterator<IntoIter = impl DoubleEndedIterator<Item = Stmt<'ctx>>>,
+    ) {
+        for stmt in iter.into_iter().rev() {
+            self.stmts.push_front(stmt);
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct Case<'ctx> {
-    pub constant: Const<'ctx>,
+    pub matcher: Expr<'ctx>,
     pub block: Block<'ctx>,
 }
 
 impl<'ctx> Case<'ctx> {
     #[inline]
-    pub fn new(constant: Const<'ctx>, block: Block<'ctx>) -> Self {
-        Self { constant, block }
+    pub fn new(matcher: Expr<'ctx>, block: Block<'ctx>) -> Self {
+        Self { matcher, block }
     }
 }
 
@@ -239,6 +255,13 @@ pub enum Expr<'ctx> {
 }
 
 impl<'ctx> Expr<'ctx> {
+    pub fn call(call: impl Into<Call<'ctx>>, span: Span) -> Self {
+        Self::Call {
+            call: Box::new(call.into()),
+            span,
+        }
+    }
+
     pub fn null(span: Span) -> Self {
         Self::Null {
             is_weak: false,
