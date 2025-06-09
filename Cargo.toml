@@ -62,7 +62,7 @@ fd-lock = "4"
 msgbox = "0.7"
 pretty_dtoa = "0.3"
 minidl = "0.1"
-bindgen = "0.71"
+bindgen = "0.72"
 mimalloc = "0.1"
 
 similar-asserts = "1"
