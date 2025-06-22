@@ -736,7 +736,7 @@ impl<K: AstKind> Formattable for Pattern<'_, K> {
             ),
             Self::Aggregate(name, items) => {
                 let items = items.iter().map(|(name, pat)| {
-                    if matches!(pat, Pattern::Name(n) if name == n) {
+                    if matches!(pat, Pattern::Name(n) if name.as_wrapped() != n.as_wrapped()) {
                         (name.as_wrapped(), Some((": ", pat.as_wrapped())))
                     } else {
                         (name.as_wrapped(), None)
@@ -746,7 +746,7 @@ impl<K: AstKind> Formattable for Pattern<'_, K> {
                     f,
                     "{} {{{}}}",
                     name.as_wrapped(),
-                    SepByMultiline::new(items, ", ", ctx.bump(1)).with_padding(" ")
+                    SepByMultiline::new(items, ", ", ctx).with_padding(" ")
                 )
             }
             Self::Nullable(nullable) => {
