@@ -725,6 +725,12 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                     size: 4,
                 });
             }
+            (ir::Intrinsic::LongIntEnum, [arg]) => {
+                emit_typed(self, arg, |typ| Instr::I32ToEnum {
+                    enum_type: typ,
+                    size: 8,
+                });
+            }
             (ir::Intrinsic::ToVariant, [arg]) => emit_typed(self, arg, Instr::ToVariant),
             (ir::Intrinsic::FromVariant, [arg]) => emit_typed(self, arg, Instr::FromVariant),
             (ir::Intrinsic::VariantIsDefined, []) => self.emit(Instr::VariantIsDefined),

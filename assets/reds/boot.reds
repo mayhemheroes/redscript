@@ -192,10 +192,19 @@ func EnumInt<A>(enum: A) -> Int32
 ///
 /// ### Example
 /// ```
-/// IntEnum(Color, 0); // Color.Red
+/// IntEnum<Color>(0); // Color.Red
 /// ```
 @intrinsic(IntEnum)
 func IntEnum<A>(value: Int32) -> A
+
+/// Converts an integer value to its enum representation.
+///
+/// ### Example
+/// ```
+/// IntEnum<Color>(0); // Color.Red
+/// ```
+@intrinsic(LongIntEnum)
+func IntEnum<A>(value: Int64) -> A
 
 /// Converts a value into a variant.
 @intrinsic(ToVariant)
