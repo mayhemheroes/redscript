@@ -432,7 +432,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         let mut method_items = vec![];
         let mut field_items = vec![];
 
-        for (item, item_span) in aggregate.items {
+        for (mut item, item_span) in aggregate.items {
             match item.item {
                 ast::Item::Function(func) => {
                     let (name, name_span) = func.name;
@@ -474,7 +474,12 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     };
                     let flags =
                         self.process_field_flags(item.qualifiers, class_flags, &typ, name_span);
-                    let properties = self.process_field_properties(&item.annotations);
+
+                    let properties = self.extract_field_properties(&mut item.annotations);
+                    for (ann, ann_span) in &item.annotations {
+                        self.reporter
+                            .report(Diagnostic::UnknownAnnotation(ann.name, *ann_span));
+                    }
 
                     let field = Field::new(flags, typ, properties, item.doc, Some(name_span));
                     let res = fields
@@ -735,7 +740,10 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         let (name, name_span) = field.name;
         let mut id = None;
 
-        for (ann, ann_span) in &entry.meta.annotations {
+        let mut annotations = entry.meta.annotations.into_vec();
+        let mut properties = self.extract_field_properties(&mut annotations);
+
+        for (ann, ann_span) in &annotations {
             match (ann.name, &ann.args[..]) {
                 (ADD_FIELD_ANNOTATION, &[(ast::Expr::Ident(type_name), span)]) => {
                     let (parent_t, agg) =
@@ -760,7 +768,13 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     let flags =
                         self.process_field_flags(entry.meta.qualifiers, flags, &typ, name_span);
 
-                    let field = Field::new(flags, typ, [], mem::take(&mut doc), Some(name_span));
+                    let field = Field::new(
+                        flags,
+                        typ,
+                        mem::take(&mut properties),
+                        mem::take(&mut doc),
+                        Some(name_span),
+                    );
                     let res = self.symbols[parent_t]
                         .schema_mut()
                         .as_aggregate_mut()
@@ -860,28 +874,25 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         flags
     }
 
-    fn process_field_properties(
+    fn extract_field_properties(
         &mut self,
-        anns: &[ast::Spanned<ast::SourceAnnotation<'ctx>>],
+        anns: &mut Vec<ast::Spanned<ast::SourceAnnotation<'ctx>>>,
     ) -> Vec<(Cow<'ctx, str>, Cow<'ctx, str>)> {
         let mut results = vec![];
-        for (ann, span) in anns {
-            match (ann.name, &*ann.args) {
-                (
-                    RUNTIME_PROPERTY_ANNOTATION,
-                    [
-                        (ast::Expr::Constant(ast::Constant::String(key)), _),
-                        (ast::Expr::Constant(ast::Constant::String(val)), _),
-                    ],
-                ) => {
-                    results.push((key.clone(), val.clone()));
-                }
-                _ => {
-                    self.reporter
-                        .report(Diagnostic::UnknownAnnotation(ann.name, *span));
-                }
+        anns.retain(|(ann, _)| match (ann.name, &*ann.args) {
+            (
+                RUNTIME_PROPERTY_ANNOTATION,
+                [
+                    (ast::Expr::Constant(ast::Constant::String(key)), _),
+                    (ast::Expr::Constant(ast::Constant::String(val)), _),
+                ],
+            ) => {
+                results.push((key.clone(), val.clone()));
+                false
             }
-        }
+            _ => true,
+        });
+
         results
     }
 
