@@ -8,10 +8,10 @@ input_file: crates/compiler/backend/tests/data/result-type.reds
 // Test; (f1)
 return
 ctx 49
-invoke.static j17 l40 f2 0000000000000000
+invoke.static j17 l3 f2 0000000000000000
 i32.one
 param.end
-invoke.virtual j32 l40 f0 0000000000000000
+invoke.virtual j32 l3 f0 0000000000000000
 invoke.static j16 l0 f3 0000000000000000
 param.end
 param.end
@@ -34,7 +34,7 @@ true.const
 switch.label 108 29
 ctx 26
 this
-invoke.virtual j25 l9 f1 0000000000000000
+invoke.virtual j25 l13 f1 0000000000000000
 cname.const 2
 param.end
 assign
@@ -43,17 +43,17 @@ ctx 10
 this
 object.field 0
 return
-invoke.static j53 l10 f2 0000000000000000
+invoke.static j53 l14 f2 0000000000000000
 ctx 9
 param 1
-invoke.virtual j25 l10 f3 0000000000000000
+invoke.virtual j25 l14 f3 0000000000000000
 local 1
 param.end
 param.end
 switch.label 80 29
 ctx 26
 this
-invoke.virtual j25 l11 f1 0000000000000000
+invoke.virtual j25 l15 f1 0000000000000000
 cname.const 4
 param.end
 assign
@@ -62,7 +62,7 @@ ctx 10
 this
 object.field 1
 return
-invoke.static j25 l12 f5 0000000000000000
+invoke.static j25 l16 f5 0000000000000000
 local 2
 param.end
 
@@ -77,7 +77,7 @@ local 3
 
 // lambda$23::Call;Int32 (f7)
 return
-invoke.static j26 l40 f8 0000000000000000
+invoke.static j26 l3 f8 0000000000000000
 param 2
 i32.one
 param.end

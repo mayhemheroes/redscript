@@ -1942,17 +1942,16 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         expr_t: &PolyType<'ctx>,
         span: Span,
     ) -> ir::Local {
-        match expr {
-            ir::Expr::Local(local, _) => local,
-            _ => {
-                let local = self.locals.add_var(expr_t.clone(), span).id;
-                self.push_prefix(ir::Expr::Assign {
-                    place: ir::Expr::Local(local, span).into(),
-                    expr: expr.into(),
-                    span,
-                });
-                local
-            }
+        if let ir::Expr::Local(local, _) = expr {
+            local
+        } else {
+            let local = self.locals.add_var(expr_t.clone(), span).id;
+            self.push_prefix(ir::Expr::Assign {
+                place: ir::Expr::Local(local, span).into(),
+                expr: expr.into(),
+                span,
+            });
+            local
         }
     }
 
