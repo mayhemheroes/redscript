@@ -939,12 +939,20 @@ impl<'ctx> Method<'ctx> {
 
 pub trait FunctionKind<'ctx> {
     fn type_(&self) -> &FunctionType<'ctx>;
+    fn intrinsic(&self) -> Option<ir::Intrinsic> {
+        None
+    }
 }
 
 impl<'ctx> FunctionKind<'ctx> for FreeFunction<'ctx> {
     #[inline]
     fn type_(&self) -> &FunctionType<'ctx> {
         &self.type_
+    }
+
+    #[inline]
+    fn intrinsic(&self) -> Option<ir::Intrinsic> {
+        self.intrinsic
     }
 }
 
@@ -959,6 +967,11 @@ impl<'ctx, A: FunctionKind<'ctx>> FunctionKind<'ctx> for &A {
     #[inline]
     fn type_(&self) -> &FunctionType<'ctx> {
         (*self).type_()
+    }
+
+    #[inline]
+    fn intrinsic(&self) -> Option<ir::Intrinsic> {
+        (*self).intrinsic()
     }
 }
 

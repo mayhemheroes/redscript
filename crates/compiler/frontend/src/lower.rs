@@ -1226,7 +1226,11 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         let candidates = env
             .query_free_functions("Cast", self.symbols)
             .filter(|entry| {
-                target_t.is_subtype_compatible(entry.func().type_().return_type(), self.symbols)
+                target_t.is_subtype_compatible(
+                    entry.func().type_().return_type(),
+                    self.symbols,
+                    false,
+                )
             });
         let res = self
             .resolve_overload("Cast", args, &[], candidates, None, hint, env, expr_span)?
@@ -1650,8 +1654,11 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                     .iter()
                     .zip(entry.func().type_().unwrapped_param_types())
                     .all(|(typ, param_t)| {
-                        typ.unwrap_ref_or_self(symbols)
-                            .is_subtype_compatible(param_t, symbols)
+                        typ.unwrap_ref_or_self(symbols).is_subtype_compatible(
+                            param_t,
+                            symbols,
+                            entry.func().intrinsic().is_none(),
+                        )
                     })
             })
         }
@@ -2257,14 +2264,20 @@ impl<'ctx> InferredType<'ctx> {
         other.constrain(self, symbols)
     }
 
-    fn is_subtype_compatible(&self, other: &Type<'ctx>, symbols: &Symbols<'ctx>) -> bool {
+    fn is_subtype_compatible(
+        &self,
+        other: &Type<'ctx>,
+        symbols: &Symbols<'ctx>,
+        allow_implicit: bool,
+    ) -> bool {
         match (self, other) {
+            (_, Type::Data(rhs)) if allow_implicit && rhs.id() == predef::VARIANT => true,
             (Self::Nothing, _) | (_, Type::Ctx(_)) => true,
             (Self::Data(lhs), Type::Data(rhs)) if lhs.id() == rhs.id() => lhs
                 .args()
                 .iter()
                 .zip(rhs.args())
-                .all(|(l, r)| l.is_subtype_compatible(r, symbols)),
+                .all(|(l, r)| l.is_subtype_compatible(r, symbols, allow_implicit)),
             (Self::Data(lhs), Type::Data(rhs)) => symbols.is_subtype(lhs.id(), rhs.id()),
             (Self::Ctx(lhs), Type::Data(rhs)) => lhs
                 .upper()
@@ -2476,12 +2489,17 @@ impl<'ctx> PolyType<'ctx> {
             .and_then(TypeApp::ref_type)
     }
 
-    fn is_subtype_compatible(&self, other: &Type<'ctx>, symbols: &Symbols<'ctx>) -> bool {
+    fn is_subtype_compatible(
+        &self,
+        other: &Type<'ctx>,
+        symbols: &Symbols<'ctx>,
+        allow_implicit: bool,
+    ) -> bool {
         match self {
-            Self::Mono(typ) => typ.is_subtype_compatible(other, symbols),
+            Self::Mono(typ) => typ.is_subtype_compatible(other, symbols, allow_implicit),
             Self::Var(var) => var
                 .upper()
-                .is_none_or(|typ| typ.is_subtype_compatible(other, symbols)),
+                .is_none_or(|typ| typ.is_subtype_compatible(other, symbols, allow_implicit)),
         }
     }
 }
