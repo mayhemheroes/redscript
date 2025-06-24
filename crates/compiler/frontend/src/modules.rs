@@ -2,7 +2,7 @@ use redscript_ast as ast;
 use sequence_trie::SequenceTrie;
 use smallvec::smallvec;
 
-use crate::lower::FreeFunctionIndexes;
+use crate::symbols::FreeFunctionIndexes;
 use crate::{FreeFunctionIndex, QualifiedName, TypeId};
 
 #[derive(Debug, Default)]

@@ -1,36 +1,30 @@
-use std::borrow::Cow;
-use std::cell::{Cell, RefCell};
-use std::hash::BuildHasher;
+use std::cell::Cell;
 use std::ops::RangeInclusive;
 use std::rc::Rc;
-use std::{fmt, iter, mem, ptr, slice};
+use std::{iter, mem, slice};
 
-use hashbrown::{HashMap, HashSet};
-use identity_hash::{BuildIdentityHasher, IdentityHashable};
+use env::{Capture, Locals};
+pub use env::{Env, TypeEnv, TypeRef};
+pub use error::{CoalesceError, Error, LowerResult, TypeError};
 use indexmap::set::MutableValues;
 use redscript_ast as ast;
 use redscript_ast::{Span, Spanned};
-use smallvec::SmallVec;
-use thiserror::Error;
+use types::Coercion;
+pub use types::{InferredTypeApp, Poly, PolyType};
 
 use crate::diagnostic::ErrorWithSpan;
 use crate::symbols::{
     FieldId, FreeFunctionIndex, FunctionEntry, FunctionKey, FunctionKind, FunctionType, Symbols,
     TypeSchema,
 };
-use crate::types::{
-    CtxVar, MAX_FN_ARITY, MAX_STATIC_ARRAY_SIZE, RefType, Type, TypeApp, TypeId, TypeKind,
-    Variance, predef,
-};
-use crate::utils::{Lazy, ScopedMap};
-use crate::{FreeFunction, IndexMap, IndexSet, LowerReporter, MethodId, Param, ir};
+use crate::types::{RefType, Type, TypeApp, TypeId, predef};
+use crate::utils::ScopedMap;
+use crate::{IndexSet, LowerReporter, MethodId, Param, ir};
 
-pub type InferredType<'ctx> = Type<'ctx, Poly>;
-pub type InferredTypeApp<'ctx> = TypeApp<'ctx, Poly>;
-pub type InferredCtxVar<'ctx> = CtxVar<'ctx, Poly>;
-
-pub type InferResult<'ctx, A> = Result<A, TypeError<'ctx>>;
-pub type FreeFunctionIndexes = SmallVec<[FreeFunctionIndex; 1]>;
+mod env;
+mod error;
+mod simplify;
+mod types;
 
 #[derive(Debug)]
 pub struct Lower<'scope, 'ctx> {
@@ -62,7 +56,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
 
     #[inline]
     fn into_output(self) -> LowerOutput<'ctx> {
-        LowerOutput::new(self.locals.locals, self.captures)
+        LowerOutput::new(self.locals.into_vec(), self.captures)
     }
 
     pub fn function(
@@ -116,7 +110,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             }
         }
 
-        let mut locals = Locals::new(local_counter, env.locals.scope_iter().count());
+        let mut locals = Locals::new(local_counter, env.locals().scope_iter().count());
         for (name, typ) in params {
             env.define_local(name, locals.add_param(typ, None).clone());
         }
@@ -358,7 +352,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 })
             }
             ast::Pattern::Aggregate((name, span), fields) => {
-                let Some(TypeRef::Name(type_id)) = env.types.get(name) else {
+                let Some(TypeRef::Name(type_id)) = env.types().get(name) else {
                     return Err(Error::UnresolvedType(name, *span));
                 };
 
@@ -752,7 +746,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 let expr @ (_, expr_span) = &**expr;
                 let (expr, expr_t) = self.lower_expr(expr, env)?;
                 let (typ, type_span) = &**typ;
-                let Type::Data(typ) = env.types.resolve(typ, *type_span)? else {
+                let Type::Data(typ) = env.types().resolve(typ, *type_span)? else {
                     return Err(Error::InvalidDynCastType(*type_span));
                 };
                 let target = InferredTypeApp::from_type(&typ);
@@ -780,7 +774,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             }
             ast::Expr::New { typ, args } => {
                 let (typ, type_span) = &**typ;
-                let Type::Data(typ) = env.types.resolve(typ, *type_span)? else {
+                let Type::Data(typ) = env.types().resolve(typ, *type_span)? else {
                     return Err(Error::InvalidNewType(*type_span));
                 };
                 let def = &self.symbols[typ.id()];
@@ -1097,7 +1091,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 let (ast::Expr::Ident(ident), _) = **expr else {
                     break 'static_method;
                 };
-                let Some(&TypeRef::Name(typ)) = env.types.get(ident) else {
+                let Some(&TypeRef::Name(typ)) = env.types().get(ident) else {
                     break 'static_method;
                 };
                 let TypeSchema::Aggregate(agg) = self.symbols[typ].schema() else {
@@ -1273,7 +1267,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             .iter()
             .zip(&*func_t_args)
             .map(|((param, _), typ)| (param.name, typ.clone()));
-        let counter = self.locals.counter;
+        let counter = self.locals.counter();
         let env = env.introduce_scope();
         let (block, output) = Lower::function_with(
             body,
@@ -1310,7 +1304,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             let (ast::Expr::Ident(ident), _) = receiver else {
                 break 'enum_case;
             };
-            let Some(&TypeRef::Name(type_id)) = env.types.get(ident) else {
+            let Some(&TypeRef::Name(type_id)) = env.types().get(ident) else {
                 break 'enum_case;
             };
             let TypeSchema::Enum(enum_) = self.symbols[type_id].schema() else {
@@ -1725,7 +1719,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
     fn resolve_field(
         &mut self,
         member: &'ctx str,
-        receiver_t: TypeApp<'ctx, Poly>,
+        receiver_t: InferredTypeApp<'ctx>,
         span: Span,
     ) -> Result<(FieldId<'ctx>, PolyType<'ctx>, InferredTypeApp<'ctx>), Error<'ctx>> {
         let (target_id, (field_idx, field)) = self
@@ -1750,12 +1744,12 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         env: &Env<'_, 'ctx>,
         span: Span,
     ) -> LowerResult<'ctx, (ir::Expr<'ctx>, PolyType<'ctx>)> {
-        let Some((loc, depth)) = env.locals.get_with_depth(name) else {
+        let Some((loc, depth)) = env.locals().get_with_depth(name) else {
             return Err(Error::UnresolvedVar(name, span));
         };
 
         let ir = if depth > 0
-            && env.locals.scope_iter().count() - usize::from(depth) < self.locals.depth
+            && env.locals().scope_iter().count() - usize::from(depth) < self.locals.depth()
         {
             self.captures.insert(Capture::new(loc.id, depth));
             ir::Expr::Capture(loc.id, span)
@@ -1968,7 +1962,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         env: &Env<'_, 'ctx>,
         span: Span,
     ) -> LowerResult<'ctx, PolyType<'ctx>> {
-        let typ = PolyType::from_type(&env.types.resolve(typ, span)?);
+        let typ = PolyType::from_type(&env.types().resolve(typ, span)?);
         self.check_type(&typ, span)?;
         Ok(typ)
     }
@@ -2012,1015 +2006,6 @@ impl<'ctx> LowerOutput<'ctx> {
     pub fn into_inner(self) -> (Vec<ir::LocalInfo<'ctx>>, IndexSet<Capture>) {
         (self.locals, self.captures)
     }
-}
-
-#[derive(Debug)]
-pub struct Locals<'scope, 'ctx> {
-    locals: Vec<ir::LocalInfo<'ctx>>,
-    counter: &'scope Cell<u16>,
-    depth: usize,
-}
-
-impl<'scope, 'ctx> Locals<'scope, 'ctx> {
-    #[inline]
-    pub fn new(counter: &'scope Cell<u16>, depth: usize) -> Self {
-        Self {
-            locals: vec![],
-            counter,
-            depth,
-        }
-    }
-
-    #[inline]
-    pub fn add_var(&mut self, typ: PolyType<'ctx>, span: Span) -> &ir::LocalInfo<'ctx> {
-        self.add(ir::Local::Var(self.counter.get()), typ, Some(span))
-    }
-
-    #[inline]
-    pub fn add_param(&mut self, typ: PolyType<'ctx>, span: Option<Span>) -> &ir::LocalInfo<'ctx> {
-        self.add(ir::Local::Param(self.counter.get()), typ, span)
-    }
-
-    #[inline]
-    fn add(
-        &mut self,
-        local: ir::Local,
-        typ: PolyType<'ctx>,
-        span: Option<Span>,
-    ) -> &ir::LocalInfo<'ctx> {
-        self.counter.set(self.counter.get() + 1);
-        let len = self.locals.len();
-        self.locals.push(ir::LocalInfo::new(local, typ, span));
-        &self.locals[len]
-    }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct Capture {
-    captured: ir::Local,
-    depth: u16,
-}
-
-impl Capture {
-    #[inline]
-    fn new(captured: ir::Local, depth: u16) -> Self {
-        Self { captured, depth }
-    }
-
-    #[inline]
-    pub fn pop_scope(&self) -> Option<Self> {
-        Some(Self::new(self.captured, self.depth.checked_sub(1)?))
-    }
-}
-
-impl<'ctx> InferredTypeApp<'ctx> {
-    fn from_type_with_env(
-        typ: &TypeApp<'ctx>,
-        env: &ScopedMap<'_, &'ctx str, PolyType<'ctx>>,
-    ) -> Result<Self, &'ctx str> {
-        let args = typ
-            .args()
-            .iter()
-            .map(|typ| PolyType::from_type_with_env(typ, env))
-            .collect::<Result<Rc<_>, _>>()?;
-        Ok(TypeApp::new(typ.id(), args))
-    }
-
-    pub fn from_type(typ: &TypeApp<'ctx>) -> Self {
-        TypeApp::new(
-            typ.id(),
-            typ.args()
-                .iter()
-                .map(PolyType::from_type)
-                .collect::<Rc<_>>(),
-        )
-    }
-
-    #[inline]
-    pub fn coalesce(&self, symbols: &Symbols<'ctx>) -> Result<TypeApp<'ctx>, CoalesceError<'ctx>> {
-        Simplifier::coalesce_app(self, symbols)
-    }
-
-    pub fn from_id(id: TypeId<'ctx>, symbols: &Symbols<'ctx>) -> Self {
-        let class = &symbols[id];
-        let args = class
-            .params()
-            .iter()
-            .map(|_| PolyType::fresh())
-            .collect::<Rc<_>>();
-        TypeApp::new(id, args)
-    }
-
-    pub fn instantiate_as(
-        self,
-        target: TypeId<'ctx>,
-        symbols: &Symbols<'ctx>,
-    ) -> Option<InferredTypeApp<'ctx>> {
-        let mut cur = self;
-        while cur.id() != target {
-            cur = cur.instantiate_base(symbols)?;
-        }
-        Some(cur)
-    }
-
-    pub fn instantiate_base(self, symbols: &Symbols<'ctx>) -> Option<InferredTypeApp<'ctx>> {
-        let class = &symbols[self.id()];
-        let args = self
-            .args()
-            .iter()
-            .cloned()
-            .chain(iter::repeat_with(PolyType::fresh));
-        let env = class.vars().zip(args).collect();
-        TypeApp::from_type_with_env(class.schema().base_type()?, &env).ok()
-    }
-
-    #[inline]
-    fn base_type_env<'scope, 'sym>(
-        self,
-        target: TypeId<'ctx>,
-        symbols: &'sym Symbols<'ctx>,
-    ) -> Option<ScopedMap<'scope, &'ctx str, PolyType<'ctx>>> {
-        Some(self.instantiate_as(target, symbols)?.type_env(symbols))
-    }
-
-    fn glb(&self, other: &Self, symbols: &Symbols<'ctx>) -> InferResult<'ctx, Self> {
-        let id = symbols
-            .glb(self.id(), other.id())
-            .ok_or_else(|| TypeError::Incompatible(self.clone(), other.clone()))?;
-        if id == self.id() {
-            Ok(self.clone())
-        } else {
-            Ok(other.clone())
-        }
-    }
-
-    fn lub(&self, other: &Self, symbols: &Symbols<'ctx>) -> InferResult<'ctx, Self> {
-        let id = symbols
-            .lub(self.id(), other.id())
-            .ok_or_else(|| TypeError::Incompatible(self.clone(), other.clone()))?;
-        let lhs = self
-            .clone()
-            .instantiate_as(id, symbols)
-            .expect("should always match the lub type");
-        let rhs = other
-            .clone()
-            .instantiate_as(id, symbols)
-            .expect("should always match the lub type");
-        let args = symbols[id]
-            .params()
-            .iter()
-            .zip(lhs.args().iter().zip(rhs.args()))
-            .map(|(v, (l, r))| match v.variance() {
-                Variance::Covariant => l.lub(r, symbols),
-                Variance::Contravariant => l.glb(r, symbols),
-                Variance::Invariant => l.lub(r, symbols)?.glb(r, symbols),
-            })
-            .collect::<Result<Rc<_>, _>>()?;
-        Ok(TypeApp::new(id, args))
-    }
-}
-
-impl fmt::Display for InferredTypeApp<'_> {
-    #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.display(false).fmt(f)
-    }
-}
-
-#[derive(Debug, Clone, Error)]
-pub enum TypeError<'ctx> {
-    #[error("type mismatch: found {0} when expected {1}")]
-    Mismatch(InferredType<'ctx>, InferredType<'ctx>),
-    #[error("type error: {0} is not compatible with {1}")]
-    Incompatible(InferredTypeApp<'ctx>, InferredTypeApp<'ctx>),
-    #[error("type error: cannot unify {0} and {1}")]
-    CannotUnify(InferredType<'ctx>, InferredType<'ctx>),
-    #[error("{0}\n  when comparing {1} and {2}")]
-    Nested(Box<Self>, InferredType<'ctx>, InferredType<'ctx>),
-}
-
-impl<'ctx> InferredType<'ctx> {
-    #[inline]
-    pub fn into_poly(self) -> PolyType<'ctx> {
-        PolyType::Mono(self)
-    }
-
-    fn glb(&self, other: &Self, symbols: &Symbols<'ctx>) -> InferResult<'ctx, Self> {
-        let typ = match (self, other) {
-            (Self::Nothing, _) | (_, Self::Nothing) => Self::Nothing,
-            (Self::Data(lhs), Self::Data(rhs)) => Self::Data(lhs.glb(rhs, symbols)?),
-            (Self::Ctx(lhs), Self::Ctx(rhs)) if lhs.name() == rhs.name() => Self::Ctx(lhs.clone()),
-            (Self::Ctx(ctx), t) | (t, Self::Ctx(ctx)) => match ctx.upper() {
-                Some(upper) => upper.glb(t, symbols)?,
-                None => return Err(TypeError::CannotUnify(self.clone(), other.clone())),
-            },
-        };
-        Ok(typ)
-    }
-
-    fn lub(&self, other: &Self, symbols: &Symbols<'ctx>) -> InferResult<'ctx, Self> {
-        let typ = match (self, other) {
-            (Self::Nothing, other) => other.clone(),
-            (_, Self::Nothing) => self.clone(),
-            (Self::Data(lhs), Self::Data(rhs)) => Self::Data(lhs.lub(rhs, symbols)?),
-            (Self::Ctx(lhs), Self::Ctx(rhs)) if lhs.name() == rhs.name() => Self::Ctx(lhs.clone()),
-            (Self::Ctx(ctx), t) | (t, Self::Ctx(ctx)) => {
-                ctx.lower().unwrap_or(&Type::Nothing).lub(t, symbols)?
-            }
-        };
-        Ok(typ)
-    }
-
-    fn constrain(&self, other: &Self, symbols: &Symbols<'ctx>) -> InferResult<'ctx, ()> {
-        match (self, other) {
-            (Self::Nothing, _) => {}
-            (Self::Data(lhs), Self::Data(rhs)) => {
-                let l0 = lhs
-                    .clone()
-                    .instantiate_as(rhs.id(), symbols)
-                    .ok_or_else(|| TypeError::Mismatch(self.clone(), other.clone()))?;
-                let r0 = rhs;
-                for (v, (l, r)) in symbols[r0.id()]
-                    .params()
-                    .iter()
-                    .zip(l0.args().iter().zip(r0.args()))
-                {
-                    let res = match v.variance() {
-                        Variance::Covariant => l.constrain(r, symbols),
-                        Variance::Contravariant => r.constrain(l, symbols),
-                        Variance::Invariant => l.constrain_invariant(r, symbols),
-                    };
-                    res.map_err(|err| TypeError::Nested(err.into(), self.clone(), other.clone()))?;
-                }
-            }
-            (Self::Ctx(lhs), Self::Ctx(rhs)) if lhs.name() == rhs.name() => {}
-            _ => return Err(TypeError::Mismatch(self.clone(), other.clone())),
-        };
-        Ok(())
-    }
-
-    fn constrain_invariant(&self, other: &Self, symbols: &Symbols<'ctx>) -> InferResult<'ctx, ()> {
-        self.constrain(other, symbols)?;
-        other.constrain(self, symbols)
-    }
-
-    fn is_subtype_compatible(
-        &self,
-        other: &Type<'ctx>,
-        symbols: &Symbols<'ctx>,
-        allow_implicit: bool,
-    ) -> bool {
-        match (self, other) {
-            (_, Type::Data(rhs)) if allow_implicit && rhs.id() == predef::VARIANT => true,
-            (Self::Nothing, _) | (_, Type::Ctx(_)) => true,
-            (Self::Data(lhs), Type::Data(rhs)) if lhs.id() == rhs.id() => lhs
-                .args()
-                .iter()
-                .zip(rhs.args())
-                .all(|(l, r)| l.is_subtype_compatible(r, symbols, allow_implicit)),
-            (Self::Data(lhs), Type::Data(rhs)) => symbols.is_subtype(lhs.id(), rhs.id()),
-            (Self::Ctx(lhs), Type::Data(rhs)) => lhs
-                .upper()
-                .and_then(|typ| Some(typ.upper_bound()?.id()))
-                .is_some_and(|id| symbols.is_subtype(id, rhs.id())),
-            _ => false,
-        }
-    }
-}
-
-impl<'ctx> From<&Type<'ctx>> for InferredType<'ctx> {
-    fn from(typ: &Type<'ctx>) -> Self {
-        match typ {
-            Type::Nothing => Self::Nothing,
-            Type::Data(typ) => Self::Data(InferredTypeApp::from_type(typ)),
-            Type::Ctx(var) => Self::Ctx(InferredCtxVar::from_var(var).into()),
-        }
-    }
-}
-
-impl<'ctx> InferredCtxVar<'ctx> {
-    pub fn from_var(var: &CtxVar<'ctx>) -> Self {
-        let lower = var.lower().map(Type::from);
-        let upper = var.upper().map(Type::from);
-        Self::new(var.name(), var.variance(), lower, upper)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum PolyType<'ctx> {
-    Mono(InferredType<'ctx>),
-    Var(Var<'ctx>),
-}
-
-impl<'ctx> PolyType<'ctx> {
-    #[inline]
-    pub fn nullary(id: TypeId<'ctx>) -> Self {
-        Type::nullary(id).into_poly()
-    }
-
-    /// Create a new `PolyType` from a `Type` within the same environment.
-    #[inline]
-    pub fn from_type(typ: &Type<'ctx>) -> Self {
-        Type::from(typ).into_poly()
-    }
-
-    /// Create a new `PolyType` from a `Type` within the provided environment.
-    pub fn from_type_with_env(
-        typ: &Type<'ctx>,
-        env: &ScopedMap<'_, &'ctx str, PolyType<'ctx>>,
-    ) -> Result<PolyType<'ctx>, &'ctx str> {
-        let result = match typ {
-            Type::Nothing => Type::Nothing,
-            Type::Data(typ) => Type::Data(InferredTypeApp::from_type_with_env(typ, env)?),
-            Type::Ctx(var) => return env.get(var.name()).cloned().ok_or(var.name()),
-        };
-        Ok(result.into_poly())
-    }
-
-    #[inline]
-    pub fn coalesce(&self, symbols: &Symbols<'ctx>) -> Result<Type<'ctx>, CoalesceError<'ctx>> {
-        Simplifier::coalesce(self, symbols)
-    }
-
-    #[inline]
-    fn fresh() -> Self {
-        Self::Var(Var::fresh())
-    }
-
-    #[inline]
-    fn with_bounds(lower: InferredType<'ctx>, upper: Option<InferredType<'ctx>>) -> Self {
-        Self::Var(Var::new(lower, upper))
-    }
-
-    fn force_upper_bound(
-        &self,
-        symbols: &Symbols<'ctx>,
-    ) -> InferResult<'ctx, Option<Cow<'_, InferredTypeApp<'ctx>>>> {
-        match self {
-            Self::Mono(typ) => Ok(typ.upper_bound().map(Cow::Borrowed)),
-            Self::Var(var) => {
-                let lower = var.lower();
-                var.add_upper(&lower, symbols)?;
-                Ok(self.upper_bound(symbols))
-            }
-        }
-    }
-
-    fn upper_bound(&self, symbols: &Symbols<'ctx>) -> Option<Cow<'_, InferredTypeApp<'ctx>>> {
-        match self {
-            Self::Mono(typ) => typ.upper_bound().map(Cow::Borrowed),
-            Self::Var(var) if var.lower().is_primitive(symbols) => {
-                var.lower().upper_bound().map(|typ| Cow::Owned(typ.clone()))
-            }
-            Self::Var(var) => var
-                .upper()
-                .as_ref()
-                .and_then(Type::upper_bound)
-                .map(|typ| Cow::Owned(typ.clone())),
-        }
-    }
-
-    fn glb(&self, other: &Self, symbols: &Symbols<'ctx>) -> InferResult<'ctx, Self> {
-        let typ = match (self, other) {
-            (Self::Mono(l), Self::Mono(r)) => Self::Mono(l.glb(r, symbols)?),
-            (Self::Mono(l), Self::Var(r)) => {
-                r.add_upper(l, symbols)?;
-                Self::Var(r.clone())
-            }
-            (Self::Var(l), Self::Mono(r)) => {
-                l.add_upper(r, symbols)?;
-                Self::Var(l.clone())
-            }
-            (Self::Var(l), Self::Var(r)) => {
-                l.unify(r, symbols)?;
-                Self::Var(r.clone())
-            }
-        };
-        Ok(typ)
-    }
-
-    fn lub(&self, other: &Self, symbols: &Symbols<'ctx>) -> InferResult<'ctx, Self> {
-        let typ = match (self, other) {
-            (Self::Mono(l), Self::Mono(r)) => Self::Mono(l.lub(r, symbols)?),
-            (Self::Mono(l), Self::Var(r)) => {
-                r.add_lower(l, symbols)?;
-                Self::Var(r.clone())
-            }
-            (Self::Var(l), Self::Mono(r)) => {
-                l.add_lower(r, symbols)?;
-                Self::Var(l.clone())
-            }
-            (Self::Var(l), Self::Var(r)) => {
-                l.unify(r, symbols)?;
-                Self::Var(r.clone())
-            }
-        };
-        Ok(typ)
-    }
-
-    fn constrain(&self, other: &Self, symbols: &Symbols<'ctx>) -> InferResult<'ctx, ()> {
-        match (self, other) {
-            (Self::Mono(l), Self::Mono(r)) => l.constrain(r, symbols),
-            (Self::Mono(l), Self::Var(r)) => r.add_lower(l, symbols),
-            (Self::Var(l), Self::Mono(r)) => l.add_upper(r, symbols),
-            (Self::Var(l), Self::Var(r)) => l.unify(r, symbols),
-        }
-    }
-
-    #[inline]
-    fn constrain_invariant(&self, other: &Self, symbols: &Symbols<'ctx>) -> InferResult<'ctx, ()> {
-        match (self, other) {
-            (Self::Mono(l), Self::Mono(r)) => l.constrain_invariant(r, symbols),
-            (Self::Mono(l), Self::Var(r)) => {
-                r.add_lower(l, symbols)?;
-                r.constrain_lower(l, symbols)
-            }
-            (Self::Var(l), Self::Mono(r)) => {
-                l.add_upper(r, symbols)?;
-                l.constrain_by_upper(r, symbols)
-            }
-            (Self::Var(l), Self::Var(r)) => l.unify(r, symbols),
-        }
-    }
-
-    fn coerce(&self, other: &Self, symbols: &Symbols<'ctx>) -> InferResult<'ctx, Option<Coercion>> {
-        match (self.strip_ref(symbols), other.strip_ref(symbols)) {
-            (Some((from, pointee)), None) => {
-                pointee.constrain(other, symbols)?;
-                Ok(Some(Coercion::FromRef(from)))
-            }
-            (None, Some((to, pointee))) => {
-                self.constrain(&pointee, symbols)?;
-                Ok(Some(Coercion::IntoRef(to)))
-            }
-            _ if matches!(other.upper_bound(symbols), Some(app) if app.id() == predef::VARIANT)
-                && matches!(self.upper_bound(symbols), Some(app) if app.id() != predef::VARIANT) =>
-            {
-                Ok(Some(Coercion::IntoVariant))
-            }
-            _ => {
-                self.constrain(other, symbols)?;
-                Ok(None)
-            }
-        }
-    }
-
-    #[inline]
-    pub fn unwrap_ref(&self, symbols: &Symbols<'ctx>) -> Option<PolyType<'ctx>> {
-        Some(self.strip_ref(symbols)?.1)
-    }
-
-    #[inline]
-    pub fn unwrap_ref_or_self(&self, symbols: &Symbols<'ctx>) -> PolyType<'ctx> {
-        self.unwrap_ref(symbols).unwrap_or_else(|| self.clone())
-    }
-
-    #[inline]
-    fn strip_ref(&self, symbols: &Symbols<'ctx>) -> Option<(RefType, PolyType<'ctx>)> {
-        self.upper_bound(symbols)
-            .as_deref()
-            .and_then(TypeApp::strip_ref)
-            .map(|(rt, typ)| (rt, typ.clone()))
-    }
-
-    pub fn ref_type(&self, symbols: &Symbols<'ctx>) -> Option<RefType> {
-        self.upper_bound(symbols)
-            .as_deref()
-            .and_then(TypeApp::ref_type)
-    }
-
-    fn is_subtype_compatible(
-        &self,
-        other: &Type<'ctx>,
-        symbols: &Symbols<'ctx>,
-        allow_implicit: bool,
-    ) -> bool {
-        match self {
-            Self::Mono(typ) => typ.is_subtype_compatible(other, symbols, allow_implicit),
-            Self::Var(var) => var
-                .upper()
-                .is_none_or(|typ| typ.is_subtype_compatible(other, symbols, allow_implicit)),
-        }
-    }
-}
-
-impl<'ctx> From<(TypeId<'ctx>, Rc<[PolyType<'ctx>]>)> for PolyType<'ctx> {
-    #[inline]
-    fn from((id, args): (TypeId<'ctx>, Rc<[PolyType<'ctx>]>)) -> Self {
-        Type::app(id, args).into_poly()
-    }
-}
-
-impl fmt::Display for PolyType<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Mono(typ) => typ.fmt(f),
-            Self::Var(_) => write!(f, "_"),
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Var<'ctx>(Rc<RefCell<VarState<'ctx>>>);
-
-impl<'ctx> Var<'ctx> {
-    #[inline]
-    fn new(lower: InferredType<'ctx>, upper: Option<InferredType<'ctx>>) -> Self {
-        Self(Rc::new(RefCell::new(VarState::new(lower, upper))))
-    }
-
-    #[inline]
-    fn fresh() -> Self {
-        Self::new(Type::Nothing, None)
-    }
-
-    #[inline]
-    fn key(&self) -> VarKey<'ctx> {
-        VarKey(self.0.as_ptr())
-    }
-
-    fn repr(&self) -> Var<'ctx> {
-        match &mut self.0.borrow_mut().repr {
-            Some(var) => {
-                let rep = var.repr();
-                if rep != *self {
-                    *var = rep.clone();
-                }
-                rep
-            }
-            None => self.clone(),
-        }
-    }
-
-    #[inline]
-    fn lower(&self) -> InferredType<'ctx> {
-        self.repr().0.borrow().lower.clone()
-    }
-
-    #[inline]
-    fn upper(&self) -> Option<InferredType<'ctx>> {
-        self.repr().0.borrow().upper.clone()
-    }
-
-    fn add_upper(&self, ub: &InferredType<'ctx>, symbols: &Symbols<'ctx>) -> InferResult<'ctx, ()> {
-        // TODO: occurs check
-        let repr = self.repr();
-        let mut repr = repr.0.borrow_mut();
-
-        let new = repr
-            .upper
-            .as_ref()
-            .map_or_else(|| Ok(ub.clone()), |u| u.glb(ub, symbols))?;
-        repr.upper = Some(new);
-        repr.lower.constrain(ub, symbols)
-    }
-
-    fn constrain_lower(
-        &self,
-        ub: &InferredType<'ctx>,
-        symbols: &Symbols<'ctx>,
-    ) -> InferResult<'ctx, ()> {
-        self.repr().0.borrow().lower.constrain(ub, symbols)
-    }
-
-    fn add_lower(&self, lb: &InferredType<'ctx>, symbols: &Symbols<'ctx>) -> InferResult<'ctx, ()> {
-        // TODO: occurs check
-        let repr = self.repr();
-        let mut repr = repr.0.borrow_mut();
-        repr.lower = repr.lower.lub(lb, symbols)?;
-        if let Some(ub) = &repr.upper {
-            lb.constrain(ub, symbols)?;
-        }
-        Ok(())
-    }
-
-    fn constrain_by_upper(
-        &self,
-        lb: &InferredType<'ctx>,
-        symbols: &Symbols<'ctx>,
-    ) -> InferResult<'ctx, ()> {
-        self.repr()
-            .0
-            .borrow()
-            .upper
-            .iter()
-            .try_for_each(|ub| lb.constrain(ub, symbols))
-    }
-
-    fn unify(&self, other: &Var<'ctx>, symbols: &Symbols<'ctx>) -> InferResult<'ctx, ()> {
-        let repr0 = self.repr();
-        let repr1 = other.repr();
-        if repr0 == repr1 {
-            return Ok(());
-        }
-        // TODO: occurs check
-        repr1.add_lower(&repr0.lower(), symbols)?;
-        if let Some(ub) = &repr0.upper() {
-            repr1.add_upper(ub, symbols)?;
-        }
-        repr0.0.borrow_mut().repr = Some(repr1.clone());
-        Ok(())
-    }
-}
-
-impl PartialEq for Var<'_> {
-    #[inline]
-    fn eq(&self, other: &Self) -> bool {
-        ptr::eq(self.0.as_ptr(), other.0.as_ptr())
-    }
-}
-
-impl Eq for Var<'_> {}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct VarKey<'ctx>(*mut VarState<'ctx>);
-
-impl IdentityHashable for VarKey<'_> {}
-
-#[derive(Debug, Clone)]
-struct VarState<'ctx> {
-    lower: InferredType<'ctx>,
-    upper: Option<InferredType<'ctx>>,
-    repr: Option<Var<'ctx>>,
-}
-
-impl<'ctx> VarState<'ctx> {
-    #[inline]
-    fn new(lower: InferredType<'ctx>, upper: Option<InferredType<'ctx>>) -> Self {
-        Self {
-            lower,
-            upper,
-            repr: None,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct TypeEnv<'scope, 'ctx>(ScopedMap<'scope, &'ctx str, TypeRef<'scope, 'ctx>>);
-
-impl<'scope, 'ctx> TypeEnv<'scope, 'ctx> {
-    pub fn with_default_types() -> Self {
-        let mut map = IndexMap::default();
-        map.insert("array", TypeRef::Name(predef::ARRAY));
-        map.insert("ref", TypeRef::Name(predef::REF));
-        map.insert("wref", TypeRef::Name(predef::WREF));
-        map.insert("script_ref", TypeRef::Name(predef::SCRIPT_REF));
-
-        Self(ScopedMap::from(map))
-    }
-
-    #[inline]
-    pub fn introduce_scope(&'scope self) -> Self {
-        Self(self.0.introduce_scope())
-    }
-
-    #[inline]
-    pub fn pop_scope(self) -> IndexMap<&'ctx str, TypeRef<'scope, 'ctx>> {
-        self.0.pop_scope()
-    }
-
-    #[inline]
-    pub fn push_scope(&'scope self, scope: IndexMap<&'ctx str, TypeRef<'scope, 'ctx>>) -> Self {
-        Self(self.0.push_scope(scope))
-    }
-
-    #[inline]
-    pub fn top(&self) -> &IndexMap<&'ctx str, TypeRef<'scope, 'ctx>> {
-        self.0.top()
-    }
-
-    #[inline]
-    pub fn get(&self, name: &'ctx str) -> Option<&TypeRef<'scope, 'ctx>> {
-        self.0.get(name)
-    }
-
-    #[inline]
-    pub fn add(&mut self, name: &'ctx str, typ: TypeRef<'scope, 'ctx>) {
-        self.0.insert(name, typ);
-    }
-
-    pub fn resolve(
-        &self,
-        typ: &ast::SourceType<'ctx>,
-        span: Span,
-    ) -> LowerResult<'ctx, Type<'ctx>> {
-        match typ {
-            ast::Type::Named { name, args } => match (self.0.get(name), &args[..]) {
-                (Some(&TypeRef::Name(id)), [(arg, span)]) if id == predef::REF => {
-                    Ok(self.resolve(arg, *span)?)
-                }
-                (Some(&TypeRef::Name(id)), _) => {
-                    let args = args
-                        .iter()
-                        .map(|(typ, span)| self.resolve(typ, *span))
-                        .collect::<Result<Rc<_>, _>>()?;
-                    Ok(Type::app(id, args))
-                }
-                (Some(TypeRef::Var(var)), _) => Ok(Type::Ctx(var.clone())),
-                (Some(TypeRef::LazyVar(stub)), _) => Ok(Type::Ctx(
-                    stub.get(self).map_err(|_| Error::CyclicType(span))??,
-                )),
-                (None, _) => Err(Error::UnresolvedType(name, span)),
-            },
-            ast::Type::Array(elem) => {
-                let (elem, span) = &**elem;
-                let elem = self.resolve(elem, *span)?;
-                Ok(Type::app(predef::ARRAY, [elem]))
-            }
-            ast::Type::StaticArray(elem, size) => {
-                let (elem, elem_span) = &**elem;
-                let elem = self.resolve(elem, *elem_span)?;
-                let id = TypeId::array_with_size(*size)
-                    .ok_or(Error::UnsupportedStaticArraySize(span))?;
-                Ok(Type::app(id, [elem]))
-            }
-            ast::Type::Fn {
-                params,
-                return_type: return_typ,
-            } => {
-                let args = params
-                    .iter()
-                    .chain([&**return_typ])
-                    .map(|(typ, span)| self.resolve(typ, *span))
-                    .collect::<Result<Rc<_>, _>>()?;
-
-                let id =
-                    TypeId::fn_with_arity(params.len()).ok_or(Error::UnsupportedArity(span))?;
-                Ok(Type::app(id, args))
-            }
-        }
-    }
-
-    pub fn resolve_param(
-        &self,
-        param: &ast::SourceTypeParam<'ctx>,
-    ) -> LowerResult<'ctx, CtxVar<'ctx>> {
-        let (name, _) = param.name;
-        let variance = param.variance.into();
-        let upper = param
-            .upper_bound
-            .as_deref()
-            .map(|(typ, span)| self.resolve(typ, *span))
-            .transpose()?;
-        Ok(CtxVar::new(name, variance, None, upper))
-    }
-}
-
-impl Default for TypeEnv<'_, '_> {
-    fn default() -> Self {
-        Self::with_default_types()
-    }
-}
-
-#[derive(Debug)]
-pub struct Env<'scope, 'ctx> {
-    types: &'scope TypeEnv<'scope, 'ctx>,
-    funcs: &'scope ScopedMap<'scope, &'ctx str, FreeFunctionIndexes>,
-    locals: ScopedMap<'scope, &'ctx str, ir::LocalInfo<'ctx>>,
-}
-
-impl<'scope, 'ctx> Env<'scope, 'ctx> {
-    pub fn new(
-        types: &'scope TypeEnv<'scope, 'ctx>,
-        globals: &'scope ScopedMap<'scope, &'ctx str, FreeFunctionIndexes>,
-    ) -> Self {
-        Self {
-            types,
-            funcs: globals,
-            locals: ScopedMap::default(),
-        }
-    }
-
-    #[inline]
-    pub fn define_local(&mut self, name: &'ctx str, info: ir::LocalInfo<'ctx>) -> ir::Local {
-        let id = info.id;
-        self.locals.insert(name, info);
-        id
-    }
-
-    #[inline]
-    fn introduce_scope(&'scope self) -> Self {
-        Self {
-            types: self.types,
-            funcs: self.funcs,
-            locals: self.locals.introduce_scope(),
-        }
-    }
-
-    fn query_free_functions<'a>(
-        &self,
-        name: &'a str,
-        symbols: &'scope Symbols<'ctx>,
-    ) -> impl Iterator<Item = FunctionEntry<FreeFunctionIndex, &'a str, &'scope FreeFunction<'ctx>>>
-    {
-        self.funcs
-            .scope_iter()
-            .filter_map(|map| map.get(name))
-            .flatten()
-            .map(move |&idx| FunctionEntry::new(idx, name, &symbols[idx]))
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum TypeRef<'scope, 'ctx> {
-    Name(TypeId<'ctx>),
-    Var(Rc<CtxVar<'ctx>>),
-    #[allow(clippy::type_complexity)]
-    LazyVar(
-        Rc<
-            Lazy<
-                LowerResult<'ctx, Rc<CtxVar<'ctx>>>,
-                Box<dyn Fn(&TypeEnv<'_, 'ctx>) -> LowerResult<'ctx, Rc<CtxVar<'ctx>>> + 'scope>,
-            >,
-        >,
-    ),
-}
-
-impl<'ctx> TypeRef<'_, 'ctx> {
-    pub fn force(self) -> Option<TypeRef<'static, 'ctx>> {
-        match self {
-            Self::Name(id) => Some(TypeRef::Name(id)),
-            Self::Var(typ) => Some(TypeRef::Var(typ)),
-            Self::LazyVar(lazy) => Some(TypeRef::Var(lazy.try_get()?.ok()?)),
-        }
-    }
-
-    pub fn id(&self) -> Option<TypeId<'ctx>> {
-        match self {
-            &Self::Name(id) => Some(id),
-            _ => None,
-        }
-    }
-}
-
-#[derive(Debug)]
-struct Simplifier<'sym, 'ctx> {
-    cache: HashMap<VarKey<'ctx>, Type<'ctx>, BuildIdentityHasher<usize>>,
-    covariant: HashSet<VarKey<'ctx>, BuildIdentityHasher<usize>>,
-    contravariant: HashSet<VarKey<'ctx>, BuildIdentityHasher<usize>>,
-    symbols: &'sym Symbols<'ctx>,
-}
-
-impl<'sym, 'ctx> Simplifier<'sym, 'ctx> {
-    fn coalesce(
-        typ: &PolyType<'ctx>,
-        symbols: &'sym Symbols<'ctx>,
-    ) -> Result<Type<'ctx>, CoalesceError<'ctx>> {
-        let mut this = Self {
-            cache: HashMap::default(),
-            covariant: HashSet::default(),
-            contravariant: HashSet::default(),
-            symbols,
-        };
-        this.analyze_poly(typ, Variance::Covariant);
-        this.simplify_poly(typ, Variance::Covariant)
-    }
-
-    fn coalesce_app(
-        typ: &InferredTypeApp<'ctx>,
-        symbols: &'sym Symbols<'ctx>,
-    ) -> Result<TypeApp<'ctx>, CoalesceError<'ctx>> {
-        let mut this = Self {
-            cache: HashMap::default(),
-            covariant: HashSet::default(),
-            contravariant: HashSet::default(),
-            symbols,
-        };
-        this.analyze_app(typ, Variance::Covariant);
-        this.simplify_app(typ, Variance::Covariant)
-    }
-
-    fn simplify_poly(
-        &mut self,
-        typ: &PolyType<'ctx>,
-        variance: Variance,
-    ) -> Result<Type<'ctx>, CoalesceError<'ctx>> {
-        let res = match typ {
-            PolyType::Var(var) => {
-                let key = var.key();
-                let hash = self.cache.hasher().hash_one(key);
-                if let Some((_, e)) = self.cache.raw_entry().from_key_hashed_nocheck(hash, &key) {
-                    return Ok(e.clone());
-                }
-
-                let typ = match (var.lower(), var.upper()) {
-                    (lower, Some(upper)) if lower == upper => self.simplify(&lower, variance)?,
-                    (bound, None) | (Type::Nothing, Some(bound)) => {
-                        self.simplify(&bound, variance)?
-                    }
-                    (lower, _)
-                        if variance == Variance::Covariant
-                            && !self.contravariant.contains(&key) =>
-                    {
-                        self.simplify(&lower, variance)?
-                    }
-                    (_, Some(upper))
-                        if variance == Variance::Contravariant
-                            && !self.covariant.contains(&key) =>
-                    {
-                        self.simplify(&upper, variance)?
-                    }
-                    (lower, Some(upper))
-                        if upper.constrain_invariant(&lower, self.symbols).is_ok() =>
-                    {
-                        self.simplify(&lower, variance)?
-                    }
-                    (lower, upper) => return Err(CoalesceError::CannotCoalesce(lower, upper)),
-                };
-
-                self.cache
-                    .raw_entry_mut()
-                    .from_key_hashed_nocheck(hash, &key)
-                    .insert(key, typ.clone())
-                    .get()
-                    .clone()
-            }
-            PolyType::Mono(c) => self.simplify(c, variance)?,
-        };
-        Ok(res)
-    }
-
-    fn simplify_app(
-        &mut self,
-        typ: &InferredTypeApp<'ctx>,
-        var: Variance,
-    ) -> Result<TypeApp<'ctx>, CoalesceError<'ctx>> {
-        let vars = self.symbols[typ.id()].params();
-        let args = typ
-            .args()
-            .iter()
-            .zip(vars)
-            .map(|(arg, v)| self.simplify_poly(arg, var.combined(v.variance())))
-            .collect::<Result<Rc<_>, _>>()?;
-        Ok(TypeApp::new(typ.id(), args))
-    }
-
-    fn simplify_ctx_var(
-        &mut self,
-        var: &InferredCtxVar<'ctx>,
-        variance: Variance,
-    ) -> Result<CtxVar<'ctx>, CoalesceError<'ctx>> {
-        let lower = var
-            .lower()
-            .map(|typ| self.simplify(typ, variance.combined(var.variance())))
-            .transpose()?;
-        let upper = var
-            .upper()
-            .map(|typ| self.simplify(typ, variance.combined(var.variance())))
-            .transpose()?;
-        Ok(CtxVar::new(var.name(), var.variance(), lower, upper))
-    }
-
-    fn simplify(
-        &mut self,
-        typ: &InferredType<'ctx>,
-        var: Variance,
-    ) -> Result<Type<'ctx>, CoalesceError<'ctx>> {
-        let res = match typ {
-            Type::Data(typ) => Type::Data(self.simplify_app(typ, var)?),
-            Type::Ctx(var) => Type::Ctx(self.simplify_ctx_var(var, var.variance())?.into()),
-            Type::Nothing => Type::Nothing,
-        };
-        Ok(res)
-    }
-
-    fn analyze_poly(&mut self, typ: &PolyType<'ctx>, variance: Variance) {
-        match typ {
-            PolyType::Var(var) => {
-                if variance != Variance::Covariant {
-                    self.contravariant.insert(var.key());
-                    if let Some(upper) = &var.upper() {
-                        self.analyze(upper, variance);
-                    }
-                }
-                if variance != Variance::Contravariant {
-                    self.covariant.insert(var.key());
-                    self.analyze(&var.lower(), variance);
-                }
-            }
-            PolyType::Mono(typ) => self.analyze(typ, variance),
-        }
-    }
-
-    fn analyze_app(&mut self, typ: &InferredTypeApp<'ctx>, variance: Variance) {
-        for (arg, v) in typ.args().iter().zip(self.symbols[typ.id()].params()) {
-            self.analyze_poly(arg, variance.combined(v.variance()));
-        }
-    }
-
-    #[inline]
-    fn analyze(&mut self, typ: &InferredType<'ctx>, variance: Variance) {
-        if let Type::Data(typ) = typ {
-            self.analyze_app(typ, variance);
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-enum Coercion {
-    FromRef(RefType),
-    IntoRef(RefType),
-    IntoVariant,
 }
 
 #[derive(Debug)]
@@ -3105,36 +2090,6 @@ impl<'ctx> FunctionResultWithArgs<'ctx, MethodId<'ctx>> {
     }
 }
 
-#[derive(Debug)]
-pub struct Poly;
-
-impl TypeKind for Poly {
-    type Type<'ctx> = PolyType<'ctx>;
-}
-
-#[derive(Debug)]
-pub enum CoalesceError<'ctx> {
-    CannotCoalesce(InferredType<'ctx>, Option<InferredType<'ctx>>),
-}
-
-impl fmt::Display for CoalesceError<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::CannotCoalesce(lower, upper) => {
-                write!(f, "type is too broad ({lower} <: T <: ")?;
-                if let Some(upper) = upper {
-                    write!(f, "{upper}")?;
-                } else {
-                    write!(f, "Any")?;
-                }
-                write!(f, " for some type T), consider adding type annotations")
-            }
-        }
-    }
-}
-
-impl std::error::Error for CoalesceError<'_> {}
-
 struct Pattern<'ctx> {
     conditions: Vec<ir::Expr<'ctx>>,
     prologue: Vec<ir::Stmt<'ctx>>,
@@ -3158,186 +2113,6 @@ impl<'ctx> Extend<Pattern<'ctx>> for Pattern<'ctx> {
     fn extend<T: IntoIterator<Item = Pattern<'ctx>>>(&mut self, iter: T) {
         for pattern in iter {
             self.merge(pattern);
-        }
-    }
-}
-
-pub type LowerResult<'id, A, E = Error<'id>> = Result<A, E>;
-
-#[derive(Debug, Clone, Error)]
-pub enum Error<'ctx> {
-    #[error("{0}")]
-    Type(Box<TypeError<'ctx>>, Span),
-    #[error("'{0}' is not defined")]
-    UnresolvedVar(&'ctx str, Span),
-    #[error("'{0}' is not a known type")]
-    UnresolvedType(&'ctx str, Span),
-    #[error("'{0}' has no member named '{1}'")]
-    UnresolvedMember(TypeId<'ctx>, &'ctx str, Span),
-    #[error("{1} matching overloads found for '{0}'")]
-    MultipleMatchingOverloads(&'ctx str, usize, Span),
-    #[error("there's no matching '{0}' function")]
-    UnresolvedFunction(&'ctx str, Span),
-    #[error("invalid number of arguments, expected {}", DisplayRangeInclusive(.0))]
-    InvalidArgCount(RangeInclusive<usize>, Span),
-    #[error(
-        "insufficient type information available for member lookup, consider adding \
-         type annotations"
-    )]
-    InsufficientTypeInformation(Span),
-    #[error("this type cannot be constructed with the 'new' operator")]
-    InvalidNewType(Span),
-    #[error("this type cannot be casted with the 'as' operator")]
-    InvalidDynCastType(Span),
-    #[error("the target type of this cast is not known, consider specifying it")]
-    UnknownStaticCastType(Span),
-    #[error("invalid number of type arguments, expected {0}")]
-    InvalidTypeArgCount(usize, Span),
-    #[error("class constructors do not accept arguments")]
-    ClassConstructorHasArguments(Span),
-    #[error(
-        "unsupported arity, functions can only have up to {} parameters",
-        MAX_FN_ARITY
-    )]
-    UnsupportedArity(Span),
-    #[error(
-        "unsupported static array size, static arrays can only have up to {} elements",
-        MAX_STATIC_ARRAY_SIZE
-    )]
-    UnsupportedStaticArraySize(Span),
-    #[error("this expression cannot be used as a case label")]
-    InvalidCaseLabel(Span),
-    #[error("invalid cyclic type reference")]
-    CyclicType(Span),
-    #[error("this literal is out of range for {0}{hint}", hint = NumberTypeRangeHint(*.0))]
-    LiteralOutOfRange(TypeId<'ctx>, Span),
-    #[error(
-        r#"expected a {0} here, you should prefix your literal with '{1}', e.g. {1}"lorem ipsum""#
-    )]
-    WrongStringLiteral(TypeId<'ctx>, char, Span),
-    #[error("'{0}' is an abstract class and cannot be instantiated")]
-    InstantiatingAbstract(TypeId<'ctx>, Span),
-    #[error("this type has no super type to refer to")]
-    NonExistentSuperType(Span),
-    #[error("this expression is not a place that can be written to")]
-    InvalidPlaceExpr(Span),
-    #[error("a temporary cannot be used here, consider storing this value in a variable")]
-    InvalidTemporary(Span),
-    #[error("only constants can be used here")]
-    UnexpectedNonConstant(Span),
-    #[error("the `NameOf(Type)` syntax is deprecated, use `NameOf<Type>()` instead")]
-    DeprecatedNameOf(Span),
-    #[error(
-        "'{0}' is a native struct with an incomplete script definition, passing arguments to its \
-        constructor might result in undefined behavior, it can however still be safely \
-        constructed without arguments: 'new {0}()'"
-    )]
-    NonSealedStructConstruction(TypeId<'ctx>, Span),
-    #[error("`case let` block must end with a `break` or `return` statement")]
-    MissingBreakInCaseLet(Span),
-}
-
-impl Error<'_> {
-    pub fn span(&self) -> Span {
-        match self {
-            Self::Type(_, span)
-            | Self::UnresolvedVar(_, span)
-            | Self::UnresolvedType(_, span)
-            | Self::UnresolvedMember(_, _, span)
-            | Self::MultipleMatchingOverloads(_, _, span)
-            | Self::UnresolvedFunction(_, span)
-            | Self::InvalidArgCount(_, span)
-            | Self::InsufficientTypeInformation(span)
-            | Self::InvalidNewType(span)
-            | Self::InvalidDynCastType(span)
-            | Self::UnknownStaticCastType(span)
-            | Self::InvalidTypeArgCount(_, span)
-            | Self::ClassConstructorHasArguments(span)
-            | Self::UnsupportedArity(span)
-            | Self::UnsupportedStaticArraySize(span)
-            | Self::InvalidCaseLabel(span)
-            | Self::CyclicType(span)
-            | Self::LiteralOutOfRange(_, span)
-            | Self::WrongStringLiteral(_, _, span)
-            | Self::InstantiatingAbstract(_, span)
-            | Self::NonExistentSuperType(span)
-            | Self::InvalidPlaceExpr(span)
-            | Self::InvalidTemporary(span)
-            | Self::UnexpectedNonConstant(span)
-            | Self::DeprecatedNameOf(span)
-            | Self::NonSealedStructConstruction(_, span)
-            | Self::MissingBreakInCaseLet(span) => *span,
-        }
-    }
-
-    pub fn code(&self) -> &'static str {
-        match self {
-            Self::Type(_, _) => "TYPE_ERR",
-            Self::UnresolvedVar(_, _) => "UNRESOLVED_REF",
-            Self::UnresolvedType(_, _) => "UNRESOLVED_TYPE",
-            Self::UnresolvedMember(_, _, _) => "UNRESOLVED_MEMBER",
-            Self::MultipleMatchingOverloads(_, _, _) => "MULTIPLE_MATCHING_OVERLOADS",
-            Self::UnresolvedFunction(_, _) => "UNRESOLVED_FN",
-            Self::InvalidArgCount(_, _) => "INVALID_ARG_COUNT",
-            Self::InsufficientTypeInformation(_) => "CANNOT_LOOKUP_MEMBER",
-            Self::InvalidNewType(_)
-            | Self::ClassConstructorHasArguments(_)
-            | Self::InstantiatingAbstract(_, _) => "INVALID_NEW_USE",
-            Self::InvalidDynCastType(_) => "INVALID_DYN_CAST",
-            Self::UnknownStaticCastType(_) => "INVALID_STATIC_CAST",
-            Self::InvalidTypeArgCount(_, _) => "INVALID_TYPE_ARG_COUNT",
-            Self::UnsupportedArity(_) => "UNSUPPORTED_ARITY",
-            Self::UnsupportedStaticArraySize(_) => "UNSUPPORTED_ARRAY_SIZE",
-            Self::InvalidCaseLabel(_) => "INVALID_CASE_LABEL",
-            Self::CyclicType(_) => "CYCLIC_TYPE",
-            Self::LiteralOutOfRange(_, _) => "LIT_OUT_OF_RANGE",
-            Self::WrongStringLiteral(_, _, _) => "WRONG_STRING_LIT",
-            Self::NonExistentSuperType(_) => "INVALID_BASE",
-            Self::InvalidPlaceExpr(_) => "INVALID_PLACE",
-            Self::InvalidTemporary(_) => "INVALID_TEMP",
-            Self::UnexpectedNonConstant(_) => "INVALID_CONSTANT",
-            Self::DeprecatedNameOf(_) => "DEPRECATED_SYNTAX",
-            Self::NonSealedStructConstruction(_, _) => "NON_SEALED_CTR",
-            Self::MissingBreakInCaseLet(_) => "MISSING_BREAK",
-        }
-    }
-
-    pub fn is_fatal(&self) -> bool {
-        !matches!(self, Self::DeprecatedNameOf(_))
-    }
-}
-
-struct NumberTypeRangeHint<'ctx>(TypeId<'ctx>);
-
-impl fmt::Display for NumberTypeRangeHint<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fn write_range<T: fmt::Display>(f: &mut fmt::Formatter<'_>, min: T, max: T) -> fmt::Result {
-            write!(f, ", provide a value between {} and {}", min, max)
-        }
-        match self.0 {
-            id if id == predef::UINT8 => write_range(f, u8::MIN, u8::MAX),
-            id if id == predef::UINT16 => write_range(f, u16::MIN, u16::MAX),
-            id if id == predef::UINT32 => write_range(f, u32::MIN, u32::MAX),
-            id if id == predef::UINT64 => write_range(f, u64::MIN, u64::MAX),
-            id if id == predef::INT8 => write_range(f, i8::MIN, i8::MAX),
-            id if id == predef::INT16 => write_range(f, i16::MIN, i16::MAX),
-            id if id == predef::INT32 => write_range(f, i32::MIN, i32::MAX),
-            id if id == predef::INT64 => write_range(f, i64::MIN, i64::MAX),
-            _ => Ok(()),
-        }
-    }
-}
-
-struct DisplayRangeInclusive<'a, T>(&'a RangeInclusive<T>);
-
-impl<T: fmt::Display + PartialEq> fmt::Display for DisplayRangeInclusive<'_, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let start = self.0.start();
-        let end = self.0.end();
-        if start == end {
-            write!(f, "{}", start)
-        } else {
-            write!(f, "between {} and {}", start, end)
         }
     }
 }

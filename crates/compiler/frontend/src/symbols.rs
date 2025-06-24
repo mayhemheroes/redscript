@@ -713,6 +713,8 @@ impl From<FieldIndex> for usize {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FreeFunctionIndex(FunctionIndex);
 
+pub type FreeFunctionIndexes = SmallVec<[FreeFunctionIndex; 1]>;
+
 #[derive(Debug, Clone)]
 pub struct FunctionType<'ctx> {
     type_params: Box<[Rc<CtxVar<'ctx>>]>,

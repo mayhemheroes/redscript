@@ -8,7 +8,8 @@ use smallvec::smallvec;
 
 use super::resolution::{Scope, THIS_IDENT, WRAPPED_METHOD_IDENT};
 use crate::diagnostic::pass::DiagnosticPass;
-use crate::lower::{Env, FreeFunctionIndexes, Lower};
+use crate::lower::{Env, Lower};
+use crate::symbols::FreeFunctionIndexes;
 use crate::{
     CompileErrorReporter, FieldId, FieldIndex, FreeFunction, FreeFunctionIndex, FunctionIndex,
     FunctionType, IndexMap, IndexSet, MethodId, PolyType, Symbols, Type, TypeId, TypeRef,

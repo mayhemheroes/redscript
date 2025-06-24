@@ -12,9 +12,9 @@ use super::TypeInference;
 use super::infer::{ClassItem, FieldItem, FuncItem, FuncItemKind, InferStageModule};
 use crate::cte::{self, Evaluator};
 use crate::diagnostic::MissingMethod;
-use crate::lower::{FreeFunctionIndexes, InferredTypeApp, TypeEnv};
+use crate::lower::{InferredTypeApp, TypeEnv};
 use crate::modules::{Export, ModuleMap};
-use crate::symbols::FunctionEntry;
+use crate::symbols::{FreeFunctionIndexes, FunctionEntry};
 use crate::utils::{Lazy, ScopedMap};
 use crate::{
     Aggregate, AggregateFlags, CompileErrorReporter, CtxVar, Diagnostic, Enum, Field, FieldFlags,
