@@ -349,7 +349,12 @@ fn load_sources(src: &[PathBuf]) -> anyhow::Result<SourceMap> {
     let mut roots = vec![];
     for src in src {
         let dotfile = Dotfile::load_or_default(src)?;
-        roots.extend(dotfile.source_roots.into_iter().map(|p| src.join(p)));
+        roots.extend(
+            dotfile
+                .expanded_source_roots()
+                .into_iter()
+                .map(|p| src.join(p)),
+        );
     }
     let sources = SourceMap::from_paths_recursively(&roots)?;
     sources.populate_boot_lib();
