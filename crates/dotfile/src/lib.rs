@@ -23,9 +23,10 @@ impl Dotfile {
     pub fn expanded_source_roots(&self) -> Vec<PathBuf> {
         self.source_roots
             .iter()
-            .map(|root| {
-                let Ok(template) = Template::parse(root) else {
-                    return root.into();
+            .map(|template| {
+                let normalized = template.replace('\\', "/");
+                let Ok(template) = Template::parse(&normalized) else {
+                    return template.into();
                 };
                 template
                     .render(&vals(|key| Some(env::var(key).unwrap_or_default().into())))
@@ -124,6 +125,21 @@ mod tests {
     fn expanded_source_roots() {
         let dotfile = Dotfile {
             source_roots: vec![String::from("{CARGO_MANIFEST_DIR}/src")],
+            format: FormatConfig::default(),
+            tools: HashMap::new(),
+        };
+
+        let expanded = dotfile.expanded_source_roots();
+        assert_eq!(
+            expanded,
+            vec![PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src")]
+        );
+    }
+
+    #[test]
+    fn expanded_source_roots_with_backslashes() {
+        let dotfile = Dotfile {
+            source_roots: vec![String::from("{CARGO_MANIFEST_DIR}\\src")],
             format: FormatConfig::default(),
             tools: HashMap::new(),
         };
