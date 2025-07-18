@@ -26,7 +26,12 @@ impl KnownTypes {
     }
 }
 
-const NEVER_REF_TYPES: &[&str] = &["ReactionData"];
+const NEVER_REF_TYPES: &[&str] = &[
+    "ReactionData",
+    "JournalEntryOverrideData",
+    "vehicleCinematicCameraShotGroup",
+    "vehicleCinematicCameraShot",
+];
 
 // generated with https://github.com/jac3km4/redscript-sealed-struct-dumper
 // this is a list of native structs that are fully exposed to scripts

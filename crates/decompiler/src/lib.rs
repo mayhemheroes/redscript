@@ -191,17 +191,17 @@ fn extract_type<'i>(typ: TypeIndex, bundle: &ScriptBundle<'i>) -> Result<ast::Ty
         TypeKind::Primitive | TypeKind::Class => Ok(ast::Type::plain(expect_borrowed(
             bundle.try_get_item_hint(typ.name(), "type name")?,
         ))),
-        &TypeKind::Ref(inner) => extract_type(inner, bundle),
-        &TypeKind::WeakRef(inner) => Ok(ast::Type::Named {
+        TypeKind::Ref(inner) => extract_type(inner, bundle),
+        TypeKind::WeakRef(inner) => Ok(ast::Type::Named {
             name: "wref",
             args: [extract_type(inner, bundle)?].into(),
         }),
-        &TypeKind::Array(inner) => Ok(ast::Type::Array(extract_type(inner, bundle)?.into())),
-        &TypeKind::StaticArray { element_type, size } => Ok(ast::Type::StaticArray(
+        TypeKind::Array(inner) => Ok(ast::Type::Array(extract_type(inner, bundle)?.into())),
+        TypeKind::StaticArray { element_type, size } => Ok(ast::Type::StaticArray(
             extract_type(element_type, bundle)?.into(),
             size as usize,
         )),
-        &TypeKind::ScriptRef(inner) => Ok(ast::Type::Named {
+        TypeKind::ScriptRef(inner) => Ok(ast::Type::Named {
             name: "script_ref",
             args: [extract_type(inner, bundle)?].into(),
         }),

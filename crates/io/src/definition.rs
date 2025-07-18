@@ -283,8 +283,8 @@ impl Type {
     }
 
     #[inline]
-    pub fn kind(&self) -> &TypeKind {
-        &self.kind
+    pub fn kind(&self) -> TypeKind {
+        self.kind
     }
 }
 
@@ -295,7 +295,7 @@ impl From<Type> for Definition<'_> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, TryRead, TryWrite, Measure)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, TryRead, TryWrite, Measure)]
 #[byte(tag_type = u8)]
 pub enum TypeKind {
     #[byte(tag = 0x00)]

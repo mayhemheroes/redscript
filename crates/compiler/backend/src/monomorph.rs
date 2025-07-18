@@ -312,13 +312,11 @@ impl<'ctx> Monomorphizer<'ctx> {
 
         let schema = symbols[typ.id()].schema();
 
-        match schema {
-            TypeSchema::Aggregate(agg)
-                if !agg.flags().is_struct() && !agg.flags().is_never_ref() =>
-            {
-                return self.type_(&MonoType::new(predef::REF, [typ.clone()]), symbols, bundle);
-            }
-            _ => {}
+        if let TypeSchema::Aggregate(agg) = schema
+            && !agg.flags().is_struct()
+            && !agg.flags().is_never_ref()
+        {
+            return self.type_(&MonoType::new(predef::REF, [typ.clone()]), symbols, bundle);
         }
 
         if let Some(&idx) = self.types.get(typ) {

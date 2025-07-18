@@ -57,7 +57,7 @@ impl<'ctx> CompilationInputs<'ctx> {
         for def in bundle.indexed_definitions() {
             match def {
                 IndexedDefinition::Type(index, typ) => {
-                    if typ.kind() == &PoolTypeKind::Primitive {
+                    if typ.kind() == PoolTypeKind::Primitive {
                         let name = bundle.get_item(typ.name()).ok_or_else(|| {
                             Error::MissingPoolItem("type name", typ.name().into())
                         })?;
@@ -65,9 +65,9 @@ impl<'ctx> CompilationInputs<'ctx> {
                         let def = TypeDef::new([], TypeSchema::Primitive, []);
                         inputs.symbols.add_type_if_none(id, def);
                     }
-                    let typ = load_type::<Mono>(typ, bundle, interner)?;
+                    let LoadedType { typ, unsupported } = load_type::<Mono>(typ, bundle, interner)?;
 
-                    if LOAD_MAPPING {
+                    if LOAD_MAPPING && !unsupported {
                         inputs.mapping.types.insert(typ, index);
                     }
                 }
@@ -105,7 +105,7 @@ impl<'ctx> CompilationInputs<'ctx> {
                         let typ = bundle.get_item(field.type_()).ok_or_else(|| {
                             Error::MissingPoolItem("field type", field.type_().into())
                         })?;
-                        let typ = load_type::<Immutable>(typ, bundle, interner)?;
+                        let LoadedType { typ, .. } = load_type::<Immutable>(typ, bundle, interner)?;
                         let flags = FieldFlags::new()
                             .with_is_native(field.flags().is_native())
                             .with_is_editable(field.flags().is_editable())
@@ -341,24 +341,27 @@ fn load_type<'ctx, K: TypeKind>(
     typ: &PoolType,
     bundle: &ScriptBundle<'ctx>,
     interner: &'ctx TypeInterner,
-) -> Result<K::Type<'ctx>, Error> {
+) -> Result<LoadedType<'ctx, K>, Error> {
     let (id, arg) = match typ.kind() {
         PoolTypeKind::Class | PoolTypeKind::Primitive => {
             let name = bundle
                 .get_item(typ.name())
                 .ok_or_else(|| Error::MissingPoolItem("type name", typ.name().into()))?;
-            return Ok(K::Type::from((interner.intern(name.as_ref()), Rc::new([]))));
+            let unsupported =
+                typ.kind() == PoolTypeKind::Class && KnownTypes::get().is_never_ref(name.as_ref());
+            let typ = K::Type::from((interner.intern(name.as_ref()), Rc::new([])));
+            return Ok(LoadedType { typ, unsupported });
         }
-        &PoolTypeKind::Ref(inner) => {
+        PoolTypeKind::Ref(inner) => {
             let inner = bundle
                 .get_item(inner)
                 .ok_or_else(|| Error::MissingPoolItem("referenced type", inner.into()))?;
             return load_type::<K>(inner, bundle, interner);
         }
-        &PoolTypeKind::WeakRef(inner) => (predef::WREF, inner),
-        &PoolTypeKind::Array(inner) => (predef::ARRAY, inner),
-        &PoolTypeKind::ScriptRef(inner) => (predef::SCRIPT_REF, inner),
-        &PoolTypeKind::StaticArray { element_type, size } => {
+        PoolTypeKind::WeakRef(inner) => (predef::WREF, inner),
+        PoolTypeKind::Array(inner) => (predef::ARRAY, inner),
+        PoolTypeKind::ScriptRef(inner) => (predef::SCRIPT_REF, inner),
+        PoolTypeKind::StaticArray { element_type, size } => {
             let id = TypeId::array_with_size(size as usize)
                 .ok_or(Error::UnsupportedStaticArray(size))?;
             (id, element_type)
@@ -367,8 +370,11 @@ fn load_type<'ctx, K: TypeKind>(
     let arg = bundle
         .get_item(arg)
         .ok_or_else(|| Error::MissingPoolItem("type argument", arg.into()))?;
-    let arg = load_type::<K>(arg, bundle, interner)?;
-    Ok(K::Type::from((id, Rc::new([arg]))))
+    let LoadedType { typ, unsupported } = load_type::<K>(arg, bundle, interner)?;
+    Ok(LoadedType {
+        typ: K::Type::from((id, Rc::new([typ]))),
+        unsupported,
+    })
 }
 
 fn load_function_type<'ctx>(
@@ -382,7 +388,8 @@ fn load_function_type<'ctx>(
             let typ = bundle
                 .get_item(typ)
                 .ok_or_else(|| Error::MissingPoolItem("function return type", typ.into()))?;
-            load_type::<Immutable>(typ, bundle, interner)
+            let LoadedType { typ, .. } = load_type::<Immutable>(typ, bundle, interner)?;
+            Ok(typ)
         })
         .transpose()?;
     let params = func
@@ -410,7 +417,7 @@ fn load_param<'ctx>(
     let typ = bundle
         .get_item(param.type_())
         .ok_or_else(|| Error::MissingPoolItem("parameter type", param.type_().into()))?;
-    let typ = load_type::<Immutable>(typ, bundle, interner)?;
+    let LoadedType { typ, .. } = load_type::<Immutable>(typ, bundle, interner)?;
     let flags = ParamFlags::new()
         .with_is_optional(param.flags().is_optional())
         .with_is_out(param.flags().is_out())
@@ -428,6 +435,11 @@ fn assert_borrowed<'a>(cow: &Cow<'a, str>) -> &'a str {
 
 fn demangled_name(name: &str) -> &str {
     name.split_once(';').map_or(name, |(name, _)| name)
+}
+
+struct LoadedType<'ctx, K: TypeKind> {
+    typ: K::Type<'ctx>,
+    unsupported: bool,
 }
 
 #[derive(Debug, Error)]
