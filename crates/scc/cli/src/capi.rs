@@ -1,9 +1,19 @@
+use anyhow::Context;
 use minidl::Library;
 
 use crate::raw;
 
 pub(super) fn load() -> anyhow::Result<raw::SccApi> {
-    let lib = Library::load("scc_lib.dll")?;
+    let lib_path = std::env::current_exe().context("Could not get current exe path")?;
+    let lib_path = if cfg!(target_os = "windows") {
+        lib_path.with_file_name("scc_lib.dll")
+    } else if cfg!(target_os = "macos") {
+        lib_path.with_file_name("libscc_lib.dylib")
+    } else {
+        lib_path.with_file_name("libscc_lib.so")
+    };
+    let lib = Library::load(lib_path).context("Could not load the scc shared library")?;
+
     Ok(unsafe {
         raw::SccApi {
             settings_new: lib.sym("scc_settings_new\0")?,

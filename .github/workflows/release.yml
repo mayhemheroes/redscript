@@ -6,9 +6,6 @@ on:
       - "v[0-9]+.[0-9]+.[0-9]+"
       - "v[0-9]+.[0-9]+.[0-9]+-*"
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
   package:
     name: Build and package
