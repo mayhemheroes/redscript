@@ -27,10 +27,11 @@ if [ -d "$staging_dir" ]; then
 fi
 mkdir -p "$staging_dir/engine/tools"
 
+cp "./target/release/scc" $tools_dir
 if [[ "$OSTYPE" == "darwin"* ]]; then
     cp -r ./assets/macos/archive/* $staging_dir
     cp "./target/release/libscc_lib.dylib" $tools_dir
-    cp "target/release/redscript-cli" "$working_dir/redscript-cli-aarch64-darwin"
+    cp "./target/release/redscript-cli" "$working_dir/redscript-cli-aarch64-darwin"
 elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
     cp "./target/release/libscc_lib.so" $tools_dir
     cp "./target/release/redscript-cli" "$working_dir/redscript-cli-x86_64-linux-gnu"
