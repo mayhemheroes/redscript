@@ -14,8 +14,6 @@ env:
 jobs:
   build:
     runs-on: ${{ inputs.os }}
-    env:
-      ARCHIVE_NAME: redscript-${{ steps.tag.outputs.tag }}-${{ inputs.suffix }}.zip
     steps:
       - uses: actions/checkout@v4
         with:
