@@ -48,3 +48,4 @@ jobs:
     with:
       os: ${{ matrix.os }}
       suffix: ${{ matrix.suffix }}
+      tag: ${{ github.base_ref || github.ref_name }}
