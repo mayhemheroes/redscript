@@ -11,8 +11,21 @@ env:
 
 jobs:
   package:
-    name: Package and upload artifacts
+    name: Build and package
     uses: ./.github/workflows/package.yml
+    strategy:
+      matrix:
+        os:
+          - windows-latest
+          - macos-14
+        include:
+          - os: windows-latest
+            suffix: windows
+          - os: macos-14
+            suffix: macos
+    with:
+      os: ${{ matrix.os }}
+      suffix: ${{ matrix.suffix }}
 
   publish:
     name: Publish release
