@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::path::PathBuf;
 use std::{env, fs, io};
 
@@ -77,6 +78,7 @@ fn compile_inner(settings: &SccSettings) -> anyhow::Result<SccOutput> {
             .sources(&sources)
             .type_interner(&interner)
             .diagnostics(&[])
+            .type_flags(Cow::Borrowed(settings.type_flags()))
             .compile()?
             .flush(&output_file)
         {

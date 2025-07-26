@@ -108,6 +108,10 @@ impl SccSettings {
         self.show_error_report
     }
 
+    pub fn type_flags(&self) -> &TypeFlags {
+        &self.type_flags
+    }
+
     pub fn set_custom_cache_file(&mut self, path: PathBuf) {
         self.custom_cache_file = Some(path);
     }
