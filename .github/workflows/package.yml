@@ -19,23 +19,25 @@ jobs:
         with:
           fetch-depth: 0
           filter: tree:0
+
       - run: rustup toolchain install stable --profile minimal --no-self-update
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: release-${{ inputs.os }}
       - run: cargo build --release
+
       - id: tag
+        if: runner.os == 'Windows'
         run: echo "tag=$(git describe --tags $(git rev-list --tags --max-count=1))" >> $env:GITHUB_OUTPUT
-      - if: ${{ inputs.os == 'windows-latest' }}
-        run: |
-          $tag=$(git describe --tags $(git rev-list --tags --max-count=1))
-          .\scripts\package.ps1 -archiveName "redscript-$tag-${{ inputs.suffix }}.zip"
-          echo "tag=$tag" >> $env:GITHUB_OUTPUT
-      - if: ${{ inputs.os != 'windows-latest' }}
-        run: |
-          tag=$(git describe --tags $(git rev-list --tags --max-count=1))
-          ./scripts/package.sh "redscript-$tag-${{ inputs.suffix }}.zip"
-          echo "tag=$tag" >> $GITHUB_OUTPUT
+      - id: tag
+        if: runner.os != 'Windows'
+        run: echo "tag=$(git describe --tags $(git rev-list --tags --max-count=1))" >> $GITHUB_OUTPUT
+
+      - if: runner.os == 'Windows'
+        run: .\scripts\package.ps1 -archiveName "redscript-${{ steps.tag.outputs.tag }}-${{ inputs.suffix }}.zip"
+      - if: runner.os != 'Windows'
+        run: ./scripts/package.sh "redscript-${{ steps.tag.outputs.tag }}-${{ inputs.suffix }}.zip"
+
       - uses: actions/upload-artifact@v4
         name: Upload artifacts
         with:
@@ -44,4 +46,5 @@ jobs:
             redscript-cli-aarch64-darwin
             redscript-cli-x86_64-linux-gnu
             redscript-${{ steps.tag.outputs.tag }}-${{ inputs.suffix }}.zip
+          name: artifact-${{ inputs.os }}
           if-no-files-found: error
