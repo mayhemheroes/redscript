@@ -26,17 +26,17 @@ jobs:
           shared-key: release-${{ inputs.os }}
       - run: cargo build --release
 
-      - id: tag
+      - id: tag-win
         if: runner.os == 'Windows'
         run: echo "tag=$(git describe --tags $(git rev-list --tags --max-count=1))" >> $env:GITHUB_OUTPUT
-      - id: tag
+      - id: tag-unix
         if: runner.os != 'Windows'
         run: echo "tag=$(git describe --tags $(git rev-list --tags --max-count=1))" >> $GITHUB_OUTPUT
 
       - if: runner.os == 'Windows'
-        run: .\scripts\package.ps1 -archiveName "redscript-${{ steps.tag.outputs.tag }}-${{ inputs.suffix }}.zip"
+        run: .\scripts\package.ps1 -archiveName "redscript-${{ steps.tag.outputs.tag-win }}-${{ inputs.suffix }}.zip"
       - if: runner.os != 'Windows'
-        run: ./scripts/package.sh "redscript-${{ steps.tag.outputs.tag }}-${{ inputs.suffix }}.zip"
+        run: ./scripts/package.sh "redscript-${{ steps.tag.outputs.tag-unix }}-${{ inputs.suffix }}.zip"
 
       - uses: actions/upload-artifact@v4
         name: Upload artifacts
@@ -45,6 +45,6 @@ jobs:
             redscript-cli.exe
             redscript-cli-aarch64-darwin
             redscript-cli-x86_64-linux-gnu
-            redscript-${{ steps.tag.outputs.tag }}-${{ inputs.suffix }}.zip
+            redscript-${{ steps.get-tag-win.outputs.tag || steps.get-tag-unix.outputs.tag }}-${{ inputs.suffix }}.zip
           name: artifact-${{ inputs.os }}
           if-no-files-found: error
