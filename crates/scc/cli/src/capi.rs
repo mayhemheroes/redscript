@@ -11,6 +11,8 @@ pub(super) fn load() -> anyhow::Result<raw::SccApi> {
             settings_add_script_path: lib.sym("scc_settings_add_script_path\0")?,
             settings_set_output_cache_file: lib.sym("scc_settings_set_output_cache_file\0")?,
             settings_disable_error_popup: lib.sym("scc_settings_disable_error_popup\0")?,
+            settings_register_never_ref_type: lib.sym("scc_settings_register_never_ref_type\0")?,
+            settings_register_mixed_ref_type: lib.sym("scc_settings_register_mixed_ref_type\0")?,
             compile: lib.sym("scc_compile\0")?,
             free_result: lib.sym("scc_free_result\0")?,
             get_success: lib.sym("scc_get_success\0")?,
@@ -45,6 +47,8 @@ mod tests {
             settings_set_output_cache_file: None,
             settings_add_script_path: None,
             settings_disable_error_popup: None,
+            settings_register_never_ref_type: None,
+            settings_register_mixed_ref_type: None,
             compile: None,
             free_result: None,
             get_success: None,
@@ -71,6 +75,12 @@ mod tests {
             api.settings_add_script_path;
         let _settings_disable_error_popup: Option<unsafe extern "C" fn(*mut SccSettings)> =
             api.settings_disable_error_popup;
+        let _settings_register_never_ref_type: Option<
+            unsafe extern "C" fn(*mut SccSettings, *const i8),
+        > = api.settings_register_never_ref_type;
+        let _settings_register_mixed_ref_type: Option<
+            unsafe extern "C" fn(*mut SccSettings, *const i8),
+        > = api.settings_register_mixed_ref_type;
         let _compile: Option<unsafe extern "C" fn(*mut SccSettings) -> *mut SccResult> =
             api.compile;
         let _free_result: Option<unsafe extern "C" fn(*mut SccResult)> = api.free_result;

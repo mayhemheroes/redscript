@@ -20,8 +20,8 @@ use redscript_io::{
 use thiserror::Error;
 
 use crate::IndexMap;
-use crate::known_types::KnownTypes;
 use crate::monomorph::Monomorphizer;
+use crate::type_flags::TypeFlags;
 
 #[derive(Debug)]
 pub struct CompilationInputs<'ctx> {
@@ -30,23 +30,27 @@ pub struct CompilationInputs<'ctx> {
 }
 
 impl<'ctx> CompilationInputs<'ctx> {
-    pub fn load(bundle: &ScriptBundle<'ctx>, interner: &'ctx TypeInterner) -> Result<Self, Error> {
-        Self::load_with::<true>(bundle, interner)
+    pub fn load(
+        bundle: &ScriptBundle<'ctx>,
+        interner: &'ctx TypeInterner,
+        flags: &TypeFlags,
+    ) -> Result<Self, Error> {
+        Self::load_with::<true>(bundle, interner, flags)
     }
 
     pub fn load_without_mapping(
         bundle: &ScriptBundle<'ctx>,
         interner: &'ctx TypeInterner,
+        flags: &TypeFlags,
     ) -> Result<Symbols<'ctx>, Error> {
-        Ok(Self::load_with::<false>(bundle, interner)?.symbols)
+        Ok(Self::load_with::<false>(bundle, interner, flags)?.symbols)
     }
 
     fn load_with<const LOAD_MAPPING: bool>(
         bundle: &ScriptBundle<'ctx>,
         interner: &'ctx TypeInterner,
+        type_flags: &TypeFlags,
     ) -> Result<Self, Error> {
-        let known_types = KnownTypes::get();
-
         let mut inputs = CompilationInputs::default();
         let mut virtual_map: HashMap<
             TypeId<'ctx>,
@@ -65,7 +69,8 @@ impl<'ctx> CompilationInputs<'ctx> {
                         let def = TypeDef::new([], TypeSchema::Primitive, []);
                         inputs.symbols.add_type_if_none(id, def);
                     }
-                    let LoadedType { typ, unsupported } = load_type::<Mono>(typ, bundle, interner)?;
+                    let LoadedType { typ, unsupported } =
+                        load_type::<Mono>(typ, bundle, interner, type_flags)?;
 
                     if LOAD_MAPPING && !unsupported {
                         inputs.mapping.types.insert(typ, index);
@@ -105,7 +110,8 @@ impl<'ctx> CompilationInputs<'ctx> {
                         let typ = bundle.get_item(field.type_()).ok_or_else(|| {
                             Error::MissingPoolItem("field type", field.type_().into())
                         })?;
-                        let LoadedType { typ, .. } = load_type::<Immutable>(typ, bundle, interner)?;
+                        let LoadedType { typ, .. } =
+                            load_type::<Immutable>(typ, bundle, interner, type_flags)?;
                         let flags = FieldFlags::new()
                             .with_is_native(field.flags().is_native())
                             .with_is_editable(field.flags().is_editable())
@@ -140,7 +146,7 @@ impl<'ctx> CompilationInputs<'ctx> {
                             .with_is_unimplemented(
                                 method.body().is_empty() && !method.flags().is_native(),
                             );
-                        let typ = load_function_type(method, bundle, interner)?;
+                        let typ = load_function_type(method, bundle, interner, type_flags)?;
                         let base = virtuals.get(&method.name()).copied();
 
                         let idx = methods.add(name, Method::new(flags, typ, base, [], None));
@@ -157,8 +163,9 @@ impl<'ctx> CompilationInputs<'ctx> {
                         .with_is_final(cls.flags().is_final())
                         .with_is_import_only(cls.flags().is_import_only())
                         .with_is_struct(cls.flags().is_struct())
-                        .with_is_never_ref(known_types.is_never_ref(class_name.as_ref()))
-                        .with_is_sealed(known_types.is_sealed(class_name.as_ref()));
+                        .with_is_never_ref(type_flags.is_never_ref(class_name.as_ref()))
+                        .with_is_mixed_ref(type_flags.is_mixed_ref(class_name.as_ref()))
+                        .with_is_sealed(type_flags.is_sealed(class_name.as_ref()));
                     let agg =
                         Aggregate::new(flags, base, fields, methods, HashMap::default(), None);
                     let def = TypeDef::new([], TypeSchema::Aggregate(agg.into()), []);
@@ -210,7 +217,7 @@ impl<'ctx> CompilationInputs<'ctx> {
                     let flags = FreeFunctionFlags::new()
                         .with_is_exec(func.flags().is_exec())
                         .with_is_native(func.flags().is_native());
-                    let typ = load_function_type(func, bundle, interner)?;
+                    let typ = load_function_type(func, bundle, interner, type_flags)?;
                     let func = FreeFunction::new(flags, typ, [], None);
                     let id = inputs.symbols.add_free_function(name, func);
 
@@ -341,6 +348,7 @@ fn load_type<'ctx, K: TypeKind>(
     typ: &PoolType,
     bundle: &ScriptBundle<'ctx>,
     interner: &'ctx TypeInterner,
+    flags: &TypeFlags,
 ) -> Result<LoadedType<'ctx, K>, Error> {
     let (id, arg) = match typ.kind() {
         PoolTypeKind::Class | PoolTypeKind::Primitive => {
@@ -348,7 +356,7 @@ fn load_type<'ctx, K: TypeKind>(
                 .get_item(typ.name())
                 .ok_or_else(|| Error::MissingPoolItem("type name", typ.name().into()))?;
             let unsupported =
-                typ.kind() == PoolTypeKind::Class && KnownTypes::get().is_never_ref(name.as_ref());
+                typ.kind() == PoolTypeKind::Class && flags.is_never_ref(name.as_ref());
             let typ = K::Type::from((interner.intern(name.as_ref()), Rc::new([])));
             return Ok(LoadedType { typ, unsupported });
         }
@@ -356,7 +364,7 @@ fn load_type<'ctx, K: TypeKind>(
             let inner = bundle
                 .get_item(inner)
                 .ok_or_else(|| Error::MissingPoolItem("referenced type", inner.into()))?;
-            return load_type::<K>(inner, bundle, interner);
+            return load_type::<K>(inner, bundle, interner, flags);
         }
         PoolTypeKind::WeakRef(inner) => (predef::WREF, inner),
         PoolTypeKind::Array(inner) => (predef::ARRAY, inner),
@@ -370,7 +378,7 @@ fn load_type<'ctx, K: TypeKind>(
     let arg = bundle
         .get_item(arg)
         .ok_or_else(|| Error::MissingPoolItem("type argument", arg.into()))?;
-    let LoadedType { typ, unsupported } = load_type::<K>(arg, bundle, interner)?;
+    let LoadedType { typ, unsupported } = load_type::<K>(arg, bundle, interner, flags)?;
     Ok(LoadedType {
         typ: K::Type::from((id, Rc::new([typ]))),
         unsupported,
@@ -381,6 +389,7 @@ fn load_function_type<'ctx>(
     func: &PoolFunction<'ctx>,
     bundle: &ScriptBundle<'ctx>,
     interner: &'ctx TypeInterner,
+    flags: &TypeFlags,
 ) -> Result<FunctionType<'ctx>, Error> {
     let typ = func
         .return_type()
@@ -388,7 +397,7 @@ fn load_function_type<'ctx>(
             let typ = bundle
                 .get_item(typ)
                 .ok_or_else(|| Error::MissingPoolItem("function return type", typ.into()))?;
-            let LoadedType { typ, .. } = load_type::<Immutable>(typ, bundle, interner)?;
+            let LoadedType { typ, .. } = load_type::<Immutable>(typ, bundle, interner, flags)?;
             Ok(typ)
         })
         .transpose()?;
@@ -399,7 +408,7 @@ fn load_function_type<'ctx>(
             let param = bundle
                 .get_item(param)
                 .ok_or_else(|| Error::MissingPoolItem("function parameter", param.into()))?;
-            load_param(param, bundle, interner)
+            load_param(param, bundle, interner, flags)
         })
         .collect::<Result<Box<_>, _>>()?;
     let return_t = typ.unwrap_or_else(|| Type::nullary(predef::VOID));
@@ -410,6 +419,7 @@ fn load_param<'ctx>(
     param: &PoolParameter,
     bundle: &ScriptBundle<'ctx>,
     interner: &'ctx TypeInterner,
+    flags: &TypeFlags,
 ) -> Result<Param<'ctx>, Error> {
     let name = bundle
         .get_item(param.name())
@@ -417,7 +427,7 @@ fn load_param<'ctx>(
     let typ = bundle
         .get_item(param.type_())
         .ok_or_else(|| Error::MissingPoolItem("parameter type", param.type_().into()))?;
-    let LoadedType { typ, .. } = load_type::<Immutable>(typ, bundle, interner)?;
+    let LoadedType { typ, .. } = load_type::<Immutable>(typ, bundle, interner, flags)?;
     let flags = ParamFlags::new()
         .with_is_optional(param.flags().is_optional())
         .with_is_out(param.flags().is_out())

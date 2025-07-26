@@ -447,7 +447,7 @@ impl<'ctx> LoweredCompilationUnit<'ctx> {
 
     pub fn run_diagnostics(
         &self,
-        passes: &[Box<dyn DiagnosticPass<'ctx>>],
+        passes: &[&'static dyn DiagnosticPass],
         reporter: &mut CompileErrorReporter<'ctx>,
     ) {
         if passes.is_empty() {

@@ -23,10 +23,10 @@ impl<A, F> Lazy<A, F> {
         self.value.borrow().clone()
     }
 
-    pub fn get<E>(&self, env: &E) -> Result<A, CycleError>
+    pub fn get<E>(&self, env: E) -> Result<A, CycleError>
     where
         A: Clone,
-        F: Fn(&E) -> A,
+        F: Fn(E) -> A,
     {
         let mut borrow = match self.value.try_borrow_mut() {
             Ok(mut slot) => match &mut *slot {

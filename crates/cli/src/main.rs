@@ -141,15 +141,15 @@ struct FormatOpts {
     max_sig_digits: Option<u8>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 enum WarnOn {
     UnusedLocals,
 }
 
 impl WarnOn {
-    pub fn to_pass<'ctx>(&self) -> Box<dyn pass::DiagnosticPass<'ctx>> {
+    pub fn to_pass(self) -> &'static dyn pass::DiagnosticPass {
         match self {
-            Self::UnusedLocals => Box::new(pass::UnusedLocals),
+            Self::UnusedLocals => &pass::UnusedLocals,
         }
     }
 }
@@ -192,10 +192,17 @@ fn compile(opts: CompileOpts) -> anyhow::Result<ExitCode> {
     let passes = opts
         .warn_on
         .into_iter()
-        .map(|w| w.to_pass())
+        .map(WarnOn::to_pass)
         .collect::<Vec<_>>();
 
-    match Compilation::new_with(&map, &sources, &interner, &passes)?.flush(opts.output) {
+    match Compilation::builder()
+        .bundle(&map)
+        .sources(&sources)
+        .type_interner(&interner)
+        .diagnostics(&passes)
+        .compile()?
+        .flush(opts.output)
+    {
         Ok((_, diagnostics)) => {
             diagnostics.dump(&sources)?;
             log::info!("Compilation successful");
@@ -217,10 +224,15 @@ fn lint(opts: LintOpts) -> anyhow::Result<ExitCode> {
     let passes = opts
         .warn_on
         .into_iter()
-        .map(|w| w.to_pass())
+        .map(WarnOn::to_pass)
         .collect::<Vec<_>>();
 
-    let comp = Compilation::new_with(&map, &sources, &interner, &passes)?;
+    let comp = Compilation::builder()
+        .bundle(&map)
+        .sources(&sources)
+        .type_interner(&interner)
+        .diagnostics(&passes)
+        .compile()?;
     comp.diagnostics().dump(&sources)?;
     if comp.diagnostics().has_fatal_errors() {
         log::info!("Compilation failed");

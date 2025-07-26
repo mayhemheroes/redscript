@@ -72,7 +72,14 @@ fn compile_inner(settings: &SccSettings) -> anyhow::Result<SccOutput> {
     let interner = TypeInterner::default();
     let (mmap, _f) = Map::with_options().open(&input_file)?;
     let refs = {
-        match Compilation::new_with(&mmap, &sources, &interner, &[])?.flush(&output_file) {
+        match Compilation::builder()
+            .bundle(&mmap)
+            .sources(&sources)
+            .type_interner(&interner)
+            .diagnostics(&[])
+            .compile()?
+            .flush(&output_file)
+        {
             Err(FlushError::Write(SaveError::Mmap(err)))
                 if err.kind() == io::ErrorKind::PermissionDenied =>
             {

@@ -1,4 +1,4 @@
-use std::ffi::CStr;
+use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::ptr;
@@ -15,7 +15,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 pub unsafe extern "C" fn scc_settings_new(r6_dir: *const i8) -> Box<SccSettings> {
     let r6_dir = unsafe { c_path(r6_dir) };
     let root_dir = r6_dir.parent().map(Path::to_owned).unwrap_or(r6_dir);
-    Box::new(SccSettings::new(root_dir, None, None, vec![], true))
+    Box::new(SccSettings::new(root_dir))
 }
 
 /// # Safety
@@ -51,6 +51,36 @@ pub unsafe extern "C" fn scc_settings_add_script_path(settings: &mut SccSettings
 #[unsafe(no_mangle)]
 pub extern "C" fn scc_settings_disable_error_popup(settings: &mut SccSettings) {
     settings.set_show_error_report(false);
+}
+
+/// # Safety
+/// The caller must ensure that `settings` is a valid pointer to a `SccSettings` struct and
+/// `name` is a valid null-terminated UTF-8 string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn scc_settings_register_never_ref_type(
+    settings: &mut SccSettings,
+    name: *const i8,
+) {
+    settings.register_never_ref_type(
+        unsafe { c_str(name) }
+            .into_string()
+            .expect("name should be valid UTF-8"),
+    );
+}
+
+/// # Safety
+/// The caller must ensure that `settings` is a valid pointer to a `SccSettings` struct and
+/// `name` is a valid null-terminated UTF-8 string.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn scc_settings_register_mixed_ref_type(
+    settings: &mut SccSettings,
+    name: *const i8,
+) {
+    settings.register_mixed_ref_type(
+        unsafe { c_str(name) }
+            .into_string()
+            .expect("name should be valid UTF-8"),
+    );
 }
 
 #[unsafe(no_mangle)]
@@ -147,6 +177,10 @@ pub extern "C" fn scc_source_ref_path<'a>(
 #[unsafe(no_mangle)]
 pub extern "C" fn scc_source_ref_line(output: &SccOutput, link: &SourceRef) -> usize {
     output.line(link).unwrap_or(0)
+}
+
+unsafe fn c_str(str: *const i8) -> CString {
+    unsafe { CStr::from_ptr(str).to_owned() }
 }
 
 unsafe fn c_path(r6_dir: *const i8) -> PathBuf {

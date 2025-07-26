@@ -81,6 +81,8 @@ pub enum Error<'ctx> {
     NonSealedStructConstruction(TypeId<'ctx>, Span),
     #[error("`case let` block must end with a `break` or `return` statement")]
     MissingBreakInCaseLet(Span),
+    #[error("this type cannot be wrapped with a ref")]
+    RefOnNeverRefType(Span),
 }
 
 impl Error<'_> {
@@ -112,7 +114,8 @@ impl Error<'_> {
             | Self::UnexpectedNonConstant(span)
             | Self::DeprecatedNameOf(span)
             | Self::NonSealedStructConstruction(_, span)
-            | Self::MissingBreakInCaseLet(span) => *span,
+            | Self::MissingBreakInCaseLet(span)
+            | Self::RefOnNeverRefType(span) => *span,
         }
     }
 
@@ -145,6 +148,7 @@ impl Error<'_> {
             Self::DeprecatedNameOf(_) => "DEPRECATED_SYNTAX",
             Self::NonSealedStructConstruction(_, _) => "NON_SEALED_CTR",
             Self::MissingBreakInCaseLet(_) => "MISSING_BREAK",
+            Self::RefOnNeverRefType(_) => "REF_ON_NEVER_REF",
         }
     }
 

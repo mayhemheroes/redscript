@@ -465,6 +465,10 @@ impl<'ctx> Aggregate<'ctx> {
         self.flags
     }
 
+    pub fn set_flags(&mut self, flags: AggregateFlags) {
+        self.flags = flags;
+    }
+
     #[inline]
     pub fn base(&self) -> Option<&TypeApp<'ctx>> {
         self.base.as_ref()
@@ -1175,9 +1179,8 @@ pub struct AggregateFlags {
     pub is_import_only: bool,
     pub is_struct: bool,
     pub is_never_ref: bool,
+    pub is_mixed_ref: bool,
     pub is_sealed: bool,
-    #[bits(1)]
-    __: u8,
 }
 
 #[bitfield(u8)]

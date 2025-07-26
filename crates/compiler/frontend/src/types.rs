@@ -210,6 +210,7 @@ impl<'ctx, K: TypeKind> TypeApp<'ctx, K> {
     #[inline]
     pub fn ref_type(&self) -> Option<RefType> {
         match self.id {
+            id if id == predef::REF => Some(RefType::Strong),
             id if id == predef::WREF => Some(RefType::Weak),
             id if id == predef::SCRIPT_REF => Some(RefType::Script),
             _ => None,
@@ -429,6 +430,7 @@ impl fmt::Display for Variance {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RefType {
+    Strong,
     Weak,
     Script,
 }

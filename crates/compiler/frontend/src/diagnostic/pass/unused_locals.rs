@@ -8,8 +8,8 @@ use crate::{CompileErrorReporter, Diagnostic, LoweredFunction, ir};
 #[derive(Debug, Default)]
 pub struct UnusedLocals;
 
-impl<'ctx> DiagnosticPass<'ctx> for UnusedLocals {
-    fn run(&self, func: &LoweredFunction<'ctx>, reporter: &mut CompileErrorReporter<'ctx>) {
+impl DiagnosticPass for UnusedLocals {
+    fn run<'ctx>(&self, func: &LoweredFunction<'ctx>, reporter: &mut CompileErrorReporter<'ctx>) {
         let mut visitor = UnusedLocalVisitor::new(func);
         visitor.visit_block(&func.block);
 

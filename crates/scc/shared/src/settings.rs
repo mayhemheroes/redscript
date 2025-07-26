@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::{io, iter};
 
 use file_id::get_file_id;
+use redscript_compiler_api::TypeFlags;
 
 const BUNDLE_FILE: &str = "final.redscripts";
 const BACKUP_BUNDLE_FILE: &str = "final.redscripts.bk";
@@ -25,22 +26,18 @@ pub struct SccSettings {
     output_cache_file: Option<PathBuf>,
     additional_script_paths: Vec<PathBuf>,
     show_error_report: bool,
+    type_flags: TypeFlags,
 }
 
 impl SccSettings {
-    pub fn new(
-        root_dir: PathBuf,
-        custom_cache_file: Option<PathBuf>,
-        output_cache_file: Option<PathBuf>,
-        additional_script_paths: Vec<PathBuf>,
-        show_error_report: bool,
-    ) -> Self {
+    pub fn new(root_dir: PathBuf) -> Self {
         Self {
             root_dir,
-            custom_cache_file,
-            output_cache_file,
-            additional_script_paths,
-            show_error_report,
+            custom_cache_file: None,
+            output_cache_file: None,
+            additional_script_paths: vec![],
+            show_error_report: true,
+            type_flags: TypeFlags::default(),
         }
     }
 
@@ -125,5 +122,13 @@ impl SccSettings {
 
     pub fn add_script_path(&mut self, path: PathBuf) {
         self.additional_script_paths.push(path);
+    }
+
+    pub fn register_never_ref_type(&mut self, name: impl Into<Cow<'static, str>>) {
+        self.type_flags.register_never_ref(name);
+    }
+
+    pub fn register_mixed_ref_type(&mut self, name: impl Into<Cow<'static, str>>) {
+        self.type_flags.register_mixed_ref(name);
     }
 }

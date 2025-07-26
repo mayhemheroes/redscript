@@ -7,7 +7,7 @@ edition.workspace = true
 [dependencies]
 anyhow.workspace = true
 serde = { workspace = true, features = ["derive"] }
-toml = { workspace = true, features = ["parse"] }
+toml = { workspace = true, features = ["parse", "serde"] }
 hashbrown = { workspace = true, features = ["serde"] }
 leon.workspace = true
 

@@ -9,7 +9,7 @@ use crate::lower::types::PolyType;
 use crate::symbols::{FreeFunctionIndex, FreeFunctionIndexes, FunctionEntry, Symbols};
 use crate::types::{CtxVar, Type, TypeId, predef};
 use crate::utils::{Lazy, ScopedMap};
-use crate::{FreeFunction, IndexMap, ir};
+use crate::{Aggregate, FreeFunction, IndexMap, ir};
 
 #[derive(Debug)]
 pub struct Env<'scope, 'ctx> {
@@ -115,48 +115,63 @@ impl<'scope, 'ctx> TypeEnv<'scope, 'ctx> {
     pub fn resolve(
         &self,
         typ: &ast::SourceType<'ctx>,
+        symbols: &Symbols<'ctx>,
         span: Span,
     ) -> LowerResult<'ctx, Type<'ctx>> {
         match typ {
             ast::Type::Named { name, args } => match (self.0.get(name), &args[..]) {
                 (Some(&TypeRef::Name(id)), [(arg, span)]) if id == predef::REF => {
-                    Ok(self.resolve(arg, *span)?)
+                    let flags = symbols
+                        .get_type(id)
+                        .and_then(|def| def.schema().as_aggregate())
+                        .map(Aggregate::flags)
+                        .unwrap_or_default();
+                    let arg = self.resolve(arg, symbols, *span)?;
+                    if flags.is_never_ref() {
+                        return Err(Error::RefOnNeverRefType(*span));
+                    }
+                    let result = if flags.is_mixed_ref() {
+                        Type::app(predef::REF, [arg])
+                    } else {
+                        arg
+                    };
+                    Ok(result)
                 }
                 (Some(&TypeRef::Name(id)), _) => {
                     let args = args
                         .iter()
-                        .map(|(typ, span)| self.resolve(typ, *span))
+                        .map(|(typ, span)| self.resolve(typ, symbols, *span))
                         .collect::<Result<Rc<_>, _>>()?;
                     Ok(Type::app(id, args))
                 }
                 (Some(TypeRef::Var(var)), _) => Ok(Type::Ctx(var.clone())),
                 (Some(TypeRef::LazyVar(stub)), _) => Ok(Type::Ctx(
-                    stub.get(self).map_err(|_| Error::CyclicType(span))??,
+                    stub.get((self, symbols))
+                        .map_err(|_| Error::CyclicType(span))??,
                 )),
                 (None, _) => Err(Error::UnresolvedType(name, span)),
             },
             ast::Type::Array(elem) => {
                 let (elem, span) = &**elem;
-                let elem = self.resolve(elem, *span)?;
+                let elem = self.resolve(elem, symbols, *span)?;
                 Ok(Type::app(predef::ARRAY, [elem]))
             }
             ast::Type::StaticArray(elem, size) => {
                 let (elem, elem_span) = &**elem;
-                let elem = self.resolve(elem, *elem_span)?;
+                let elem = self.resolve(elem, symbols, *elem_span)?;
                 let id = TypeId::array_with_size(*size)
                     .ok_or(Error::UnsupportedStaticArraySize(span))?;
                 Ok(Type::app(id, [elem]))
             }
             ast::Type::Fn {
                 params,
-                return_type: return_typ,
+                return_type,
             } => {
                 let args = params
                     .iter()
-                    .chain([&**return_typ])
-                    .map(|(typ, span)| self.resolve(typ, *span))
+                    .chain([&**return_type])
+                    .map(|(typ, span)| self.resolve(typ, symbols, *span))
                     .collect::<Result<Rc<_>, _>>()?;
-
                 let id =
                     TypeId::fn_with_arity(params.len()).ok_or(Error::UnsupportedArity(span))?;
                 Ok(Type::app(id, args))
@@ -167,13 +182,14 @@ impl<'scope, 'ctx> TypeEnv<'scope, 'ctx> {
     pub fn resolve_param(
         &self,
         param: &ast::SourceTypeParam<'ctx>,
+        symbols: &Symbols<'ctx>,
     ) -> LowerResult<'ctx, CtxVar<'ctx>> {
         let (name, _) = param.name;
         let variance = param.variance.into();
         let upper = param
             .upper_bound
             .as_deref()
-            .map(|(typ, span)| self.resolve(typ, *span))
+            .map(|(typ, span)| self.resolve(typ, symbols, *span))
             .transpose()?;
         Ok(CtxVar::new(name, variance, None, upper))
     }
@@ -265,7 +281,12 @@ pub enum TypeRef<'scope, 'ctx> {
         Rc<
             Lazy<
                 LowerResult<'ctx, Rc<CtxVar<'ctx>>>,
-                Box<dyn Fn(&TypeEnv<'_, 'ctx>) -> LowerResult<'ctx, Rc<CtxVar<'ctx>>> + 'scope>,
+                Box<
+                    dyn Fn(
+                            (&TypeEnv<'_, 'ctx>, &Symbols<'ctx>),
+                        ) -> LowerResult<'ctx, Rc<CtxVar<'ctx>>>
+                        + 'scope,
+                >,
             >,
         >,
     ),

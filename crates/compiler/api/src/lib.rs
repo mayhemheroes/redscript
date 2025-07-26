@@ -1,10 +1,12 @@
+use std::borrow::Cow;
 use std::fmt;
 use std::path::Path;
 
+use bon::bon;
 pub use redscript_ast as ast;
 use redscript_ast::SourceMap;
-pub use redscript_compiler_backend::CompilationInputs;
 use redscript_compiler_backend::{AssembleError, PoolError, PoolMappings};
+pub use redscript_compiler_backend::{CompilationInputs, TypeFlags};
 use redscript_compiler_frontend::UnknownSource;
 use redscript_compiler_frontend::pass::{DiagnosticPass, UnusedLocals};
 pub use redscript_compiler_frontend::{
@@ -17,6 +19,8 @@ use redscript_io::byte;
 pub use redscript_io::{SaveError, ScriptBundle};
 use thiserror::Error;
 
+const DEFAULT_DIAGNOSTICS: &[&'static dyn DiagnosticPass] = &[&UnusedLocals];
+
 pub struct Compilation<'ctx> {
     sources: &'ctx SourceMap,
     symbols: Symbols<'ctx>,
@@ -26,18 +30,22 @@ pub struct Compilation<'ctx> {
     diagnostics: Diagnostics<'ctx>,
 }
 
+#[bon]
 impl<'ctx> Compilation<'ctx> {
-    pub fn new_with(
+    #[builder(finish_fn = compile)]
+    pub fn new(
         bundle: &'ctx [u8],
         sources: &'ctx SourceMap,
-        interner: &'ctx TypeInterner,
-        passes: &[Box<dyn DiagnosticPass<'ctx>>],
+        type_interner: &'ctx TypeInterner,
+        #[builder(default = Cow::Owned(TypeFlags::default()))] type_flags: Cow<'_, TypeFlags>,
+        #[builder(default = DEFAULT_DIAGNOSTICS)] diagnostics: &[&'static dyn DiagnosticPass],
     ) -> Result<Self, Error> {
         let mut reporter = CompileErrorReporter::default();
         let bundle = ScriptBundle::from_bytes(bundle)?;
-        let (symbols, mappings) = CompilationInputs::load(&bundle, interner)?.into_inner();
-        let (unit, symbols) = infer_from_sources(sources, symbols, &mut reporter, interner);
-        unit.run_diagnostics(passes, &mut reporter);
+        let (symbols, mappings) =
+            CompilationInputs::load(&bundle, type_interner, &type_flags)?.into_inner();
+        let (unit, symbols) = infer_from_sources(sources, symbols, &mut reporter, type_interner);
+        unit.run_diagnostics(diagnostics, &mut reporter);
 
         let mut diagnostics = reporter.into_reported();
         diagnostics.sort_by_key(Diagnostic::is_fatal);
@@ -50,14 +58,6 @@ impl<'ctx> Compilation<'ctx> {
             bundle,
             diagnostics: Diagnostics(diagnostics),
         })
-    }
-
-    pub fn new(
-        bundle: &'ctx [u8],
-        sources: &'ctx SourceMap,
-        interner: &'ctx TypeInterner,
-    ) -> Result<Self, Error> {
-        Self::new_with(bundle, sources, interner, &default_diagnostics())
     }
 
     pub fn flush(
@@ -193,8 +193,4 @@ impl SourceMapExt for SourceMap {
             include_str!("../../../../assets/reds/boot.reds"),
         );
     }
-}
-
-fn default_diagnostics<'ctx>() -> Vec<Box<dyn DiagnosticPass<'ctx>>> {
-    vec![Box::new(UnusedLocals)]
 }

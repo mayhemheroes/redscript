@@ -40,6 +40,12 @@ typedef void scc_settings_add_script_path(SccSettings *settings,
 
 typedef void scc_settings_disable_error_popup(SccSettings *settings);
 
+typedef void scc_settings_register_never_ref_type(SccSettings *settings,
+                                                  const char *type_name);
+
+typedef void scc_settings_register_mixed_ref_type(SccSettings *settings,
+                                                  const char *type_name);
+
 typedef SccResult *scc_compile(SccSettings *settings);
 
 typedef void scc_free_result(SccResult *result);
@@ -96,6 +102,22 @@ typedef struct SccApi {
    * compatibility.
    */
   scc_settings_disable_error_popup *settings_disable_error_popup;
+  /**
+   * Registers a type as @neverRef.
+   *
+   * Added in redscript 1.0.0. It will be null if the loaded library version is
+   * older. The caller should do a null check if they want to maintain backward
+   * compatibility.
+   */
+  scc_settings_register_never_ref_type *settings_register_never_ref_type;
+  /**
+   * Registers a type as @mixedRef.
+   *
+   * Added in redscript 1.0.0. It will be null if the loaded library version is
+   * older. The caller should do a null check if they want to maintain backward
+   * compatibility.
+   */
+  scc_settings_register_mixed_ref_type *settings_register_mixed_ref_type;
   /**
    * Runs the compiler with the given settings.
    */
@@ -162,6 +184,10 @@ inline SccApi scc_load_api(HMODULE module) {
           module, "scc_settings_add_script_path"),
       (scc_settings_disable_error_popup *)GetProcAddress(
           module, "scc_settings_disable_error_popup"),
+      (scc_settings_register_never_ref_type *)GetProcAddress(
+          module, "scc_settings_register_never_ref_type"),
+      (scc_settings_register_mixed_ref_type *)GetProcAddress(
+          module, "scc_settings_register_mixed_ref_type"),
       (scc_compile *)GetProcAddress(module, "scc_compile"),
       (scc_free_result *)GetProcAddress(module, "scc_free_result"),
       (scc_get_success *)GetProcAddress(module, "scc_get_success"),

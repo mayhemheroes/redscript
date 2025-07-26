@@ -13,6 +13,7 @@ redscript-compiler-backend.workspace = true
 
 log.workspace = true
 thiserror.workspace = true
+bon.workspace = true
 
 [lints]
 workspace = true

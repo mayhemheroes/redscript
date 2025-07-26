@@ -1,20 +1,25 @@
-use std::sync::LazyLock;
+use std::borrow::Cow;
 
 use hashbrown::HashSet;
 
-pub struct KnownTypes {
-    sealed: HashSet<&'static str>,
-    never_ref: HashSet<&'static str>,
+#[derive(Debug, Clone)]
+pub struct TypeFlags {
+    sealed: HashSet<Cow<'static, str>>,
+    never_ref: HashSet<Cow<'static, str>>,
+    mixed_ref: HashSet<Cow<'static, str>>,
 }
 
-impl KnownTypes {
-    pub fn get() -> &'static Self {
-        static INSTANCE: LazyLock<KnownTypes> = LazyLock::new(|| KnownTypes {
-            sealed: SEALED_TYPES.iter().copied().collect(),
-            never_ref: NEVER_REF_TYPES.iter().copied().collect(),
-        });
+impl TypeFlags {
+    pub fn register_sealed(&mut self, name: impl Into<Cow<'static, str>>) {
+        self.sealed.insert(name.into());
+    }
 
-        &INSTANCE
+    pub fn register_never_ref(&mut self, name: impl Into<Cow<'static, str>>) {
+        self.never_ref.insert(name.into());
+    }
+
+    pub fn register_mixed_ref(&mut self, name: impl Into<Cow<'static, str>>) {
+        self.mixed_ref.insert(name.into());
     }
 
     pub fn is_sealed(&self, name: &str) -> bool {
@@ -24,14 +29,21 @@ impl KnownTypes {
     pub fn is_never_ref(&self, name: &str) -> bool {
         self.never_ref.contains(name)
     }
+
+    pub fn is_mixed_ref(&self, name: &str) -> bool {
+        self.mixed_ref.contains(name)
+    }
 }
 
-const NEVER_REF_TYPES: &[&str] = &[
-    "ReactionData",
-    "JournalEntryOverrideData",
-    "vehicleCinematicCameraShotGroup",
-    "vehicleCinematicCameraShot",
-];
+impl Default for TypeFlags {
+    fn default() -> Self {
+        Self {
+            sealed: SEALED_TYPES.iter().map(|s| Cow::Borrowed(*s)).collect(),
+            never_ref: HashSet::new(),
+            mixed_ref: HashSet::new(),
+        }
+    }
+}
 
 // generated with https://github.com/jac3km4/redscript-sealed-struct-dumper
 // this is a list of native structs that are fully exposed to scripts

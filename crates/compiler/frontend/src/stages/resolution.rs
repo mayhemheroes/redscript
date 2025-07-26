@@ -30,6 +30,7 @@ pub(super) const ADD_METHOD_ANNOTATION: &str = "addMethod";
 pub(super) const ADD_FIELD_ANNOTATION: &str = "addField";
 pub(super) const INTRINSIC_ANNOTATION: &str = "intrinsic";
 pub(super) const NEVER_REF_ANNOTATION: &str = "neverRef";
+pub(super) const MIXED_REF_ANNOTATION: &str = "mixedRef";
 pub(super) const NAME_IMPLEMENTATION_ANNOTATION: &str = "nameImplementation";
 pub(super) const RUNTIME_PROPERTY_ANNOTATION: &str = "runtimeProperty";
 
@@ -98,8 +99,8 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                 continue;
             }
 
-            let meta = ParsedMeta {
-                annotations: annotations.into(),
+            let mut meta = ParsedMeta {
+                annotations,
                 visibility,
                 qualifiers,
                 doc,
@@ -125,6 +126,26 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                         .add_type(path, id)
                         .map_err(|_| Diagnostic::NameRedefinition(name_span));
                     self.reporter.unwrap_err(res);
+
+                    // we initialize and add a stub to enable the compiler to automatically
+                    // resolve the ref type whenever the type is used
+                    let mut flags = AggregateFlags::new();
+                    meta.annotations
+                        .retain(|(ann, _)| match (ann.name, &ann.args[..]) {
+                            (NEVER_REF_ANNOTATION, &[]) => {
+                                flags.set_is_never_ref(true);
+                                false
+                            }
+                            (MIXED_REF_ANNOTATION, &[]) => {
+                                flags.set_is_mixed_ref(true);
+                                false
+                            }
+                            _ => true,
+                        });
+                    let mut stub = Aggregate::default();
+                    stub.set_flags(flags);
+                    self.symbols
+                        .add_type(id, TypeDef::new([], TypeSchema::Aggregate(stub.into()), []));
 
                     match item {
                         ast::Item::Class(aggregate) => {
@@ -362,7 +383,12 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         let mut qs = entry.meta.qualifiers;
         let is_import_only = qs.take_flag(ast::ItemQualifiers::IMPORT_ONLY);
         let is_native = is_import_only || qs.take_flag(ast::ItemQualifiers::NATIVE);
-        let mut class_flags = AggregateFlags::default()
+        let class_flags = self
+            .symbols
+            .get_type(entry.id)
+            .and_then(|def| def.schema().as_aggregate())
+            .map(Aggregate::flags)
+            .unwrap_or_default()
             .with_is_import_only(is_import_only)
             .with_is_native(is_native)
             .with_is_final(qs.take_flag(ast::ItemQualifiers::FINAL))
@@ -378,15 +404,15 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
 
         for (ann, ann_span) in &entry.meta.annotations {
             match (ann.name, &ann.args[..]) {
-                (NEVER_REF_ANNOTATION, &[]) => {
-                    class_flags.set_is_never_ref(true);
-                }
                 (
                     NAME_IMPLEMENTATION_ANNOTATION,
                     [(ast::Expr::DynCast { expr, typ }, expr_span)],
                 ) => {
                     let (typ, type_span) = typ.as_ref();
-                    let Some(typ) = self.reporter.unwrap_err(types.resolve(typ, *type_span)) else {
+                    let Some(typ) =
+                        self.reporter
+                            .unwrap_err(types.resolve(typ, &self.symbols, *type_span))
+                    else {
                         continue;
                     };
                     let Type::Data(typ) = typ else {
@@ -469,7 +495,10 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     let (name, name_span) = let_.name;
                     let (typ, span) = let_.typ.as_ref();
 
-                    let Some(typ) = self.reporter.unwrap_err(types.resolve(typ, *span)) else {
+                    let Some(typ) =
+                        self.reporter
+                            .unwrap_err(types.resolve(typ, &self.symbols, *span))
+                    else {
                         continue;
                     };
                     let flags =
@@ -499,7 +528,11 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
             .extends
             .as_deref()
             .and_then(|(name, span)| {
-                Some((self.reporter.unwrap_err(types.resolve(name, *span))?, *span))
+                Some((
+                    self.reporter
+                        .unwrap_err(types.resolve(name, &self.symbols, *span))?,
+                    *span,
+                ))
             })
             .and_then(|(typ, span)| {
                 if let Type::Data(type_app) = typ {
@@ -740,7 +773,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         let (name, name_span) = field.name;
         let mut id = None;
 
-        let mut annotations = entry.meta.annotations.into_vec();
+        let mut annotations = entry.meta.annotations;
         let mut properties = self.extract_field_properties(&mut annotations);
 
         for (ann, ann_span) in &annotations {
@@ -764,7 +797,9 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     }
 
                     let (typ, span) = field.typ.as_ref();
-                    let typ = self.reporter.unwrap_err(types.resolve(typ, *span))?;
+                    let typ = self
+                        .reporter
+                        .unwrap_err(types.resolve(typ, &self.symbols, *span))?;
                     let flags =
                         self.process_field_flags(entry.meta.qualifiers, flags, &typ, name_span);
 
@@ -1157,7 +1192,9 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     .typ
                     .as_ref()
                     .expect("parameter type should always be present");
-                let typ = self.reporter.unwrap_err(types.resolve(typ, *type_span))?;
+                let typ =
+                    self.reporter
+                        .unwrap_err(types.resolve(typ, &self.symbols, *type_span))?;
                 let qs = param.qualifiers;
                 let flags = ParamFlags::default()
                     .with_is_optional(qs.contains(ast::ParamQualifiers::OPTIONAL))
@@ -1170,7 +1207,10 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         let return_t = func
             .return_type
             .as_deref()
-            .and_then(|(ty, span)| self.reporter.unwrap_err(types.resolve(ty, *span)))
+            .and_then(|(ty, span)| {
+                self.reporter
+                    .unwrap_err(types.resolve(ty, &self.symbols, *span))
+            })
             .unwrap_or_else(|| Type::nullary(predef::VOID));
 
         let func_t = FunctionType::new(vars, params, return_t);
@@ -1193,8 +1233,8 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
 
         for param in params {
             let (name, name_span) = param.name;
-            let typ = TypeRef::LazyVar(Rc::new(Lazy::new(Box::new(|env| {
-                env.resolve_param(param).map(Rc::new)
+            let typ = TypeRef::LazyVar(Rc::new(Lazy::new(Box::new(|(env, symbols)| {
+                env.resolve_param(param, symbols).map(Rc::new)
             }))));
             if types.get(name).is_some() {
                 self.reporter
@@ -1213,7 +1253,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     unreachable!()
                 };
                 let res = lazy
-                    .get(&types)
+                    .get((&types, &self.symbols))
                     .map_err(|_| LowerError::CyclicType(span))
                     .and_then(|res| res);
                 self.reporter.unwrap_err(res)
@@ -1412,7 +1452,7 @@ struct ResolutionStageModule<'ctx> {
 
 #[derive(Debug)]
 struct ParsedMeta<'ctx> {
-    annotations: Box<[ast::Spanned<ast::SourceAnnotation<'ctx>>]>,
+    annotations: Vec<ast::Spanned<ast::SourceAnnotation<'ctx>>>,
     // TODO: visibility
     #[allow(unused)]
     visibility: Option<ast::Visibility>,

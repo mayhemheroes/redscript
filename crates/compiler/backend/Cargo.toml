@@ -9,6 +9,7 @@ redscript-io = { workspace = true, features = ["identity-hash"] }
 redscript-compiler-frontend.workspace = true
 
 thiserror.workspace = true
+bon.workspace = true
 identity-hash.workspace = true
 slab.workspace = true
 smallvec.workspace = true

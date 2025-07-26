@@ -746,7 +746,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 let expr @ (_, expr_span) = &**expr;
                 let (expr, expr_t) = self.lower_expr(expr, env)?;
                 let (typ, type_span) = &**typ;
-                let Type::Data(typ) = env.types().resolve(typ, *type_span)? else {
+                let Type::Data(typ) = env.types().resolve(typ, self.symbols, *type_span)? else {
                     return Err(Error::InvalidDynCastType(*type_span));
                 };
                 let target = InferredTypeApp::from_type(&typ);
@@ -774,7 +774,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             }
             ast::Expr::New { typ, args } => {
                 let (typ, type_span) = &**typ;
-                let Type::Data(typ) = env.types().resolve(typ, *type_span)? else {
+                let Type::Data(typ) = env.types().resolve(typ, self.symbols, *type_span)? else {
                     return Err(Error::InvalidNewType(*type_span));
                 };
                 let def = &self.symbols[typ.id()];
@@ -1773,7 +1773,8 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             Some(Coercion::FromRef(RefType::Script)) => ir::Intrinsic::Deref,
             Some(Coercion::IntoRef(RefType::Script)) => ir::Intrinsic::AsRef,
             Some(Coercion::IntoVariant) => ir::Intrinsic::ToVariant,
-            None => return Ok(()),
+            Some(Coercion::FromRef(RefType::Strong) | Coercion::IntoRef(RefType::Strong))
+            | None => return Ok(()),
         };
         let arg = mem::replace(expr, ir::Expr::null(span));
         let (call, _) = self.new_free_function_call(name, [(arg, lhs)], &[], env, span)?;
@@ -1962,7 +1963,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         env: &Env<'_, 'ctx>,
         span: Span,
     ) -> LowerResult<'ctx, PolyType<'ctx>> {
-        let typ = PolyType::from_type(&env.types().resolve(typ, span)?);
+        let typ = PolyType::from_type(&env.types().resolve(typ, self.symbols, span)?);
         self.check_type(&typ, span)?;
         Ok(typ)
     }
