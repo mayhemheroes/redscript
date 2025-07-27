@@ -743,7 +743,6 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 )
             }
             ast::Expr::DynCast { expr, typ } => {
-                let expr @ (_, expr_span) = &**expr;
                 let (expr, expr_t) = self.lower_expr(expr, env)?;
                 let (typ, type_span) = &**typ;
                 let Type::Data(typ) = env.types().resolve(typ, self.symbols, *type_span)? else {
@@ -755,22 +754,32 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 {
                     expected
                         .constrain(&inner, self.symbols)
-                        .with_span(*expr_span)?;
-                    Type::app(predef::WREF, [expected.clone()]).into_poly()
+                        .map(|_| Type::app(predef::WREF, [expected.clone()]).into_poly())
+                        .map_err(|err| (err, inner))
                 } else {
                     expected
                         .constrain(&expr_t, self.symbols)
-                        .with_span(*expr_span)?;
-                    expected
+                        .map(|_| expected.clone())
+                        .map_err(|err| (err, expr_t.clone()))
                 };
 
-                let ir = ir::Expr::DynCast {
-                    expr: expr.into(),
-                    expr_type: expr_t.into(),
-                    target_type: target.into(),
-                    span: *span,
-                };
-                (ir, inferred)
+                match inferred {
+                    Err((err, inner)) => {
+                        if inner.constrain(&expected, self.symbols).is_ok() {
+                            return Err(Error::RedundantDynCast(*span));
+                        }
+                        return Err(Error::ImpossibleDynCast(err.into(), *span));
+                    }
+                    Ok(inferred) => {
+                        let ir = ir::Expr::DynCast {
+                            expr: expr.into(),
+                            expr_type: expr_t.into(),
+                            target_type: target.into(),
+                            span: *span,
+                        };
+                        (ir, inferred)
+                    }
+                }
             }
             ast::Expr::New { typ, args } => {
                 let (typ, type_span) = &**typ;

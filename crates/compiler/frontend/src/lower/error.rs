@@ -83,6 +83,10 @@ pub enum Error<'ctx> {
     MissingBreakInCaseLet(Span),
     #[error("this type cannot be wrapped with a ref")]
     RefOnNeverRefType(Span),
+    #[error("this cast can never succeed, because the types are not related ({0})")]
+    ImpossibleDynCast(Box<TypeError<'ctx>>, Span),
+    #[error("this cast is redundant, you should remove it")]
+    RedundantDynCast(Span),
 }
 
 impl Error<'_> {
@@ -115,7 +119,9 @@ impl Error<'_> {
             | Self::DeprecatedNameOf(span)
             | Self::NonSealedStructConstruction(_, span)
             | Self::MissingBreakInCaseLet(span)
-            | Self::RefOnNeverRefType(span) => *span,
+            | Self::RefOnNeverRefType(span)
+            | Self::ImpossibleDynCast(_, span)
+            | Self::RedundantDynCast(span) => *span,
         }
     }
 
@@ -149,6 +155,8 @@ impl Error<'_> {
             Self::NonSealedStructConstruction(_, _) => "NON_SEALED_CTR",
             Self::MissingBreakInCaseLet(_) => "MISSING_BREAK",
             Self::RefOnNeverRefType(_) => "REF_ON_NEVER_REF",
+            Self::ImpossibleDynCast(_, _) => "IMPOSSIBLE_DYN_CAST",
+            Self::RedundantDynCast(_) => "REDUNDANT_DYN_CAST",
         }
     }
 

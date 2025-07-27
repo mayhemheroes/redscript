@@ -1,0 +1,14 @@
+---
+source: crates/compiler/frontend/tests/errors.rs
+expression: "DisplayDiagnostics(reporter.into_reported(), &sources)"
+input_file: crates/compiler/frontend/tests/data/dyn-cast-checks.reds
+---
+[IMPOSSIBLE_DYN_CAST] At tests/data/dyn-cast-checks.reds:15:11
+  let _ = a as ClassC; // Impossible
+          ^^^^^^^^^^^
+this cast can never succeed, because the types are not related (type mismatch: found ClassC when expected ClassA)
+
+[REDUNDANT_DYN_CAST] At tests/data/dyn-cast-checks.reds:16:11
+  let _ = b as ClassA; // Redundant
+          ^^^^^^^^^^^
+this cast is redundant, you should remove it
