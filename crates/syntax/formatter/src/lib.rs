@@ -49,9 +49,11 @@ pub fn format_document<'a>(
 
     let (tokens, e) = lex_with_lf_and_comments(source, id);
     errors.extend(e);
-    let Some(tokens) = tokens else {
+    let Some(mut tokens) = tokens else {
         return (None, errors);
     };
+    tokens.retain(|(t, _)| !matches!(t, Token::Whitespace));
+
     let (ws, tokens): (Vec<_>, Vec<_>) =
         tokens.into_iter().partition(|(t, _)| t.is_ws_or_comment());
 

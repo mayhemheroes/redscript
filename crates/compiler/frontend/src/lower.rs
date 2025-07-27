@@ -799,10 +799,12 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
 
                         if aggregate.flags().is_native() && !aggregate.flags().is_sealed() {
                             if !args.is_empty() {
-                                return Err(Error::NonSealedStructConstruction(typ.id(), *span));
+                                self.reporter
+                                    .report(Error::NonSealedStructConstruction(typ.id(), *span));
                             }
                         } else if args.len() != field_count {
-                            return Err(Error::InvalidArgCount(field_count..=field_count, *span));
+                            self.reporter
+                                .report(Error::InvalidArgCount(field_count..=field_count, *span));
                         }
 
                         let type_env = typ.type_env(self.symbols);

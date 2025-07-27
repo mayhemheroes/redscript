@@ -87,28 +87,21 @@ pub fn lex<'src>(
 
     let comment = line_comment.or(block_comment);
 
-    let tok = if keep_lf_and_comments {
-        recursive(|this| {
-            let lf = text::newline().to(Token::LineFeed);
-            choice((lf, comment, str, interp_str(this), num, symbol(), word))
-                .padded_by(text::inline_whitespace())
-                .recover_with(skip_then_retry_until(any().ignored(), end()))
-                .map_with(|tok, e| (tok, e.span()))
-        })
-    } else {
-        recursive(|this| {
-            choice((comment, str, interp_str(this), num, symbol(), word))
-                .padded()
-                .recover_with(skip_then_retry_until(any().ignored(), end()))
-                .map_with(|tok, e| (tok, e.span()))
-        })
-    };
+    recursive(|this| {
+        let lf = text::newline().to(Token::LineFeed);
+        let ws = text::inline_whitespace().at_least(1).to(Token::Whitespace);
 
-    tok.repeated().collect::<Vec<_>>().map(move |mut toks| {
-        if !keep_lf_and_comments {
-            toks.retain(|(tok, _)| !tok.is_ws_or_comment());
-        }
-        toks
+        choice((lf, ws, comment, str, interp_str(this), num, symbol(), word))
+            .recover_with(skip_then_retry_until(any().ignored(), end()))
+            .map_with(|tok, e| (tok, e.span()))
+            .repeated()
+            .collect::<Vec<_>>()
+            .map(move |mut toks| {
+                if !keep_lf_and_comments {
+                    toks.retain(|(tok, _)| !tok.is_ws_or_comment());
+                }
+                toks
+            })
     })
 }
 
@@ -146,7 +139,7 @@ fn str_elem<'src>() -> impl Parser<'src, &'src str, Cow<'src, str>, LexExtra<'sr
 }
 
 fn interp_str<'src>(
-    tok: impl Parser<'src, &'src str, (Token<'src, LexSpan>, LexSpan), LexExtra<'src>> + Clone,
+    toks: impl Parser<'src, &'src str, Vec<(Token<'src, LexSpan>, LexSpan)>, LexExtra<'src>> + Clone,
 ) -> impl Parser<'src, &'src str, Token<'src, LexSpan>, LexExtra<'src>> + Clone {
     let balanced_parens = recursive(|p| {
         just('(')
@@ -163,11 +156,7 @@ fn interp_str<'src>(
                 .collect::<StrParts<'_>>()
                 .map(|ps| Token::StrFrag(ps.str)),
             just("\\")
-                .ignore_then(
-                    tok.repeated()
-                        .collect::<Vec<_>>()
-                        .nested_in(balanced_parens),
-                )
+                .ignore_then(toks.nested_in(balanced_parens))
                 .map(|tok| Token::Group(tok.into())),
         ))
         .map_with(|tok, e| (tok, e.span()))
@@ -254,6 +243,7 @@ pub enum Token<'src, S = Span> {
     LineComment(&'src str),
     DocComment(&'src str),
     BlockComment(&'src str),
+    Whitespace,
     LineFeed,
 
     AssignAdd,
@@ -311,7 +301,7 @@ impl<'src, S1> Token<'src, S1> {
     pub fn is_ws_or_comment(&self) -> bool {
         matches!(
             self,
-            Self::LineComment(_) | Self::BlockComment(_) | Self::LineFeed
+            Self::LineComment(_) | Self::BlockComment(_) | Self::LineFeed | Self::Whitespace
         )
     }
 
@@ -353,6 +343,7 @@ impl<'src, S1> Token<'src, S1> {
             Self::LineComment(s) => Token::LineComment(s),
             Self::DocComment(s) => Token::DocComment(s),
             Self::BlockComment(s) => Token::BlockComment(s),
+            Self::Whitespace => Token::Whitespace,
             Self::LineFeed => Token::LineFeed,
             Self::AssignAdd => Token::AssignAdd,
             Self::AssignSub => Token::AssignSub,
@@ -426,6 +417,7 @@ impl fmt::Display for Token<'_> {
                 }
                 write!(f, "\"")
             }
+            Self::Whitespace => write!(f, " "),
             Self::LineFeed => writeln!(f),
             Self::Group(s) => {
                 for (tok, _) in s {

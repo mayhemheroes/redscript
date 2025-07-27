@@ -405,7 +405,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         }
 
         let mut implementations = HashMap::default();
-        let mut derive_new = false;
+        let mut derive_new = None;
 
         for (ann, ann_span) in &entry.meta.annotations {
             match (ann.name, &ann.args[..]) {
@@ -448,9 +448,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                         self.reporter.report(Diagnostic::DuplicateImpl(*type_span));
                     }
                 }
-                (DERIVE_NEW_ANNOTATION, []) => {
-                    derive_new = true;
-                }
+                (DERIVE_NEW_ANNOTATION, []) => derive_new = Some(*ann_span),
                 _ => {
                     self.reporter
                         .report(Diagnostic::UnknownAnnotation(ann.name, *ann_span));
@@ -552,14 +550,14 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     .then(|| TypeApp::nullary(predef::ISCRIPTABLE))
             });
 
-        if derive_new {
-            let method = derive_new::derive_new_method(entry.id, &vars, fields.iter(), name_span);
+        if let Some(derive_span) = derive_new {
+            let method = derive_new::derive_new_method(entry.id, &vars, fields.iter(), derive_span);
             let id = methods.add(NEW_METHOD_IDENT, method);
             method_items.push(derive_new::derive_new_method_item(
                 id,
                 aggregate_name,
                 fields.iter(),
-                name_span,
+                derive_span,
             ));
         }
 

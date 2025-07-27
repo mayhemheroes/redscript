@@ -3,9 +3,10 @@ use std::rc::Rc;
 use indexmap::IndexMap;
 use redscript_ast::{self as ast, Span};
 
+use crate::stages::infer::FuncItem;
+use crate::symbols::FieldEntry;
 use crate::{
     CtxVar, FunctionIndex, FunctionType, Method, MethodFlags, Param, ParamFlags, Type, TypeId,
-    stages::infer::FuncItem, symbols::FieldEntry,
 };
 
 pub fn derive_new_method<'e, 'ctx: 'e>(

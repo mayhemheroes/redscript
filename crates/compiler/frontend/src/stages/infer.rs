@@ -206,7 +206,7 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
 #[allow(clippy::too_many_arguments)]
 fn lower_function<'ctx>(
     func_type: &FunctionType<'ctx>,
-    params: &[&'ctx str],
+    param_names: &[&'ctx str],
     body: &ast::SourceFunctionBody<'ctx>,
     this: Option<PolyType<'ctx>>,
     mut env: Env<'_, 'ctx>,
@@ -222,7 +222,7 @@ fn lower_function<'ctx>(
     let params = func_type
         .params()
         .iter()
-        .zip(params)
+        .zip(param_names)
         .map(|(param, &name)| (name, PolyType::from_type(param.type_())));
     let return_t = PolyType::from_type(func_type.return_type());
 

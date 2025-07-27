@@ -1,16 +1,16 @@
 ---
 source: crates/compiler/frontend/tests/errors.rs
-expression: "DisplayDiagnostics(diagnostics, &sources)"
+expression: "DisplayDiagnostics(reporter.into_reported(), &sources)"
 input_file: crates/compiler/frontend/tests/data/class-checks.reds
 ---
 [SYM_REDEFINITION] At tests/data/class-checks.reds:23:7
 class ClassDefinedTwice {}
-      ^^^^^^^^^^^^^^^^^^
+      ^^^^^^^^^^^^^^^^^
 this name is already defined in the scope
 
 [INVALID_ANN_USE] At tests/data/class-checks.reds:19:1
 @badAnnotation()
-^^^
+^^^^^^^^^^^^^^^^
 'badAnnotation' is not a valid annotation in this context
 
 [UNEXPECTED_NATIVE] At tests/data/class-checks.reds:49:14
@@ -55,7 +55,7 @@ struct methods must be static
 
 [SYM_REDEFINITION] At tests/data/class-checks.reds:85:21
 @nameImplementation(ClashingIntStruct as GenericStruct<Int32>)
-                    ^^^^^^^^^^^^^^^^^^
+                    ^^^^^^^^^^^^^^^^^
 this name is already defined in the scope
 
 [DUP_IMPL] At tests/data/class-checks.reds:87:46
@@ -65,17 +65,17 @@ this implementation is a duplicate of a previous one
 
 [INVALID_BASE] At tests/data/class-checks.reds:4:7
 class ClassExtendingStruct extends Struct {}
-      ^^^^^^^^^^^^^^^^^^^^^
+      ^^^^^^^^^^^^^^^^^^^^
 this type cannot inherit from a struct
 
 [INVALID_BASE] At tests/data/class-checks.reds:17:7
 class ClassExtendingPrimitive extends Int32 {}
-      ^^^^^^^^^^^^^^^^^^^^^^^^
+      ^^^^^^^^^^^^^^^^^^^^^^^
 this type cannot inherit from a primitive
 
 [INVALID_TYPE_ARG_COUNT] At tests/data/class-checks.reds:35:7
 class ClassWithInvalidTypeArgCounts extends AbstractClass<Int32, Int32> {
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 type AbstractClass expects 1 type arguments
 
 [INVALID_TYPE_ARG_COUNT] At tests/data/class-checks.reds:36:7
@@ -90,7 +90,7 @@ type AbstractClass expects 1 type arguments
 
 [INVALID_BASE] At tests/data/class-checks.reds:41:7
 class CircularClassA extends CircularClassB {}
-      ^^^^^^^^^^^^^^^
+      ^^^^^^^^^^^^^^
 this class circularly extends itself
 
 [INVALID_VARIANCE] At tests/data/class-checks.reds:65:16
@@ -105,27 +105,27 @@ the type 'B' appears in covariant position, which is incompatible with its decla
 
 [UNSASTISFIED_BOUND] At tests/data/class-checks.reds:78:7
 class ClassViolatingBound extends ClassWithBound<Chair> {}
-      ^^^^^^^^^^^^^^^^^^^^
+      ^^^^^^^^^^^^^^^^^^^
 type Chair does not satisfy expected bound Animal
 
 [DUP_METHOD] At tests/data/class-checks.reds:25:7
 class ClassWithDuplicateMethod {
-      ^^^^^^^^^^^^^^^^^^^^^^^^^
+      ^^^^^^^^^^^^^^^^^^^^^^^^
 this class contains a duplicated implementation of the 'Method' method
 
 [MISSING_IMPL] At tests/data/class-checks.reds:11:7
 class IncompleteClass extends AbstractClass<Int32> {}
-      ^^^^^^^^^^^^^^^^
+      ^^^^^^^^^^^^^^^
 this class is missing some required method implementation(s):
   func UnimplementedMethod(a: Int32) {}
 
 [FINAL_FN_OVERRIDE] At tests/data/class-checks.reds:30:7
 class ClassOverridingFinalMethod extends AbstractClass<Int32> {
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^
 this class overrides a final method 'FinalMethod'
 
 [MISSING_IMPL] At tests/data/class-checks.reds:35:7
 class ClassWithInvalidTypeArgCounts extends AbstractClass<Int32, Int32> {
-      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 this class is missing some required method implementation(s):
   func UnimplementedMethod(a: Int32) {}
