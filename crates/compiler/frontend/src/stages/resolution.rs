@@ -24,6 +24,8 @@ use crate::{
     TypeRef, TypeSchema, TypeScope, Variance, ir, predef,
 };
 
+mod derive_new;
+
 pub(super) const WRAP_METHOD_ANNOTATION: &str = "wrapMethod";
 pub(super) const REPLACE_METHOD_ANNOTATION: &str = "replaceMethod";
 pub(super) const ADD_METHOD_ANNOTATION: &str = "addMethod";
@@ -33,9 +35,11 @@ pub(super) const NEVER_REF_ANNOTATION: &str = "neverRef";
 pub(super) const MIXED_REF_ANNOTATION: &str = "mixedRef";
 pub(super) const NAME_IMPLEMENTATION_ANNOTATION: &str = "nameImplementation";
 pub(super) const RUNTIME_PROPERTY_ANNOTATION: &str = "runtimeProperty";
+pub(super) const DERIVE_NEW_ANNOTATION: &str = "deriveNew";
 
 pub(super) const THIS_IDENT: &str = "this";
 pub(super) const WRAPPED_METHOD_IDENT: &str = "wrappedMethod";
+pub(super) const NEW_METHOD_IDENT: &str = "New";
 
 #[derive(Debug)]
 pub struct NameResolution<'scope, 'ctx> {
@@ -377,7 +381,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         is_struct: bool,
     ) -> ClassItem<'a, 'ctx> {
         let aggregate = entry.aggregate;
-        let (_, name_span) = aggregate.name;
+        let (aggregate_name, name_span) = aggregate.name;
         let span = entry.meta.span;
 
         let mut qs = entry.meta.qualifiers;
@@ -401,6 +405,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         }
 
         let mut implementations = HashMap::default();
+        let mut derive_new = false;
 
         for (ann, ann_span) in &entry.meta.annotations {
             match (ann.name, &ann.args[..]) {
@@ -443,6 +448,9 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                         self.reporter.report(Diagnostic::DuplicateImpl(*type_span));
                     }
                 }
+                (DERIVE_NEW_ANNOTATION, []) => {
+                    derive_new = true;
+                }
                 _ => {
                     self.reporter
                         .report(Diagnostic::UnknownAnnotation(ann.name, *ann_span));
@@ -479,16 +487,12 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
 
                     let method = Method::new(flags, func_t, None, item.doc, Some(name_span));
                     let id = methods.add(name, method);
+                    let params = func.param_names().collect::<Box<[_]>>();
                     let Some(body) = func.body else {
                         continue;
                     };
                     method_items.push(FuncItem::new(
-                        id,
-                        item_span,
-                        name_span,
-                        func.params,
-                        body,
-                        type_scope,
+                        id, item_span, name_span, params, body, type_scope,
                     ));
                 }
                 ast::Item::Let(let_) => {
@@ -547,6 +551,17 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     .not()
                     .then(|| TypeApp::nullary(predef::ISCRIPTABLE))
             });
+
+        if derive_new {
+            let method = derive_new::derive_new_method(entry.id, &vars, fields.iter(), name_span);
+            let id = methods.add(NEW_METHOD_IDENT, method);
+            method_items.push(derive_new::derive_new_method_item(
+                id,
+                aggregate_name,
+                fields.iter(),
+                name_span,
+            ));
+        }
 
         let aggregate = Aggregate::new(
             class_flags,
@@ -624,6 +639,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         let (name, name_span) = func.name;
         let (func_t, type_scope) = self.create_function_env(&func, types);
         let span = entry.meta.span;
+        let param_names = func.param_names().collect::<Box<[_]>>();
 
         let mut intrinsic: Option<ir::Intrinsic> = None;
         let mut replaced: Option<MethodId<'ctx>> = None;
@@ -692,7 +708,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     MethodId::new(id, idx),
                     span,
                     name_span,
-                    func.params,
+                    param_names,
                     func.body,
                     type_scope,
                 );
@@ -726,11 +742,11 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                 (func, body)
             }
             (Some(body), None, Some(replaced), None) => {
-                let func = FuncItem::new(replaced, span, name_span, func.params, body, type_scope);
+                let func = FuncItem::new(replaced, span, name_span, param_names, body, type_scope);
                 return Some(FuncItemKind::ReplaceMethod(func));
             }
             (Some(body), None, None, Some(wrapped)) => {
-                let func = FuncItem::new(wrapped, span, name_span, func.params, body, type_scope);
+                let func = FuncItem::new(wrapped, span, name_span, param_names, body, type_scope);
                 return Some(FuncItemKind::WrapMethod(func));
             }
             (Some(_), _, _, _) => {
@@ -756,7 +772,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                 entry.index,
                 span,
                 name_span,
-                func.params,
+                param_names,
                 body,
                 type_scope,
             ))

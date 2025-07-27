@@ -298,6 +298,10 @@ impl<'src, K: AstKind> Function<'src, K> {
             body: self.body.map(|b| b.into_wrapped().unwrapped()),
         }
     }
+
+    pub fn param_names(&self) -> impl ExactSizeIterator<Item = &'src str> {
+        self.params.iter().map(|p| p.as_wrapped().name)
+    }
 }
 
 #[derive_where(Debug, Clone, PartialEq)]

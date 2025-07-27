@@ -547,7 +547,7 @@ impl<'ctx> FieldMap<'ctx> {
         }
     }
 
-    pub fn iter(&self) -> impl ExactSizeIterator<Item = FieldEntry<'_, 'ctx>> {
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = FieldEntry<'_, 'ctx>> + Clone {
         self.map
             .iter()
             .enumerate()

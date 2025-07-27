@@ -54,7 +54,7 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                     let method = &self.symbols[id];
                     let func = lower_function(
                         method.type_(),
-                        &item.params,
+                        &item.params_names,
                         &item.body,
                         method.flags().is_static().not().then(|| this_t.clone()),
                         Env::new(&types.push_scope(item.scope), &scope.funcs),
@@ -95,7 +95,7 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                     FuncItemKind::FreeFunction(func) => {
                         let value = lower_function(
                             self.symbols[func.id].type_(),
-                            &func.params,
+                            &func.params_names,
                             &func.body,
                             None,
                             Env::new(&scope.types.push_scope(func.scope), &scope.funcs),
@@ -109,7 +109,7 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                         let sym = &self.symbols[func.id];
                         let lowered = lower_function(
                             sym.type_(),
-                            &func.params,
+                            &func.params_names,
                             &func.body,
                             sym.flags()
                                 .is_static()
@@ -132,7 +132,7 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                                 .then(|| PolyType::nullary(func.id.parent()));
                             lower_function(
                                 sym.type_(),
-                                &func.params,
+                                &func.params_names,
                                 body,
                                 this,
                                 Env::new(&scope.types.push_scope(func.scope), &scope.funcs),
@@ -156,7 +156,7 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                         let sym = &self.symbols[func.id];
                         let lowered = lower_function(
                             sym.type_(),
-                            &func.params,
+                            &func.params_names,
                             &func.body,
                             sym.flags()
                                 .is_static()
@@ -206,7 +206,7 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
 #[allow(clippy::too_many_arguments)]
 fn lower_function<'ctx>(
     func_type: &FunctionType<'ctx>,
-    params: &[Spanned<ast::SourceParam<'ctx>>],
+    params: &[&'ctx str],
     body: &ast::SourceFunctionBody<'ctx>,
     this: Option<PolyType<'ctx>>,
     mut env: Env<'_, 'ctx>,
@@ -223,7 +223,7 @@ fn lower_function<'ctx>(
         .params()
         .iter()
         .zip(params)
-        .map(|(param, (sp, _))| (sp.name, PolyType::from_type(param.type_())));
+        .map(|(param, &name)| (name, PolyType::from_type(param.type_())));
     let return_t = PolyType::from_type(func_type.return_type());
 
     let (block, output, errors) = Lower::function(body, params, env, return_t, symbols);
@@ -324,7 +324,7 @@ pub struct FuncItem<'scope, 'ctx, K, B = ast::SourceFunctionBody<'ctx>> {
     id: K,
     span: Span,
     name_span: Span,
-    params: Box<[Spanned<ast::SourceParam<'ctx>>]>,
+    params_names: Box<[&'ctx str]>,
     body: B,
     scope: TypeScope<'scope, 'ctx>,
 }
@@ -335,7 +335,7 @@ impl<'scope, 'ctx, K, B> FuncItem<'scope, 'ctx, K, B> {
         id: K,
         span: Span,
         name_span: Span,
-        params: Box<[Spanned<ast::SourceParam<'ctx>>]>,
+        params_names: impl Into<Box<[&'ctx str]>>,
         body: B,
         scope: TypeScope<'scope, 'ctx>,
     ) -> Self {
@@ -343,7 +343,7 @@ impl<'scope, 'ctx, K, B> FuncItem<'scope, 'ctx, K, B> {
             id,
             span,
             name_span,
-            params,
+            params_names: params_names.into(),
             body,
             scope,
         }
