@@ -27,6 +27,17 @@ pub fn lowercase(thing: &str) -> impl fmt::Display + Clone + use<'_> {
     })
 }
 
+pub fn surrounded_by<'a, A>(
+    thing: A,
+    left: &'a str,
+    right: &'a str,
+) -> impl fmt::Display + Clone + use<'a, A>
+where
+    A: fmt::Display + Clone,
+{
+    DisplayFn::new(move |f: &mut fmt::Formatter<'_>| write!(f, "{left}{thing}{right}"))
+}
+
 pub fn sep_by<T, I>(iter: I, sep: &str) -> impl fmt::Display + use<'_, T, I>
 where
     I: IntoIterator<Item = T>,

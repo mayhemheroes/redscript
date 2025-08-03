@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use hashbrown::{HashMap, HashSet};
 use redscript_compiler_api::ast::SourceMap;
-use redscript_compiler_api::{Diagnostic, Diagnostics};
+use redscript_compiler_api::{DiagnosticLevel, Diagnostics};
 use thiserror::Error;
 
 use crate::SccSettings;
@@ -72,7 +72,7 @@ impl CompilationFailure {
     ) -> anyhow::Result<Self> {
         let fatal = diagnostics
             .into_iter()
-            .filter(Diagnostic::is_fatal)
+            .filter(|d| d.level() == DiagnosticLevel::Error)
             .collect::<Vec<_>>();
 
         let failing_files = fatal

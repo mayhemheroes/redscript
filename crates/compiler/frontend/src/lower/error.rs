@@ -4,6 +4,7 @@ use std::ops::RangeInclusive;
 use redscript_ast::Span;
 use thiserror::Error;
 
+use crate::diagnostic::DiagnosticLevel;
 use crate::lower::types::{InferredType, InferredTypeApp};
 use crate::types::{MAX_FN_ARITY, MAX_STATIC_ARRAY_SIZE, TypeId, predef};
 
@@ -14,15 +15,15 @@ pub type LowerResult<'id, A, E = Error<'id>> = Result<A, E>;
 pub enum Error<'ctx> {
     #[error("{0}")]
     Type(Box<TypeError<'ctx>>, Span),
-    #[error("'{0}' is not defined")]
+    #[error("`{0}` is not defined")]
     UnresolvedVar(&'ctx str, Span),
-    #[error("'{0}' is not a known type")]
+    #[error("`{0}` is not a known type")]
     UnresolvedType(&'ctx str, Span),
-    #[error("'{0}' has no member named '{1}'")]
+    #[error("`{0}` has no member named `{1}`")]
     UnresolvedMember(TypeId<'ctx>, &'ctx str, Span),
-    #[error("{1} matching overloads found for '{0}'")]
+    #[error("{1} matching overloads found for `{0}`")]
     MultipleMatchingOverloads(&'ctx str, usize, Span),
-    #[error("there's no matching '{0}' function")]
+    #[error("there's no matching `{0}` function")]
     UnresolvedFunction(&'ctx str, Span),
     #[error("invalid number of arguments, expected {}", DisplayRangeInclusive(.0))]
     InvalidArgCount(RangeInclusive<usize>, Span),
@@ -31,9 +32,9 @@ pub enum Error<'ctx> {
          type annotations"
     )]
     InsufficientTypeInformation(Span),
-    #[error("this type cannot be constructed with the 'new' operator")]
+    #[error("this type cannot be constructed with the `new` operator")]
     InvalidNewType(Span),
-    #[error("this type cannot be casted with the 'as' operator")]
+    #[error("this type cannot be casted with the `as` operator")]
     InvalidDynCastType(Span),
     #[error("the target type of this cast is not known, consider specifying it")]
     UnknownStaticCastType(Span),
@@ -58,10 +59,10 @@ pub enum Error<'ctx> {
     #[error("this literal is out of range for {0}{hint}", hint = NumberTypeRangeHint(*.0))]
     LiteralOutOfRange(TypeId<'ctx>, Span),
     #[error(
-        r#"expected a {0} here, you should prefix your literal with '{1}', e.g. {1}"lorem ipsum""#
+        r#"expected a `{0}` here, you should prefix your literal with '{1}', e.g. {1}"lorem ipsum""#
     )]
     WrongStringLiteral(TypeId<'ctx>, char, Span),
-    #[error("'{0}' is an abstract class and cannot be instantiated")]
+    #[error("`{0}` is an abstract class and cannot be instantiated")]
     InstantiatingAbstract(TypeId<'ctx>, Span),
     #[error("this type has no super type to refer to")]
     NonExistentSuperType(Span),
@@ -74,11 +75,11 @@ pub enum Error<'ctx> {
     #[error("the `NameOf(Type)` syntax is deprecated, use `NameOf<Type>()` instead")]
     DeprecatedNameOf(Span),
     #[error(
-        "'{0}' is a native struct with an incomplete script definition, passing arguments to its \
+        "`{0}` is a native struct with an incomplete script definition, passing arguments to its \
         constructor might result in undefined behavior, it can however still be safely \
-        constructed without arguments: 'new {0}()'"
+        constructed without arguments: `new {0}()`"
     )]
-    NonSealedStructConstruction(TypeId<'ctx>, Span),
+    NonFullyDefinedNativeStructConstruction(TypeId<'ctx>, Span),
     #[error("`case let` block must end with a `break` or `return` statement")]
     MissingBreakInCaseLet(Span),
     #[error("this type cannot be wrapped with a ref")]
@@ -121,7 +122,7 @@ impl Error<'_> {
             | Self::InvalidTemporary(span)
             | Self::UnexpectedNonConstant(span)
             | Self::DeprecatedNameOf(span)
-            | Self::NonSealedStructConstruction(_, span)
+            | Self::NonFullyDefinedNativeStructConstruction(_, span)
             | Self::MissingBreakInCaseLet(span)
             | Self::RefOnNeverRefType(span)
             | Self::ImpossibleDynCast(_, span)
@@ -158,13 +159,23 @@ impl Error<'_> {
             Self::InvalidTemporary(_) => "INVALID_TEMP",
             Self::UnexpectedNonConstant(_) => "INVALID_CONSTANT",
             Self::DeprecatedNameOf(_) => "DEPRECATED_SYNTAX",
-            Self::NonSealedStructConstruction(_, _) => "NON_SEALED_CTR",
+            Self::NonFullyDefinedNativeStructConstruction(_, _) => "NON_SEALED_CTR",
             Self::MissingBreakInCaseLet(_) => "MISSING_BREAK",
             Self::RefOnNeverRefType(_) => "REF_ON_NEVER_REF",
             Self::ImpossibleDynCast(_, _) => "IMPOSSIBLE_DYN_CAST",
             Self::RedundantDynCast(_) => "REDUNDANT_DYN_CAST",
             Self::PrivateMemberAccess(_) => "PRIVATE_MEMBER_ACCESS",
             Self::ProtectedMemberAccess(_) => "PROTECTED_MEMBER_ACCESS",
+        }
+    }
+
+    pub fn level(&self) -> DiagnosticLevel {
+        match self {
+            Self::DeprecatedNameOf(_) => DiagnosticLevel::Warning,
+            Self::PrivateMemberAccess(_) | Self::ProtectedMemberAccess(_) => {
+                DiagnosticLevel::ErrorAllowedAtRuntime
+            }
+            _ => DiagnosticLevel::Error,
         }
     }
 
@@ -210,13 +221,13 @@ impl<T: fmt::Display + PartialEq> fmt::Display for DisplayRangeInclusive<'_, T> 
 
 #[derive(Debug, Clone, Error)]
 pub enum TypeError<'ctx> {
-    #[error("type mismatch: found {0} when expected {1}")]
+    #[error("type mismatch: found `{0}` when expected `{1}`")]
     Mismatch(InferredType<'ctx>, InferredType<'ctx>),
-    #[error("type error: {0} is not compatible with {1}")]
+    #[error("type error: `{0}` is not compatible with `{1}`")]
     Incompatible(InferredTypeApp<'ctx>, InferredTypeApp<'ctx>),
-    #[error("type error: cannot unify {0} and {1}")]
+    #[error("type error: cannot unify `{0}` and `{1}`")]
     CannotUnify(InferredType<'ctx>, InferredType<'ctx>),
-    #[error("{0}\n  when comparing {1} and {2}")]
+    #[error("{0}\n  when comparing `{1}` and `{2}`")]
     Nested(Box<Self>, InferredType<'ctx>, InferredType<'ctx>),
 }
 
@@ -229,11 +240,11 @@ impl fmt::Display for CoalesceError<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::CannotCoalesce(lower, upper) => {
-                write!(f, "type is too broad ({lower} <: T <: ")?;
+                write!(f, "type is too broad (`{lower}` <: T <: ")?;
                 if let Some(upper) = upper {
-                    write!(f, "{upper}")?;
+                    write!(f, "`{upper}`")?;
                 } else {
-                    write!(f, "Any")?;
+                    write!(f, "`Any`")?;
                 }
                 write!(f, " for some type T), consider adding type annotations")
             }

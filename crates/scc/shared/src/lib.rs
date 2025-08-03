@@ -7,7 +7,10 @@ use fd_lock::RwLock;
 use output::extract_refs;
 pub use output::{SccOutput, SourceRef, SourceRefType};
 use redscript_compiler_api::ast::SourceMap;
-use redscript_compiler_api::{Compilation, FlushError, SaveError, SourceMapExt, TypeInterner};
+use redscript_compiler_api::{
+    Compilation, Diagnostic, DiagnosticFilter, DiagnosticLevel, FlushError, SaveError,
+    SourceMapExt, TypeInterner,
+};
 use report::{CompilationFailure, ErrorReport};
 pub use settings::SccSettings;
 use settings::{BACKUP_FILE_EXT, TIMESTAMP_FILE_EXT};
@@ -20,6 +23,8 @@ mod output;
 mod report;
 mod settings;
 mod timestamp;
+
+const FATAL_DIAGNOSTIC_LEVEL: DiagnosticLevel = DiagnosticLevel::Error;
 
 pub fn compile(settings: &SccSettings) -> anyhow::Result<SccOutput> {
     logger::setup(settings.root_dir());
@@ -72,13 +77,17 @@ fn compile_inner(settings: &SccSettings) -> anyhow::Result<SccOutput> {
 
     let interner = TypeInterner::default();
     let (mmap, _f) = Map::with_options().open(&input_file)?;
+
     let refs = {
+        let diagnostic_filter = DiagnosticFilter::Predicate(Box::new(diagnostic_filter));
+
         match Compilation::builder()
             .bundle(&mmap)
             .sources(&sources)
             .type_interner(&interner)
             .diagnostics(&[])
             .type_flags(Cow::Borrowed(settings.type_flags()))
+            .fatal_diagnostic_level(FATAL_DIAGNOSTIC_LEVEL)
             .compile()?
             .flush(&output_file)
         {
@@ -91,13 +100,13 @@ fn compile_inner(settings: &SccSettings) -> anyhow::Result<SccOutput> {
                 );
             }
             Err(FlushError::CompilationErrors(diagnostics)) => {
-                diagnostics.dump(&sources)?;
+                diagnostics.dump(&sources, diagnostic_filter)?;
 
                 return Err(CompilationFailure::new(diagnostics, &sources, settings)?.into());
             }
             Err(err) => anyhow::bail!("{err}"),
             Ok((syms, diagnostics)) => {
-                diagnostics.dump(&sources)?;
+                diagnostics.dump(&sources, diagnostic_filter)?;
 
                 log::info!("Succesfully written '{}'", output_file.display());
                 extract_refs(&syms, &interner)
@@ -183,4 +192,8 @@ fn prepare_input_cache(settings: &SccSettings, ts_file: &mut fs::File) -> anyhow
         }
         Ok(backup_file)
     }
+}
+
+fn diagnostic_filter(dia: &Diagnostic<'_>) -> bool {
+    dia.level() == DiagnosticLevel::Error || dia.level() == DiagnosticLevel::Warning
 }

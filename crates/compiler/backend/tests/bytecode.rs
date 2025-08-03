@@ -32,7 +32,7 @@ fn bytecode() {
         let (unit, symbols) = infer_from_sources(&sources, symbols, &mut reporter, &interner);
         let diagnostics = reporter.into_reported();
         assert_eq!(
-            diagnostics.iter().filter(|d| d.is_fatal()).count(),
+            diagnostics.iter().filter(|d| d.is_error()).count(),
             0,
             "{}: {}",
             Diagnostics::from(diagnostics),

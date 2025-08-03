@@ -6,7 +6,7 @@ input_file: crates/compiler/frontend/tests/data/pattern-checks.reds
 [TYPE_ERR] At tests/data/pattern-checks.reds:3:10
   if let Struct { field } = new Struct(1) {
          ^^^^^^
-type mismatch: found Struct when expected IScriptable
+type mismatch: found `Struct` when expected `IScriptable`
 
 [MISSING_BREAK] At tests/data/pattern-checks.reds:7:14
     case let [a]:

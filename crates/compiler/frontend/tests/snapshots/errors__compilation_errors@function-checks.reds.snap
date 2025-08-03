@@ -1,6 +1,6 @@
 ---
 source: crates/compiler/frontend/tests/errors.rs
-expression: "DisplayDiagnostics(diagnostics, &sources)"
+expression: "DisplayDiagnostics(reporter.into_reported(), &sources)"
 input_file: crates/compiler/frontend/tests/data/function-checks.reds
 ---
 [UNEXPECTED_BODY] At tests/data/function-checks.reds:4:13
@@ -16,7 +16,7 @@ this function must have a body
 [UNUSED_ITEM_QUALIFIERS] At tests/data/function-checks.reds:10:19
 final static func UnusedFinalStaticQualifiers(s: String) -> String {
                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-final, static qualifiers have no effect on this item
+`final`, `static` qualifiers have no effect on this item
 
 [NON_DATA_VARIANCE] At tests/data/function-checks.reds:14:28
 func FunctionWithVariance<+A>() -> A {}

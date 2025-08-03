@@ -10,7 +10,7 @@ use hashbrown::HashMap;
 use mimalloc::MiMalloc;
 use redscript_compiler_api::ast::SourceMap;
 use redscript_compiler_api::{
-    Compilation, FlushError, ScriptBundle, SourceMapExt, TypeInterner, pass,
+    Compilation, DiagnosticLevel, FlushError, ScriptBundle, SourceMapExt, TypeInterner, pass,
 };
 use redscript_decompiler::{Settings, decompile_all};
 use redscript_dotfile::Dotfile;
@@ -88,6 +88,9 @@ struct CompileOpts {
     /// enable specific warnings
     #[argh(option, short = 'W')]
     warn_on: Vec<WarnOn>,
+    /// set the minimum level of diagnostics to emit
+    #[argh(option, short = 'L', default = "WarnOnLevel::Warning")]
+    warn_level: WarnOnLevel,
 }
 
 /// lint redscript source code
@@ -103,6 +106,9 @@ struct LintOpts {
     /// enable specific warnings
     #[argh(option, short = 'W')]
     warn_on: Vec<WarnOn>,
+    /// set the minimum level of diagnostics to emit
+    #[argh(option, short = 'L', default = "WarnOnLevel::Warning")]
+    warn_level: WarnOnLevel,
 }
 
 /// format redscript source code
@@ -141,7 +147,7 @@ struct FormatOpts {
     max_sig_digits: Option<u8>,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum WarnOn {
     UnusedLocals,
 }
@@ -161,6 +167,33 @@ impl FromStr for WarnOn {
         match s {
             "unused_locals" => Ok(Self::UnusedLocals),
             _ => Err(format!("unknown warning: {s}")),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum WarnOnLevel {
+    Pedantic,
+    Warning,
+}
+
+impl From<WarnOnLevel> for DiagnosticLevel {
+    fn from(level: WarnOnLevel) -> Self {
+        match level {
+            WarnOnLevel::Pedantic => DiagnosticLevel::Pedantic,
+            WarnOnLevel::Warning => DiagnosticLevel::Warning,
+        }
+    }
+}
+
+impl FromStr for WarnOnLevel {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "pedantic" => Ok(Self::Pedantic),
+            "warning" => Ok(Self::Warning),
+            _ => Err(format!("unknown warning level: {s}")),
         }
     }
 }
@@ -204,12 +237,12 @@ fn compile(opts: CompileOpts) -> anyhow::Result<ExitCode> {
         .flush(opts.output)
     {
         Ok((_, diagnostics)) => {
-            diagnostics.dump(&sources)?;
+            diagnostics.dump(&sources, DiagnosticLevel::from(opts.warn_level))?;
             log::info!("Compilation successful");
             Ok(ExitCode::SUCCESS)
         }
         Err(FlushError::CompilationErrors(diagnostics)) => {
-            diagnostics.dump(&sources)?;
+            diagnostics.dump(&sources, DiagnosticLevel::from(opts.warn_level))?;
             log::info!("Compilation failed");
             Ok(ExitCode::FAILURE)
         }
@@ -233,8 +266,14 @@ fn lint(opts: LintOpts) -> anyhow::Result<ExitCode> {
         .type_interner(&interner)
         .diagnostics(&passes)
         .compile()?;
-    comp.diagnostics().dump(&sources)?;
-    if comp.diagnostics().has_fatal_errors() {
+
+    comp.diagnostics()
+        .dump(&sources, DiagnosticLevel::from(opts.warn_level))?;
+
+    if comp
+        .diagnostics()
+        .has_fatal_errors(DiagnosticLevel::ErrorAllowedAtRuntime)
+    {
         log::info!("Compilation failed");
         Ok(ExitCode::FAILURE)
     } else {

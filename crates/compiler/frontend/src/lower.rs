@@ -817,8 +817,9 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
 
                         if aggregate.flags().is_native() && !aggregate.flags().is_sealed() {
                             if !args.is_empty() {
-                                self.reporter
-                                    .report(Error::NonSealedStructConstruction(typ.id(), *span));
+                                self.reporter.report(
+                                    Error::NonFullyDefinedNativeStructConstruction(typ.id(), *span),
+                                );
                             }
                         } else if args.len() != field_count {
                             self.reporter

@@ -6,7 +6,7 @@ input_file: crates/compiler/frontend/tests/data/item-checks.reds
 [UNRESOLVED_IMPORT] At tests/data/item-checks.reds:1:1
 import NonExisting
 ^^^^^^^^^^^^^^^^^^
-'NonExisting' could not be found
+`NonExisting` could not be found
 
 [UNEXPECTED_ITEM] At tests/data/item-checks.reds:3:5
 let badTopLevelField: CName;

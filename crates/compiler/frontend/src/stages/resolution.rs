@@ -829,7 +829,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
 
                     if flags.is_sealed() {
                         self.reporter
-                            .report(Diagnostic::SealedTypeFieldAddition(name_span));
+                            .report(Diagnostic::FullyDefinedNativeTypeFieldAddition(name_span));
                     } else if flags.is_struct() && !flags.is_native() {
                         self.reporter
                             .report(Diagnostic::ScriptedStructFieldAddition(name_span));

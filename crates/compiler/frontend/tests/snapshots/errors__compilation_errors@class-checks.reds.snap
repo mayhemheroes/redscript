@@ -11,7 +11,7 @@ this name is already defined in the scope
 [INVALID_ANN_USE] At tests/data/class-checks.reds:19:1
 @badAnnotation()
 ^^^^^^^^^^^^^^^^
-'badAnnotation' is not a valid annotation in this context
+`badAnnotation` is not a valid annotation in this context
 
 [UNEXPECTED_NATIVE] At tests/data/class-checks.reds:49:14
   native let field: Int32;
@@ -26,17 +26,17 @@ scripted types are not allowed to have native members
 [INVALID_PERSISTENT] At tests/data/class-checks.reds:55:18
   persistent let string: String;
                  ^^^^^^
-Strings, Variants and Resources cannot be persisted
+strings, variants and resources cannot be marked as persistent
 
 [INVALID_PERSISTENT] At tests/data/class-checks.reds:56:18
   persistent let variant: Variant;
                  ^^^^^^^
-Strings, Variants and Resources cannot be persisted
+strings, variants and resources cannot be marked as persistent
 
 [INVALID_PERSISTENT] At tests/data/class-checks.reds:57:18
   persistent let res: ResRef;
                  ^^^
-Strings, Variants and Resources cannot be persisted
+strings, variants and resources cannot be marked as persistent
 
 [MISSING_BODY] At tests/data/class-checks.reds:65:8
   func MethodA(a: A)
@@ -76,17 +76,17 @@ this type cannot inherit from a primitive
 [INVALID_TYPE_ARG_COUNT] At tests/data/class-checks.reds:35:7
 class ClassWithInvalidTypeArgCounts extends AbstractClass<Int32, Int32> {
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-type AbstractClass expects 1 type arguments
+type `AbstractClass` expects 1 type arguments
 
 [INVALID_TYPE_ARG_COUNT] At tests/data/class-checks.reds:36:7
   let field: AbstractClass;
       ^^^^^
-type AbstractClass expects 1 type arguments
+type `AbstractClass` expects 1 type arguments
 
 [INVALID_TYPE_ARG_COUNT] At tests/data/class-checks.reds:38:15
   func Method(a: AbstractClass) -> AbstractClass<String, String> {}
               ^^^^^^^^^^^^^^^^
-type AbstractClass expects 1 type arguments
+type `AbstractClass` expects 1 type arguments
 
 [INVALID_BASE] At tests/data/class-checks.reds:41:7
 class CircularClassA extends CircularClassB {}
@@ -96,22 +96,22 @@ this class circularly extends itself
 [INVALID_VARIANCE] At tests/data/class-checks.reds:65:16
   func MethodA(a: A)
                ^^^^
-the type 'A' appears in contravariant position, which is incompatible with its declaration
+the type `A` appears in contravariant position, which is incompatible with its declaration
 
 [INVALID_VARIANCE] At tests/data/class-checks.reds:66:8
   func MethodB() -> B
        ^^^^^^^
-the type 'B' appears in covariant position, which is incompatible with its declaration
+the type `B` appears in covariant position, which is incompatible with its declaration
 
 [UNSASTISFIED_BOUND] At tests/data/class-checks.reds:78:7
 class ClassViolatingBound extends ClassWithBound<Chair> {}
       ^^^^^^^^^^^^^^^^^^^
-type Chair does not satisfy expected bound Animal
+type `Chair` does not satisfy expected bound `Animal`
 
 [DUP_METHOD] At tests/data/class-checks.reds:25:7
 class ClassWithDuplicateMethod {
       ^^^^^^^^^^^^^^^^^^^^^^^^
-this class contains a duplicated implementation of the 'Method' method
+this class contains a duplicated implementation of the `Method` method
 
 [MISSING_IMPL] At tests/data/class-checks.reds:11:7
 class IncompleteClass extends AbstractClass<Int32> {}
@@ -122,7 +122,7 @@ this class is missing some required method implementation(s):
 [FINAL_FN_OVERRIDE] At tests/data/class-checks.reds:30:7
 class ClassOverridingFinalMethod extends AbstractClass<Int32> {
       ^^^^^^^^^^^^^^^^^^^^^^^^^^
-this class overrides a final method 'FinalMethod'
+this class overrides a final method `FinalMethod`
 
 [MISSING_IMPL] At tests/data/class-checks.reds:35:7
 class ClassWithInvalidTypeArgCounts extends AbstractClass<Int32, Int32> {

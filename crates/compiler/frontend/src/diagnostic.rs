@@ -6,7 +6,7 @@ use {redscript_ast as ast, redscript_parser as parser};
 
 use crate::lower::{LowerResult, Poly, TypeError};
 use crate::stages::FunctionAnnotation;
-use crate::utils::fmt::{DisplayFn, lowercase, sep_by};
+use crate::utils::fmt::{DisplayFn, lowercase, sep_by, surrounded_by};
 use crate::{CoalesceError, LowerError, Param, PolyType, Type, TypeId, Variance, cte, predef};
 
 pub mod pass;
@@ -29,43 +29,43 @@ pub enum Diagnostic<'ctx> {
     MissingFunctionBody(Span),
     #[error("this function cannot have a body")]
     UnexpectedFunctionBody(Span),
-    #[error("{} qualifiers have no effect on this item", sep_by(.0.iter_names().map(|(name,_)| lowercase(name)), ", "))]
+    #[error("{} qualifiers have no effect on this item", sep_by(.0.iter_names().map(|(name,_)| surrounded_by(lowercase(name), "`", "`")), ", "))]
     UnusedItemQualifiers(ast::ItemQualifiers, Span),
-    #[error("'{0}' is not a known intrinsic")]
+    #[error("`{0}` is not a known intrinsic")]
     UnknownIntrinsic(&'ctx str, Span),
     #[error("items of this type are not allowed here")]
     UnexpectedItem(Span),
     #[error("base type must be a valid known type")]
     InvalidBaseType(Span),
-    #[error("'{0}' is not a valid annotation in this context")]
+    #[error("`{0}` is not a valid annotation in this context")]
     UnknownAnnotation(&'ctx str, Span),
-    #[error("'{0}' could not be found")]
+    #[error("`{0}` could not be found")]
     ImportNotFound(&'ctx str, Span),
-    #[error("'{0}' is private and cannot be imported")]
+    #[error("`{0}` is private and cannot be imported")]
     ImportIsPrivate(&'ctx str, Span),
     #[error("this name is already defined in the scope")]
     NameRedefinition(Span),
-    #[error("'{0}' is not a valid target for this annotation")]
+    #[error("`{0}` is not a valid target for this annotation")]
     InvalidAnnotationType(&'ctx str, Span),
-    #[error("could not find a method with a matching signature for the {0} annotation")]
+    #[error("could not find a method with a matching signature for the `{0}` annotation")]
     AnnotatedMethodNotFound(FunctionAnnotation<'ctx>, Span),
     #[error("the annotations on this function are incompatible with each other")]
     IncompatibleAnnotations(Span),
     #[error("this class is missing some required method implementation(s):\n{}", sep_by(.0, "\n"))]
     MissingMethodImpls(Box<[MissingMethod<'ctx>]>, Span),
-    #[error("this class contains a duplicated implementation of the '{0}' method")]
+    #[error("this class contains a duplicated implementation of the `{0}` method")]
     DuplicateMethod(&'ctx str, Span),
-    #[error("this class overrides a final method '{0}'")]
+    #[error("this class overrides a final method `{0}`")]
     FinalMethodOverride(&'ctx str, Span),
     #[error("this class circularly extends itself")]
     CircularInheritance(Span),
-    #[error("type {} expects {} type arguments", .0, .1)]
+    #[error("type `{0}` expects {1} type arguments")]
     InvalidTypeArgCount(TypeId<'ctx>, usize, Span),
-    #[error("type {0} does not satisfy expected bound {1}")]
+    #[error("type `{0}` does not satisfy expected bound `{1}`")]
     UnsastisfiedBound(Box<Type<'ctx>>, Box<Type<'ctx>>, Span),
     #[error("this annotation attempts to modify a user-defined symbol, which is not allowed")]
     UserSymbolAnnotation(Span),
-    #[error("the type '{0}' appears in {1} position, which is incompatible with its declaration")]
+    #[error("the type `{0}` appears in {1} position, which is incompatible with its declaration")]
     InvalidVariance(&'ctx str, Variance, Span),
     #[error("this type cannot inherit from {0}")]
     IncompatibleBaseType(&'static str, Span),
@@ -79,14 +79,14 @@ pub enum Diagnostic<'ctx> {
     NonStaticStructMethod(Span),
     #[error("scripted types are not allowed to have native members")]
     NativeMemberOfScriptedType(Span),
-    #[error("Strings, Variants and Resources cannot be persisted")]
+    #[error("strings, variants and resources cannot be marked as persistent")]
     InvalidPersistentField(Span),
-    #[error("fields cannot be added to sealed types")]
-    SealedTypeFieldAddition(Span),
-    #[error("fields cannot be added to scripted structs")]
+    #[error("`@addField` cannot be used with native types that are known to be fully defined")]
+    FullyDefinedNativeTypeFieldAddition(Span),
+    #[error("`@addField` cannot be used with scripted structs")]
     ScriptedStructFieldAddition(Span),
     #[error("{0}")]
-    EvalFailed(#[from] cte::Error),
+    Cte(#[from] cte::Error),
     #[error("the name of an implementation must be a valid identifier")]
     InvalidImplName(Span),
     #[error("the type of an implementation must have no free type variables")]
@@ -96,27 +96,36 @@ pub enum Diagnostic<'ctx> {
     #[error("unused variable")]
     UnusedLocal(Span),
     #[error("{0}")]
-    Other(Box<dyn std::error::Error + 'ctx>, Span),
+    Other(Box<dyn std::error::Error + 'ctx>, DiagnosticLevel, Span),
 }
 
 impl<'ctx> Diagnostic<'ctx> {
-    pub fn is_fatal(&self) -> bool {
+    pub fn level(&self) -> DiagnosticLevel {
         match self {
-            Self::TypeError(err) => err.is_fatal(),
+            Self::TypeError(err) => err.level(),
+            Self::DuplicateVariantValue(_) | Self::FinalMethodOverride(_, _) => {
+                DiagnosticLevel::Pedantic
+            }
             Self::UnusedItemQualifiers(_, _)
-            | Self::DuplicateVariantValue(_)
             | Self::DuplicateVariantName(_)
-            | Self::FinalMethodOverride(_, _)
-            | Self::UnusedLocal(_) => false,
-            _ => true,
+            | Self::UnusedLocal(_) => DiagnosticLevel::Warning,
+            Self::Other(_, level, _) => *level,
+            _ => DiagnosticLevel::Error,
         }
+    }
+
+    pub fn is_error(&self) -> bool {
+        matches!(
+            self.level(),
+            DiagnosticLevel::Error | DiagnosticLevel::ErrorAllowedAtRuntime
+        )
     }
 
     pub fn span(&self) -> Span {
         match self {
             Self::SyntaxError(err) => err.span(),
             Self::TypeError(err) => err.span(),
-            Self::EvalFailed(err) => err.span(),
+            Self::Cte(err) => err.span(),
             Self::CoalesceError(_, span)
             | Self::DuplicateVariantName(span)
             | Self::DuplicateVariantValue(span)
@@ -149,13 +158,13 @@ impl<'ctx> Diagnostic<'ctx> {
             | Self::NonStaticStructMethod(span)
             | Self::NativeMemberOfScriptedType(span)
             | Self::InvalidPersistentField(span)
-            | Self::SealedTypeFieldAddition(span)
+            | Self::FullyDefinedNativeTypeFieldAddition(span)
             | Self::ScriptedStructFieldAddition(span)
             | Self::InvalidImplName(span)
             | Self::InvalidImplType(span)
             | Self::DuplicateImpl(span)
             | Self::UnusedLocal(span)
-            | Self::Other(_, span) => *span,
+            | Self::Other(_, _, span) => *span,
         }
     }
 
@@ -195,14 +204,14 @@ impl<'ctx> Diagnostic<'ctx> {
             Self::NonStaticStructMethod(_) => "NON_STATIC_STRUCT_FN",
             Self::NativeMemberOfScriptedType(_) => "UNEXPECTED_NATIVE",
             Self::InvalidPersistentField(_) => "INVALID_PERSISTENT",
-            Self::SealedTypeFieldAddition(_) => "SEALED_TYPE_FIELD_ADDITION",
+            Self::FullyDefinedNativeTypeFieldAddition(_) => "FULLY_DEFINED_NATIVE_FIELD_ADDITION",
             Self::ScriptedStructFieldAddition(_) => "SCRIPTED_STRUCT_FIELD_ADDITION",
-            Self::EvalFailed(_) => "CTE_ERR",
+            Self::Cte(_) => "CTE_ERR",
             Self::InvalidImplName(_) => "INVALID_IMPL_NAME",
             Self::InvalidImplType(_) => "INVALID_IMPL_TYPE",
             Self::DuplicateImpl(_) => "DUP_IMPL",
             Self::UnusedLocal(_) => "UNUSED_LOCAL",
-            Self::Other(_, _) => "OTHER",
+            Self::Other(_, _, _) => "OTHER",
         }
     }
 
@@ -238,6 +247,14 @@ impl<'ctx> Diagnostic<'ctx> {
             writeln!(f, "{self}")
         }))
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum DiagnosticLevel {
+    Pedantic = 0,
+    Warning = 1,
+    ErrorAllowedAtRuntime = 2,
+    Error = 3,
 }
 
 impl<'ctx> From<LowerError<'ctx>> for Diagnostic<'ctx> {

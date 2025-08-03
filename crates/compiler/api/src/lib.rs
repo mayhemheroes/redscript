@@ -10,10 +10,10 @@ pub use redscript_compiler_backend::{CompilationInputs, TypeFlags};
 use redscript_compiler_frontend::UnknownSource;
 use redscript_compiler_frontend::pass::{DiagnosticPass, UnusedLocals};
 pub use redscript_compiler_frontend::{
-    Aggregate, CompileErrorReporter, Diagnostic, Enum, Evaluator, Field, FunctionType,
-    LoweredCompilationUnit, LoweredFunction, PolyType, Symbols, TypeId, TypeIndex, TypeInterner,
-    TypeSchema, TypeScope, infer_from_sources, ir, parse_file, parse_files, pass, process_sources,
-    types,
+    Aggregate, CompileErrorReporter, Diagnostic, DiagnosticLevel, Enum, Evaluator, Field,
+    FunctionType, LoweredCompilationUnit, LoweredFunction, PolyType, Symbols, TypeId, TypeIndex,
+    TypeInterner, TypeSchema, TypeScope, infer_from_sources, ir, parse_file, parse_files, pass,
+    process_sources, types,
 };
 use redscript_io::byte;
 pub use redscript_io::{SaveError, ScriptBundle};
@@ -28,6 +28,7 @@ pub struct Compilation<'ctx> {
     unit: LoweredCompilationUnit<'ctx>,
     bundle: ScriptBundle<'ctx>,
     diagnostics: Diagnostics<'ctx>,
+    fatal_diagnostic_level: DiagnosticLevel,
 }
 
 #[bon]
@@ -39,6 +40,8 @@ impl<'ctx> Compilation<'ctx> {
         type_interner: &'ctx TypeInterner,
         #[builder(default = Cow::Owned(TypeFlags::default()))] type_flags: Cow<'_, TypeFlags>,
         #[builder(default = DEFAULT_DIAGNOSTICS)] diagnostics: &[&'static dyn DiagnosticPass],
+        #[builder(default = DiagnosticLevel::ErrorAllowedAtRuntime)]
+        fatal_diagnostic_level: DiagnosticLevel,
     ) -> Result<Self, Error> {
         let mut reporter = CompileErrorReporter::default();
         let bundle = ScriptBundle::from_bytes(bundle)?;
@@ -48,7 +51,7 @@ impl<'ctx> Compilation<'ctx> {
         unit.run_diagnostics(diagnostics, &mut reporter);
 
         let mut diagnostics = reporter.into_reported();
-        diagnostics.sort_by_key(Diagnostic::is_fatal);
+        diagnostics.sort_by_key(Diagnostic::is_error);
 
         Ok(Self {
             sources,
@@ -57,6 +60,7 @@ impl<'ctx> Compilation<'ctx> {
             unit,
             bundle,
             diagnostics: Diagnostics(diagnostics),
+            fatal_diagnostic_level,
         })
     }
 
@@ -64,15 +68,21 @@ impl<'ctx> Compilation<'ctx> {
         mut self,
         path: impl AsRef<Path>,
     ) -> Result<(Symbols<'ctx>, Diagnostics<'ctx>), FlushError<'ctx>> {
-        if self.diagnostics.has_fatal_errors() {
+        if self
+            .diagnostics
+            .has_fatal_errors(self.fatal_diagnostic_level)
+        {
             return Err(FlushError::CompilationErrors(self.diagnostics));
         }
 
         let mut monomorph = self.mappings.into_monomorphizer(self.sources);
         if let Err(err) = monomorph.monomorphize(&self.unit, &self.symbols, &mut self.bundle) {
             if let Some(span) = err.span() {
-                self.diagnostics
-                    .push(Diagnostic::Other(Box::new(err), span));
+                self.diagnostics.push(Diagnostic::Other(
+                    Box::new(err),
+                    DiagnosticLevel::Error,
+                    span,
+                ));
                 return Err(FlushError::CompilationErrors(self.diagnostics));
             }
         }
@@ -102,16 +112,25 @@ impl<'ctx> Compilation<'ctx> {
 pub struct Diagnostics<'ctx>(Vec<Diagnostic<'ctx>>);
 
 impl<'ctx> Diagnostics<'ctx> {
-    pub fn has_fatal_errors(&self) -> bool {
-        self.0.iter().any(Diagnostic::is_fatal)
+    pub fn has_fatal_errors(&self, fatal_diagnostic_level: DiagnosticLevel) -> bool {
+        self.0.iter().any(|d| d.level() >= fatal_diagnostic_level)
     }
 
-    pub fn dump(&self, sources: &SourceMap) -> Result<(), UnknownSource> {
+    pub fn dump(
+        &self,
+        sources: &SourceMap,
+        filter: impl Into<DiagnosticFilter>,
+    ) -> Result<(), UnknownSource> {
         let mut warnings = 0;
         let mut errors = 0;
+        let filter = filter.into();
 
         for diagnostic in self {
-            if diagnostic.is_fatal() {
+            if !filter.check(diagnostic) {
+                continue;
+            }
+
+            if diagnostic.is_error() {
                 log::error!("{}", diagnostic.display(sources)?);
                 errors += 1;
             } else {
@@ -155,6 +174,32 @@ impl<'ctx> From<Vec<Diagnostic<'ctx>>> for Diagnostics<'ctx> {
 impl fmt::Display for Diagnostics<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.into_iter().try_for_each(|d| writeln!(f, "{d}"))
+    }
+}
+
+pub enum DiagnosticFilter {
+    Minimum(DiagnosticLevel),
+    Predicate(Box<dyn for<'a, 'b> Fn(&'a Diagnostic<'b>) -> bool>),
+}
+
+impl DiagnosticFilter {
+    pub fn check(&self, diagnostic: &Diagnostic<'_>) -> bool {
+        match self {
+            DiagnosticFilter::Minimum(minimum) => diagnostic.level() >= *minimum,
+            DiagnosticFilter::Predicate(predicate) => predicate(diagnostic),
+        }
+    }
+}
+
+impl From<DiagnosticLevel> for DiagnosticFilter {
+    fn from(level: DiagnosticLevel) -> Self {
+        Self::Minimum(level)
+    }
+}
+
+impl From<Box<dyn for<'a, 'b> Fn(&'a Diagnostic<'b>) -> bool>> for DiagnosticFilter {
+    fn from(predicate: Box<dyn for<'a> Fn(&Diagnostic<'a>) -> bool>) -> Self {
+        Self::Predicate(predicate)
     }
 }
 
