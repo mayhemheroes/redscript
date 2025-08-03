@@ -208,22 +208,35 @@ impl<'ctx> InferredType<'ctx> {
     fn is_subtype_compatible(
         &self,
         other: &Type<'ctx>,
+        variance: Variance,
         symbols: &Symbols<'ctx>,
-        allow_implicit: bool,
     ) -> bool {
+        fn check<'ctx>(
+            lhs: TypeId<'ctx>,
+            rhs: TypeId<'ctx>,
+            variance: Variance,
+            symbols: &Symbols<'ctx>,
+        ) -> bool {
+            match variance {
+                Variance::Covariant => symbols.is_subtype(lhs, rhs),
+                Variance::Contravariant => symbols.is_subtype(rhs, lhs),
+                Variance::Invariant => lhs == rhs,
+            }
+        }
+
         match (self, other) {
-            (_, Type::Data(rhs)) if allow_implicit && rhs.id() == predef::VARIANT => true,
             (Self::Nothing, _) | (_, Type::Ctx(_)) => true,
             (Self::Data(lhs), Type::Data(rhs)) if lhs.id() == rhs.id() => lhs
                 .args()
                 .iter()
                 .zip(rhs.args())
-                .all(|(l, r)| l.is_subtype_compatible(r, symbols, allow_implicit)),
-            (Self::Data(lhs), Type::Data(rhs)) => symbols.is_subtype(lhs.id(), rhs.id()),
+                .zip(symbols[rhs.id()].params())
+                .all(|((l, r), t)| l.is_subtype_compatible(r, variance * t.variance(), symbols)),
+            (Self::Data(lhs), Type::Data(rhs)) => check(lhs.id(), rhs.id(), variance, symbols),
             (Self::Ctx(lhs), Type::Data(rhs)) => lhs
                 .upper()
-                .and_then(|typ| Some(typ.upper_bound()?.id()))
-                .is_some_and(|id| symbols.is_subtype(id, rhs.id())),
+                .and_then(|typ| typ.upper_bound())
+                .is_some_and(|lhs| check(lhs.id(), rhs.id(), variance, symbols)),
             _ => false,
         }
     }
@@ -437,14 +450,14 @@ impl<'ctx> PolyType<'ctx> {
     pub fn is_subtype_compatible(
         &self,
         other: &Type<'ctx>,
+        variance: Variance,
         symbols: &Symbols<'ctx>,
-        allow_implicit: bool,
     ) -> bool {
         match self {
-            Self::Mono(typ) => typ.is_subtype_compatible(other, symbols, allow_implicit),
+            Self::Mono(typ) => typ.is_subtype_compatible(other, variance, symbols),
             Self::Var(var) => var
                 .upper()
-                .is_none_or(|typ| typ.is_subtype_compatible(other, symbols, allow_implicit)),
+                .is_none_or(|typ| typ.is_subtype_compatible(other, variance, symbols)),
         }
     }
 }

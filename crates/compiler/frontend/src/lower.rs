@@ -19,7 +19,7 @@ use crate::symbols::{
 };
 use crate::types::{RefType, Type, TypeApp, TypeId, predef};
 use crate::utils::ScopedMap;
-use crate::{IndexSet, LowerReporter, MethodId, Param, ir};
+use crate::{IndexSet, LowerReporter, MethodId, Param, Variance, ir};
 
 mod env;
 mod error;
@@ -1249,8 +1249,8 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             .filter(|entry| {
                 target_t.is_subtype_compatible(
                     entry.func().type_().return_type(),
+                    Variance::Covariant,
                     self.symbols,
-                    false,
                 )
             });
         let res = self
@@ -1674,13 +1674,25 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             it.into_iter().filter(|entry| {
                 arg_types
                     .iter()
-                    .zip(entry.func().type_().unwrapped_param_types())
-                    .all(|(typ, param_t)| {
-                        typ.unwrap_ref_or_self(symbols).is_subtype_compatible(
-                            param_t,
-                            symbols,
-                            entry.func().intrinsic().is_none(),
-                        )
+                    .zip(entry.func().type_().params())
+                    .all(|(typ, param)| match param.type_() {
+                        Type::Data(id)
+                            if id.id() == predef::VARIANT && entry.func().intrinsic().is_none() =>
+                        {
+                            true
+                        }
+                        _ => {
+                            let variance = if param.flags().is_out() {
+                                Variance::Invariant
+                            } else {
+                                Variance::Covariant
+                            };
+                            typ.unwrap_ref_or_self(symbols).is_subtype_compatible(
+                                param.type_().unwrap_ref_or_self(),
+                                variance,
+                                symbols,
+                            )
+                        }
                     })
             })
         }
