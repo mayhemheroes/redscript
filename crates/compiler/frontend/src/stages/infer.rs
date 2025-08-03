@@ -56,8 +56,9 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                         method.type_(),
                         &item.params_names,
                         &item.body,
-                        method.flags().is_static().not().then(|| this_t.clone()),
                         Env::new(&types.push_scope(item.scope), &scope.funcs),
+                        method.flags().is_static().not().then(|| this_t.clone()),
+                        Some(class.id),
                         &self.symbols,
                         reporter,
                         item.span,
@@ -97,8 +98,9 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                             self.symbols[func.id].type_(),
                             &func.params_names,
                             &func.body,
-                            None,
                             Env::new(&scope.types.push_scope(func.scope), &scope.funcs),
+                            None,
+                            None,
                             &self.symbols,
                             reporter,
                             func.span,
@@ -111,11 +113,12 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                             sym.type_(),
                             &func.params_names,
                             &func.body,
+                            Env::new(&scope.types.push_scope(func.scope), &scope.funcs),
                             sym.flags()
                                 .is_static()
                                 .not()
                                 .then(|| PolyType::nullary(func.id.parent())),
-                            Env::new(&scope.types.push_scope(func.scope), &scope.funcs),
+                            Some(func.id.parent()),
                             &self.symbols,
                             reporter,
                             func.span,
@@ -134,8 +137,9 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                                 sym.type_(),
                                 &func.params_names,
                                 body,
-                                this,
                                 Env::new(&scope.types.push_scope(func.scope), &scope.funcs),
+                                this,
+                                Some(func.id.parent()),
                                 &self.symbols,
                                 reporter,
                                 func.span,
@@ -158,11 +162,12 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                             sym.type_(),
                             &func.params_names,
                             &func.body,
+                            Env::new(&scope.types.push_scope(func.scope), &funcs),
                             sym.flags()
                                 .is_static()
                                 .not()
                                 .then(|| PolyType::nullary(func.id.parent())),
-                            Env::new(&scope.types.push_scope(func.scope), &funcs),
+                            Some(func.id.parent()),
                             &self.symbols,
                             reporter,
                             func.span,
@@ -208,8 +213,9 @@ fn lower_function<'ctx>(
     func_type: &FunctionType<'ctx>,
     param_names: &[&'ctx str],
     body: &ast::SourceFunctionBody<'ctx>,
-    this: Option<PolyType<'ctx>>,
     mut env: Env<'_, 'ctx>,
+    this: Option<PolyType<'ctx>>,
+    context: Option<TypeId<'ctx>>,
     symbols: &Symbols<'ctx>,
     reporter: &mut CompileErrorReporter<'ctx>,
     span: Span,
@@ -226,7 +232,7 @@ fn lower_function<'ctx>(
         .map(|(param, &name)| (name, PolyType::from_type(param.type_())));
     let return_t = PolyType::from_type(func_type.return_type());
 
-    let (block, output, errors) = Lower::function(body, params, env, return_t, symbols);
+    let (block, output, errors) = Lower::function(body, params, env, return_t, context, symbols);
     reporter.report_many(errors);
 
     let locals = this.iter().chain(output.locals()).cloned().collect();

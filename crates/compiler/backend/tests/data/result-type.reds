@@ -4,11 +4,11 @@ func Test() -> Result<Int32, String> {
 }
 
 abstract class Scriptable {
-  func IsA(name: CName) -> Bool {}
+  public func IsA(name: CName) -> Bool {}
 }
 
 abstract class Result<+A, +E> extends Scriptable {
-  func Map<B>(f: (A) -> B) -> Result<B, E> {
+  public func Map<B>(f: (A) -> B) -> Result<B, E> {
     switch this {
       case let Ok { value }:
         return Ok.New(f(value));
@@ -21,9 +21,9 @@ abstract class Result<+A, +E> extends Scriptable {
 class MyClass {}
 
 class Ok<A, E> extends Result<A, E> {
-  let value: A;
+  public let value: A;
 
-  static func New(value: A) -> Ok<A, E> {
+  public static func New(value: A) -> Ok<A, E> {
     let self = new Ok<A, E>();
     self.value = value;
     return self;
@@ -31,9 +31,9 @@ class Ok<A, E> extends Result<A, E> {
 }
 
 class Err<A, E> extends Result<A, E> {
-  let error: E;
+  public let error: E;
 
-  static func New(error: E) -> Err<A, E> {
+  public static func New(error: E) -> Err<A, E> {
     let self = new Err<A, E>();
     self.error = error;
     return self;

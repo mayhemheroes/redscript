@@ -2,7 +2,7 @@
 class Class {}
 
 class Subclass extends Class {
-  let children: [Class];
+  public let children: [Class];
 }
 
 func AcceptsClassArray(arr: [Class]) {}

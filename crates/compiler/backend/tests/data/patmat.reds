@@ -124,19 +124,19 @@ func TestWhileArray(array: [Int32]) {
 }
 
 abstract class Scriptable {
-  func IsA(name: CName) -> Bool {}
+  public func IsA(name: CName) -> Bool {}
 }
 
 class Class extends Scriptable {
-  let nested: Class;
+  public let nested: Class;
 }
 
 class SubclassA extends Class {
-  let fieldA: Int32;
+  public let fieldA: Int32;
 }
 
 class SubclassB extends Class {
-  let fieldB: [Int32];
+  public let fieldB: [Int32];
 }
 
 native func OperatorEqual(lhs: Int32, rhs: Int32) -> Bool

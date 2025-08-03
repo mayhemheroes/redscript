@@ -41,6 +41,8 @@ pub enum Diagnostic<'ctx> {
     UnknownAnnotation(&'ctx str, Span),
     #[error("'{0}' could not be found")]
     ImportNotFound(&'ctx str, Span),
+    #[error("'{0}' is private and cannot be imported")]
+    ImportIsPrivate(&'ctx str, Span),
     #[error("this name is already defined in the scope")]
     NameRedefinition(Span),
     #[error("'{0}' is not a valid target for this annotation")]
@@ -127,6 +129,7 @@ impl<'ctx> Diagnostic<'ctx> {
             | Self::InvalidBaseType(span)
             | Self::UnknownAnnotation(_, span)
             | Self::ImportNotFound(_, span)
+            | Self::ImportIsPrivate(_, span)
             | Self::NameRedefinition(span)
             | Self::InvalidAnnotationType(_, span)
             | Self::AnnotatedMethodNotFound(_, span)
@@ -179,6 +182,7 @@ impl<'ctx> Diagnostic<'ctx> {
             | Self::UserSymbolAnnotation(_)
             | Self::GenericMethodAnnotation(_) => "INVALID_ANN_USE",
             Self::ImportNotFound(_, _) => "UNRESOLVED_IMPORT",
+            Self::ImportIsPrivate(_, _) => "PRIVATE_IMPORT",
             Self::NameRedefinition(_) => "SYM_REDEFINITION",
             Self::MissingMethodImpls(_, _) => "MISSING_IMPL",
             Self::DuplicateMethod(_, _) => "DUP_METHOD",

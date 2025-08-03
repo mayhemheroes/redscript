@@ -1193,12 +1193,14 @@ pub struct FreeFunctionFlags {
 
 #[bitfield(u8)]
 pub struct MethodFlags {
+    #[bits(2)]
+    pub visibility: Visibility,
     pub is_static: bool,
     pub is_final: bool,
     pub is_native: bool,
     pub is_callback: bool,
     pub is_unimplemented: bool,
-    #[bits(3)]
+    #[bits(1)]
     __: u8,
 }
 
@@ -1213,12 +1215,14 @@ pub struct ParamFlags {
 
 #[bitfield(u8)]
 pub struct FieldFlags {
+    #[bits(2)]
+    pub visibility: Visibility,
     pub is_native: bool,
     pub is_editable: bool,
     pub is_inline: bool,
     pub is_const: bool,
     pub is_persistent: bool,
-    #[bits(3)]
+    #[bits(1)]
     __: u8,
 }
 
@@ -1304,5 +1308,32 @@ fn method_dedup<'ctx: 'a, 'a>() -> impl FnMut(
             dedup.insert(overloaded);
         }
         dedup.remove(entry.key()).not().then_some(entry)
+    }
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Visibility {
+    #[default]
+    Private,
+    Protected,
+    Public,
+}
+
+impl Visibility {
+    const fn into_bits(self) -> u8 {
+        match self {
+            Self::Public => 0,
+            Self::Private => 1,
+            Self::Protected => 2,
+        }
+    }
+
+    const fn from_bits(bits: u8) -> Self {
+        match bits {
+            0 => Self::Public,
+            1 => Self::Private,
+            2 => Self::Protected,
+            _ => unreachable!(),
+        }
     }
 }

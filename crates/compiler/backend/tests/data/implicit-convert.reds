@@ -3,8 +3,9 @@ native func TakeScriptRef(str: script_ref<String>)
 native func TakeRef(instance: Class)
 
 class Class {
-  let field: String;
-  func Method() {}
+  public let field: String;
+
+  public func Method() {}
 }
 
 func Test() {

@@ -1,6 +1,6 @@
 
 class Base {
-  func Testing() -> Int32 = 0
+  protected func Testing() -> Int32 = 0
 }
 
 class Class extends Base {

@@ -15,7 +15,7 @@ pub use types::{InferredTypeApp, Poly, PolyType};
 use crate::diagnostic::ErrorWithSpan;
 use crate::symbols::{
     FieldId, FreeFunctionIndex, FunctionEntry, FunctionKey, FunctionKind, FunctionType, Symbols,
-    TypeSchema,
+    TypeSchema, Visibility,
 };
 use crate::types::{RefType, Type, TypeApp, TypeId, predef};
 use crate::utils::ScopedMap;
@@ -34,6 +34,7 @@ pub struct Lower<'scope, 'ctx> {
     stmt_prefix: Vec<Vec<ir::Stmt<'ctx>>>,
     symbols: &'scope Symbols<'ctx>,
     reporter: &'scope mut LowerReporter<'ctx>,
+    context: Option<TypeId<'ctx>>,
 }
 
 impl<'scope, 'ctx> Lower<'scope, 'ctx> {
@@ -41,6 +42,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
     fn new(
         locals: Locals<'scope, 'ctx>,
         return_type: PolyType<'ctx>,
+        context: Option<TypeId<'ctx>>,
         symbols: &'scope Symbols<'ctx>,
         reporter: &'scope mut LowerReporter<'ctx>,
     ) -> Self {
@@ -51,6 +53,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             stmt_prefix: Vec::new(),
             symbols,
             reporter,
+            context,
         }
     }
 
@@ -64,6 +67,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         params: impl IntoIterator<Item = (&'ctx str, PolyType<'ctx>)>,
         env: Env<'_, 'ctx>,
         return_t: PolyType<'ctx>,
+        context: Option<TypeId<'ctx>>,
         symbols: &Symbols<'ctx>,
     ) -> (ir::Block<'ctx>, LowerOutput<'ctx>, Vec<Error<'ctx>>) {
         let counter = Cell::new(0);
@@ -74,18 +78,21 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             params,
             env,
             return_t,
+            context,
             symbols,
             &mut reporter,
         );
         (block, output, reporter.into_reported())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn function_with(
         body: &ast::SourceFunctionBody<'ctx>,
         local_counter: &Cell<u16>,
         params: impl IntoIterator<Item = (&'ctx str, PolyType<'ctx>)>,
         mut env: Env<'_, 'ctx>,
         return_t: PolyType<'ctx>,
+        context: Option<TypeId<'ctx>>,
         symbols: &Symbols<'ctx>,
         reporter: &mut LowerReporter<'ctx>,
     ) -> (ir::Block<'ctx>, LowerOutput<'ctx>) {
@@ -94,16 +101,17 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             reporter: &mut LowerReporter<'ctx>,
             locals: Locals<'_, 'ctx>,
             ret_t: PolyType<'ctx>,
+            context: Option<TypeId<'ctx>>,
             body: &ast::SourceFunctionBody<'ctx>,
             env: &mut Env<'_, 'ctx>,
         ) -> (ir::Block<'ctx>, LowerOutput<'ctx>) {
             match body {
                 ast::FunctionBody::Block(block) => {
-                    let mut lower = Lower::new(locals, ret_t.clone(), symbols, reporter);
+                    let mut lower = Lower::new(locals, ret_t.clone(), context, symbols, reporter);
                     (lower.lower_block(&block.stmts, env), lower.into_output())
                 }
                 ast::FunctionBody::Inline(expr) => {
-                    let result = Lower::expr(expr, locals, env, ret_t, symbols, reporter);
+                    let result = Lower::expr(expr, locals, env, ret_t, context, symbols, reporter);
                     let (body, output) = reporter.unwrap_err(result).unzip();
                     (body.unwrap_or_default(), output.unwrap_or_default())
                 }
@@ -114,7 +122,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         for (name, typ) in params {
             env.define_local(name, locals.add_param(typ, None).clone());
         }
-        inner(symbols, reporter, locals, return_t, body, &mut env)
+        inner(symbols, reporter, locals, return_t, context, body, &mut env)
     }
 
     pub fn constant(
@@ -126,7 +134,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         let mut reporter = LowerReporter::default();
         let counter = Cell::new(0);
         let locals = Locals::new(&counter, 0);
-        let mut lower = Lower::new(locals, expected.clone(), symbols, &mut reporter);
+        let mut lower = Lower::new(locals, expected.clone(), None, symbols, &mut reporter);
         let res = (|| {
             let (mut expr, typ) = lower.lower_expr_with(expr, Some(&expected), env)?;
             lower.coerce(&mut expr, typ, expected, env, *span)?;
@@ -146,10 +154,11 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         locals: Locals<'_, 'ctx>,
         env: &Env<'_, 'ctx>,
         return_t: PolyType<'ctx>,
+        context: Option<TypeId<'ctx>>,
         symbols: &Symbols<'ctx>,
         reporter: &mut LowerReporter<'ctx>,
     ) -> LowerResult<'ctx, (ir::Block<'ctx>, LowerOutput<'ctx>)> {
-        let mut lower = Lower::new(locals, return_t.clone(), symbols, reporter);
+        let mut lower = Lower::new(locals, return_t.clone(), context, symbols, reporter);
         let (mut expr, typ) = lower.lower_expr_with(expr, Some(&return_t), env)?;
         lower.coerce(&mut expr, typ, return_t, env, *span)?;
 
@@ -1167,23 +1176,29 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 .peekable();
             if candidates.peek().is_none() {
                 let (field_expr, field_t, _) =
-                    self.new_field_read(ir, member, upper_bound, ref_type, *expr_span)?;
+                    self.new_field_access(ir, member, upper_bound, ref_type, *expr_span)?;
                 break 'instance Some((field_expr, field_t));
             }
 
-            let res = self
-                .resolve_overload(
-                    member,
-                    args,
-                    type_args,
-                    candidates,
-                    Some(upper_bound.clone()),
-                    hint,
-                    env,
-                    *expr_span,
-                )?
-                .into_instance_call(ir, upper_bound, ref_type, mode);
-            return Ok(res);
+            let resolved = self.resolve_overload(
+                member,
+                args,
+                type_args,
+                candidates,
+                Some(upper_bound.clone()),
+                hint,
+                env,
+                *expr_span,
+            )?;
+
+            let id = resolved.resulution.function;
+            self.check_visibility(
+                id.parent(),
+                self.symbols[id].flags().visibility(),
+                call_span,
+            );
+
+            return Ok(resolved.into_instance_call(ir, upper_bound, ref_type, mode));
         };
 
         let (closure, typ) = closure.map_or_else(|| self.lower_expr(expr, env), Ok)?;
@@ -1286,6 +1301,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             types,
             env,
             return_t,
+            self.context,
             self.symbols,
             self.reporter,
         );
@@ -1338,7 +1354,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             .with_span(receiver_span)?
             .ok_or(Error::InsufficientTypeInformation(receiver_span))?
             .into_owned();
-        let (expr, typ, _) = self.new_field_read(ir, member, upper_bound, ref_type, span)?;
+        let (expr, typ, _) = self.new_field_access(ir, member, upper_bound, ref_type, span)?;
         Ok((expr, typ))
     }
 
@@ -1740,6 +1756,9 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 Some((id, typ.schema().as_aggregate()?.fields().by_name(member)?))
             })
             .ok_or_else(|| Error::UnresolvedMember(receiver_t.id(), member, span))?;
+
+        self.check_visibility(receiver_t.id(), field.flags().visibility(), span);
+
         let this_t = receiver_t
             .instantiate_as(target_id, self.symbols)
             .expect("should instantiate as base type");
@@ -1793,6 +1812,22 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         Ok(())
     }
 
+    fn check_visibility(&mut self, parent: TypeId<'ctx>, visibility: Visibility, span: Span) {
+        match visibility {
+            Visibility::Private if self.context != Some(parent) => {
+                self.reporter.report(Error::PrivateMemberAccess(span));
+            }
+            Visibility::Protected
+                if self.context.is_none_or(|context| {
+                    !self.symbols.base_iter(context).any(|(id, _)| id == parent)
+                }) =>
+            {
+                self.reporter.report(Error::ProtectedMemberAccess(span));
+            }
+            _ => {}
+        }
+    }
+
     fn new_arg(
         &mut self,
         expr: &mut ir::Expr<'ctx>,
@@ -1832,7 +1867,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         Ok(res)
     }
 
-    fn new_field_read(
+    fn new_field_access(
         &mut self,
         ir: ir::Expr<'ctx>,
         member: &'ctx str,

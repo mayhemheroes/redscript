@@ -4,7 +4,7 @@ use indexmap::IndexMap;
 use redscript_ast::{self as ast, Span};
 
 use crate::stages::infer::FuncItem;
-use crate::symbols::FieldEntry;
+use crate::symbols::{FieldEntry, Visibility};
 use crate::{
     CtxVar, FunctionIndex, FunctionType, Method, MethodFlags, Param, ParamFlags, Type, TypeId,
 };
@@ -15,7 +15,10 @@ pub fn derive_new_method<'e, 'ctx: 'e>(
     fields: impl IntoIterator<Item = FieldEntry<'e, 'ctx>>,
     span: Span,
 ) -> Method<'ctx> {
-    let flags = MethodFlags::new().with_is_final(true).with_is_static(true);
+    let flags = MethodFlags::new()
+        .with_visibility(Visibility::Public)
+        .with_is_final(true)
+        .with_is_static(true);
     let return_t = Type::app(
         id,
         vars.iter()

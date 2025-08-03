@@ -7,7 +7,7 @@
 /// Equals(n"A", n"A"); // true
 /// ```
 @intrinsic(Equals)
-func Equals<A>(lhs: A, rhs: A) -> Bool
+public func Equals<A>(lhs: A, rhs: A) -> Bool
 
 /// Test two values for inequality.
 ///
@@ -17,7 +17,7 @@ func Equals<A>(lhs: A, rhs: A) -> Bool
 /// NotEquals(n"A", n"A"); // false
 /// ```
 @intrinsic(NotEquals)
-func NotEquals<A>(lhs: A, rhs: A) -> Bool
+public func NotEquals<A>(lhs: A, rhs: A) -> Bool
 
 /// Empties an array.
 ///
@@ -27,7 +27,7 @@ func NotEquals<A>(lhs: A, rhs: A) -> Bool
 /// ArrayClear(arr); // []
 /// ```
 @intrinsic(ArrayClear)
-func ArrayClear<A>(out array: [A])
+public func ArrayClear<A>(out array: [A])
 
 /// Returns the size of an array.
 ///
@@ -37,7 +37,7 @@ func ArrayClear<A>(out array: [A])
 /// ArraySize(arr); // 3
 /// ```
 @intrinsic(ArraySize)
-func ArraySize<A>(out array: [A]) -> Int32
+public func ArraySize<A>(out array: [A]) -> Int32
 
 /// Resizes an array.
 ///
@@ -47,7 +47,7 @@ func ArraySize<A>(out array: [A]) -> Int32
 /// ArrayResize(arr, 5); // [1, 2, 3, 0, 0]
 /// ```
 @intrinsic(ArrayResize)
-func ArrayResize<A>(out array: [A], newSize: Int32)
+public func ArrayResize<A>(out array: [A], newSize: Int32)
 
 /// Finds the first occurrence of an element in an array.
 ///
@@ -57,7 +57,7 @@ func ArrayResize<A>(out array: [A], newSize: Int32)
 /// ArrayFindFirst(arr, 2); // 1
 /// ```
 @intrinsic(ArrayFindFirst)
-func ArrayFindFirst<A>(out array: [A], needle: A) -> Int32
+public func ArrayFindFirst<A>(out array: [A], needle: A) -> Int32
 
 /// Finds the last occurrence of an element in an array.
 ///
@@ -67,7 +67,7 @@ func ArrayFindFirst<A>(out array: [A], needle: A) -> Int32
 /// ArrayFindLast(arr, 2); // 3
 /// ```
 @intrinsic(ArrayFindLast)
-func ArrayFindLast<A>(out array: [A], needle: A) -> Int32
+public func ArrayFindLast<A>(out array: [A], needle: A) -> Int32
 
 /// Checks if an element exists in an array.
 ///
@@ -77,7 +77,7 @@ func ArrayFindLast<A>(out array: [A], needle: A) -> Int32
 /// ArrayContains(arr, 2); // true
 /// ```
 @intrinsic(ArrayContains)
-func ArrayContains<A>(out array: [A], needle: A) -> Bool
+public func ArrayContains<A>(out array: [A], needle: A) -> Bool
 
 /// Counts the number of occurrences of an element in an array.
 ///
@@ -87,7 +87,7 @@ func ArrayContains<A>(out array: [A], needle: A) -> Bool
 /// ArrayCount(arr, 2); // 2
 /// ```
 @intrinsic(ArrayCount)
-func ArrayCount<A>(out array: [A], needle: A) -> Int32
+public func ArrayCount<A>(out array: [A], needle: A) -> Int32
 
 /// Pushes an element onto the end of an array.
 ///
@@ -97,7 +97,7 @@ func ArrayCount<A>(out array: [A], needle: A) -> Int32
 /// ArrayPush(arr, 4); // [1, 2, 3, 4]
 /// ```
 @intrinsic(ArrayPush)
-func ArrayPush<A>(out array: [A], elem: A)
+public func ArrayPush<A>(out array: [A], elem: A)
 
 /// Pops an element from the end of an array.
 ///
@@ -107,7 +107,7 @@ func ArrayPush<A>(out array: [A], elem: A)
 /// ArrayPop(arr); // 3
 /// ```
 @intrinsic(ArrayPop)
-func ArrayPop<A>(out array: [A]) -> A
+public func ArrayPop<A>(out array: [A]) -> A
 
 /// Inserts an element at a specific index in an array.
 ///
@@ -117,7 +117,7 @@ func ArrayPop<A>(out array: [A]) -> A
 /// ArrayInsert(arr, 1, 4); // [1, 4, 2, 3]
 /// ```
 @intrinsic(ArrayInsert)
-func ArrayInsert<A>(out array: [A], index: Int32, elem: A)
+public func ArrayInsert<A>(out array: [A], index: Int32, elem: A)
 
 /// Removes an element from an array.
 ///
@@ -127,7 +127,7 @@ func ArrayInsert<A>(out array: [A], index: Int32, elem: A)
 /// ArrayRemove(arr, 2); // [1, 3]
 /// ```
 @intrinsic(ArrayRemove)
-func ArrayRemove<A>(out array: [A], elem: A) -> Bool
+public func ArrayRemove<A>(out array: [A], elem: A) -> Bool
 
 /// Grows an array by a specified number of elements.
 ///
@@ -137,7 +137,7 @@ func ArrayRemove<A>(out array: [A], elem: A) -> Bool
 /// ArrayGrow(arr, 2); // [1, 2, 3, 0, 0]
 /// ```
 @intrinsic(ArrayGrow)
-func ArrayGrow<A>(out array: [A], count: Int32)
+public func ArrayGrow<A>(out array: [A], count: Int32)
 
 /// Erases an element at a specific index in an array.
 ///
@@ -147,7 +147,7 @@ func ArrayGrow<A>(out array: [A], count: Int32)
 /// ArrayErase(arr, 1); // [1, 3]
 /// ```
 @intrinsic(ArrayErase)
-func ArrayErase<A>(out array: [A], index: Int32)
+public func ArrayErase<A>(out array: [A], index: Int32)
 
 /// Returns the last element of an array.
 ///
@@ -157,7 +157,7 @@ func ArrayErase<A>(out array: [A], index: Int32)
 /// ArrayLast(arr); // 3
 /// ```
 @intrinsic(ArrayLast)
-func ArrayLast<A>(out array: [A]) -> A
+public func ArrayLast<A>(out array: [A]) -> A
 
 /// Sorts an array in ascending order.
 ///
@@ -167,7 +167,7 @@ func ArrayLast<A>(out array: [A]) -> A
 /// ArraySort(arr); // [1, 2, 3]
 /// ```
 @intrinsic(ArraySort)
-func ArraySort<A>(out array: [A])
+public func ArraySort<A>(out array: [A])
 
 /// Converts a value to its string representation.
 ///
@@ -177,7 +177,7 @@ func ArraySort<A>(out array: [A])
 /// ToString(num); // "42"
 /// ```
 @intrinsic(ToString)
-func ToString<A>(a: A) -> String
+public func ToString<A>(a: A) -> String
 
 /// Converts an enum value to its integer representation.
 ///
@@ -186,7 +186,7 @@ func ToString<A>(a: A) -> String
 /// EnumInt(Color.Red); // 0
 /// ```
 @intrinsic(EnumInt)
-func EnumInt<A>(enum: A) -> Int32
+public func EnumInt<A>(enum: A) -> Int32
 
 /// Converts an integer value to its enum representation.
 ///
@@ -195,7 +195,7 @@ func EnumInt<A>(enum: A) -> Int32
 /// IntEnum<Color>(0); // Color.Red
 /// ```
 @intrinsic(IntEnum)
-func IntEnum<A>(value: Int32) -> A
+public func IntEnum<A>(value: Int32) -> A
 
 /// Converts an integer value to its enum representation.
 ///
@@ -204,36 +204,36 @@ func IntEnum<A>(value: Int32) -> A
 /// IntEnum<Color>(0); // Color.Red
 /// ```
 @intrinsic(LongIntEnum)
-func IntEnum<A>(value: Int64) -> A
+public func IntEnum<A>(value: Int64) -> A
 
 /// Converts a value into a variant.
 @intrinsic(ToVariant)
-func ToVariant<A>(a: A) -> Variant
+public func ToVariant<A>(a: A) -> Variant
 
 /// Converts a variant into a value.
 @intrinsic(FromVariant)
-func FromVariant<A>(variant: Variant) -> A
+public func FromVariant<A>(variant: Variant) -> A
 
 @intrinsic(VariantIsRef)
-func VariantIsRef<A>(variant: Variant) -> Bool
+public func VariantIsRef<A>(variant: Variant) -> Bool
 
 @intrinsic(VariantIsArray)
-func VariantIsArray<A>(variant: Variant) -> Bool
+public func VariantIsArray<A>(variant: Variant) -> Bool
 
 @intrinsic(VariantTypeName)
-func VariantTypeName(variant: Variant) -> String
+public func VariantTypeName(variant: Variant) -> String
 
 @intrinsic(AsRef)
-func AsRef<A>(a: A) -> script_ref<A>
+public func AsRef<A>(a: A) -> script_ref<A>
 
 @intrinsic(Deref)
-func Deref<A>(a: script_ref<A>) -> A
+public func Deref<A>(a: script_ref<A>) -> A
 
 @intrinsic(RefToWeakRef)
-func RefToWeakRef<A extends IScriptable>(weak: A) -> wref<A>
+public func RefToWeakRef<A extends IScriptable>(weak: A) -> wref<A>
 
 @intrinsic(WeakRefToRef)
-func WeakRefToRef<A>(weak: wref<A>) -> A
+public func WeakRefToRef<A>(weak: wref<A>) -> A
 
 /// Tests if a value is defined.
 ///
@@ -244,7 +244,7 @@ func WeakRefToRef<A>(weak: wref<A>) -> A
 /// IsDefined(null); // false
 /// ```
 @intrinsic(IsDefined)
-func IsDefined(a: IScriptable) -> Bool
+public func IsDefined(a: IScriptable) -> Bool
 
 /// Tests if a variant is defined.
 ///
@@ -254,7 +254,7 @@ func IsDefined(a: IScriptable) -> Bool
 /// IsDefined(variant); // true
 /// ```
 @intrinsic(VariantIsDefined)
-func IsDefined(a: Variant) -> Bool
+public func IsDefined(a: Variant) -> Bool
 
 /// Returns the fully qualified name of a type including its full module path.
 ///
@@ -263,13 +263,13 @@ func IsDefined(a: Variant) -> Bool
 /// NameOf<Int32>() // "Int32"
 /// ```
 @intrinsic(NameOf)
-func NameOf<A>() -> CName
+public func NameOf<A>() -> CName
 
-abstract class Function0<+R> {
+public abstract class Function0<+R> {
   public func Call() -> R
 }
 
-abstract class Function1<-A, +R> {
+public abstract class Function1<-A, +R> {
   public func Call(a: A) -> R
 
   public final func Compose<A1>(f: (A1) -> A) -> (A1) -> R =

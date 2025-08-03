@@ -2,12 +2,11 @@
 source: crates/compiler/backend/tests/bytecode.rs
 expression: "BytecodePrinter::new(&bundle, bundle_len)"
 input_file: crates/compiler/backend/tests/data/implicit-convert.reds
-snapshot_kind: text
 ---
 // Class::Method; (f0)
 
 // Test; (f1)
-invoke.static j30 l11 f2 0000000000000001
+invoke.static j30 l12 f2 0000000000000001
 as_ref 0
 string.const 0
 param.end
@@ -15,14 +14,14 @@ assign
 local 0
 ref.to_wref
 object.new 0
-invoke.static j26 l14 f3 0000000000000000
+invoke.static j26 l15 f3 0000000000000000
 wref.to_ref
 local 0
 param.end
 ctx 26
 wref.to_ref
 local 0
-invoke.virtual j16 l16 f0 0000000000000000
+invoke.virtual j16 l17 f0 0000000000000000
 param.end
 ctx 19
 wref.to_ref

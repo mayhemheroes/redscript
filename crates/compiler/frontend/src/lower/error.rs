@@ -87,6 +87,10 @@ pub enum Error<'ctx> {
     ImpossibleDynCast(Box<TypeError<'ctx>>, Span),
     #[error("this cast is redundant, you should remove it")]
     RedundantDynCast(Span),
+    #[error("this member cannot be accessed, because it is private")]
+    PrivateMemberAccess(Span),
+    #[error("this member cannot be accessed, because it is protected")]
+    ProtectedMemberAccess(Span),
 }
 
 impl Error<'_> {
@@ -121,7 +125,9 @@ impl Error<'_> {
             | Self::MissingBreakInCaseLet(span)
             | Self::RefOnNeverRefType(span)
             | Self::ImpossibleDynCast(_, span)
-            | Self::RedundantDynCast(span) => *span,
+            | Self::RedundantDynCast(span)
+            | Self::PrivateMemberAccess(span)
+            | Self::ProtectedMemberAccess(span) => *span,
         }
     }
 
@@ -157,6 +163,8 @@ impl Error<'_> {
             Self::RefOnNeverRefType(_) => "REF_ON_NEVER_REF",
             Self::ImpossibleDynCast(_, _) => "IMPOSSIBLE_DYN_CAST",
             Self::RedundantDynCast(_) => "REDUNDANT_DYN_CAST",
+            Self::PrivateMemberAccess(_) => "PRIVATE_MEMBER_ACCESS",
+            Self::ProtectedMemberAccess(_) => "PROTECTED_MEMBER_ACCESS",
         }
     }
 

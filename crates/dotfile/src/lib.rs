@@ -91,7 +91,7 @@ mod tests {
                 },
                 tools: HashMap::new(),
             }
-        )
+        );
     }
 
     #[test]

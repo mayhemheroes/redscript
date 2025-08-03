@@ -13,8 +13,8 @@ use super::infer::{ClassItem, FieldItem, FuncItem, FuncItemKind, InferStageModul
 use crate::cte::{self, Evaluator};
 use crate::diagnostic::MissingMethod;
 use crate::lower::{InferredTypeApp, TypeEnv};
-use crate::modules::{Export, ModuleMap};
-use crate::symbols::{FreeFunctionIndexes, FunctionEntry};
+use crate::modules::{Export, ImportError, ModuleMap};
+use crate::symbols::{FreeFunctionIndexes, FunctionEntry, Visibility};
 use crate::utils::{Lazy, ScopedMap};
 use crate::{
     Aggregate, AggregateFlags, CompileErrorReporter, CtxVar, Diagnostic, Enum, Field, FieldFlags,
@@ -110,6 +110,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                 doc,
                 span: item_span,
             };
+            let public = matches!(meta.visibility, Some(ast::Visibility::Public));
             match item {
                 ast::Item::Import(import) => {
                     imports.push(ParsedImport {
@@ -127,7 +128,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     let id = interner.intern(Cow::from(&path));
                     let res = self
                         .module_map
-                        .add_type(path, id)
+                        .add_type(path, id, public)
                         .map_err(|_| Diagnostic::NameRedefinition(name_span));
                     self.reporter.unwrap_err(res);
 
@@ -218,7 +219,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     if matches!(annotation, None | Some(FunctionAnnotation::Intrinsic(_))) {
                         let res = self
                             .module_map
-                            .add_function(path, index)
+                            .add_function(path, index, public)
                             .map_err(|_| Diagnostic::NameRedefinition(name_span));
                         self.reporter.unwrap_err(res);
                     }
@@ -236,7 +237,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     let id = interner.intern(Cow::from(&path));
                     let res = self
                         .module_map
-                        .add_type(path, id)
+                        .add_type(path, id, public)
                         .map_err(|_| Diagnostic::NameRedefinition(name_span));
                     self.reporter.unwrap_err(res);
 
@@ -270,11 +271,14 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
             .expect("root should always exist")
         {
             match export {
-                Export::FreeFunction(vec) => {
-                    funcs.entry(name).or_default().extend(vec.iter().copied());
+                Export::FreeFunction { overloads, .. } => {
+                    funcs
+                        .entry(name)
+                        .or_default()
+                        .extend(overloads.iter().copied());
                 }
-                &Export::Type(typ) => {
-                    scope.types.add(name, TypeRef::Name(typ));
+                &Export::Type { id, .. } => {
+                    scope.types.add(name, TypeRef::Name(id));
                 }
             }
         }
@@ -318,9 +322,16 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                         &entry.import,
                         |name, typ| type_scope.add(name, TypeRef::Name(typ)),
                         |name, func| func_scope.top_mut().entry(name).or_default().push(func),
-                        |name| {
-                            self.reporter
-                                .report(Diagnostic::ImportNotFound(name, entry.span));
+                        |error| {
+                            let error = match error {
+                                ImportError::NotFound(name) => {
+                                    Diagnostic::ImportNotFound(name, entry.span)
+                                }
+                                ImportError::Private(name) => {
+                                    Diagnostic::ImportIsPrivate(name, entry.span)
+                                }
+                            };
+                            self.reporter.report(error);
                         },
                     );
                 }
@@ -464,12 +475,25 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         let mut method_items = vec![];
         let mut field_items = vec![];
 
+        let default_visibility = if class_flags.is_struct() {
+            Visibility::Public
+        } else {
+            Visibility::Private
+        };
+
         for (mut item, item_span) in aggregate.items {
+            let visibility = item
+                .visibility
+                .map_or(default_visibility, convert_visibility);
+
             match item.item {
                 ast::Item::Function(func) => {
                     let (name, name_span) = func.name;
                     let qs = item.qualifiers;
-                    let flags = self.process_method_flags(qs, &func, class_flags, name_span);
+
+                    let flags = self
+                        .process_method_flags(qs, &func, class_flags, name_span)
+                        .with_visibility(visibility);
 
                     let (func_t, type_scope) = self.create_function_env(&func, &types);
                     if func.body.is_none()
@@ -503,8 +527,9 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     else {
                         continue;
                     };
-                    let flags =
-                        self.process_field_flags(item.qualifiers, class_flags, &typ, name_span);
+                    let flags = self
+                        .process_field_flags(item.qualifiers, class_flags, &typ, name_span)
+                        .with_visibility(visibility);
 
                     let properties = self.extract_field_properties(&mut item.annotations);
                     for (ann, ann_span) in &item.annotations {
@@ -814,8 +839,13 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     let typ = self
                         .reporter
                         .unwrap_err(types.resolve(typ, &self.symbols, *span))?;
-                    let flags =
-                        self.process_field_flags(entry.meta.qualifiers, flags, &typ, name_span);
+                    let visibility = entry
+                        .meta
+                        .visibility
+                        .map_or(Visibility::Private, convert_visibility);
+                    let flags = self
+                        .process_field_flags(entry.meta.qualifiers, flags, &typ, name_span)
+                        .with_visibility(visibility);
 
                     let field = Field::new(
                         flags,
@@ -859,7 +889,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         let is_native = qs.take_flag(ast::ItemQualifiers::NATIVE);
         let is_final = qs.take_flag(ast::ItemQualifiers::FINAL);
         let is_static = qs.take_flag(ast::ItemQualifiers::STATIC);
-        let flags = MethodFlags::default()
+        let flags = MethodFlags::new()
             .with_is_native(is_native)
             .with_is_final(is_final)
             .with_is_static(is_static)
@@ -1453,6 +1483,14 @@ fn process_conditionals<'ctx>(
     include
 }
 
+fn convert_visibility(visiblity: ast::Visibility) -> Visibility {
+    match visiblity {
+        ast::Visibility::Public => Visibility::Public,
+        ast::Visibility::Private => Visibility::Private,
+        ast::Visibility::Protected => Visibility::Protected,
+    }
+}
+
 #[derive(Debug)]
 struct ResolutionStageModule<'ctx> {
     imports: Vec<ParsedImport<'ctx>>,
@@ -1467,8 +1505,6 @@ struct ResolutionStageModule<'ctx> {
 #[derive(Debug)]
 struct ParsedMeta<'ctx> {
     annotations: Vec<ast::Spanned<ast::SourceAnnotation<'ctx>>>,
-    // TODO: visibility
-    #[allow(unused)]
     visibility: Option<ast::Visibility>,
     qualifiers: ast::ItemQualifiers,
     doc: Box<[&'ctx str]>,

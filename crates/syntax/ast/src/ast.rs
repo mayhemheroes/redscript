@@ -1417,9 +1417,9 @@ impl From<BinOp> for &'static str {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Visibility {
-    Public,
-    Protected,
     Private,
+    Protected,
+    Public,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
