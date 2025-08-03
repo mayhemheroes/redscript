@@ -135,7 +135,7 @@ fn prepare_input_cache(settings: &SccSettings, ts_file: &mut fs::File) -> anyhow
     if !backup_file.exists() {
         let base = settings.default_backup_cache_file_path();
         if base.exists() {
-            log::info!("Re-initializing the backup file from {}", base.display());
+            log::info!("Re-initializing the backup file from '{}'", base.display());
 
             fs::copy(&base, &backup_file)
                 .context("could not copy the base redscript backup file")?;
@@ -155,12 +155,15 @@ fn prepare_input_cache(settings: &SccSettings, ts_file: &mut fs::File) -> anyhow
     {
         match saved_ts {
             saved_ts if saved_ts != Some(write_ts) && backup_file.exists() => {
-                log::info!("Removing a stale backup file at {}", backup_file.display());
+                log::info!(
+                    "Removing a stale backup file at '{}'",
+                    backup_file.display()
+                );
 
                 fs::remove_file(&backup_file).context("failed to remove a stale backup file")?;
             }
             _ if backup_file.exists() => {
-                log::info!("Restoring the backup file to {}", cache_file.display());
+                log::info!("Restoring the backup file to '{}'", cache_file.display());
 
                 fs::rename(&backup_file, &cache_file)
                     .context("failed to restore the backup file")?;
@@ -175,7 +178,7 @@ fn prepare_input_cache(settings: &SccSettings, ts_file: &mut fs::File) -> anyhow
             }
             saved_ts if saved_ts != Some(write_ts) => {
                 log::info!(
-                    "The final.redscripts file is not ours, copying it to {}",
+                    "The final.redscripts file is not ours, copying it to '{}'",
                     backup_file.display()
                 );
 
