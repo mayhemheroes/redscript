@@ -693,8 +693,8 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 (ir::Expr::call(call, *span), typ)
             }
             ast::Expr::UnOp { op, expr } => {
-                if let (ast::UnOp::Neg, &(ast::Expr::Constant(ast::Constant::I32(i)), span)) =
-                    (op, &**expr)
+                if matches!(op, ast::UnOp::Neg)
+                    && let &(ast::Expr::Constant(ast::Constant::I32(i)), span) = &**expr
                 {
                     let const_ = self.lower_constant(&ast::Constant::I32(-i), hint, span);
                     let typ = PolyType::nullary(const_.type_id());

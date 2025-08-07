@@ -68,11 +68,13 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
 
                 let mut fields = IndexMap::default();
                 for item in class.fields {
-                    if let Some(expr) = item.default.and_then(|default| {
-                        let env = Env::new(&types, &scope.funcs);
-                        let id = FieldId::new(class.id, item.id);
-                        lower_constant(id, &default, &env, &self.symbols, reporter)
-                    }) {
+                    let Some(default) = item.default else {
+                        continue;
+                    };
+                    let id = FieldId::new(class.id, item.id);
+                    let env = Env::new(&types, &scope.funcs);
+                    if let Some(expr) = lower_constant(id, &default, &env, &self.symbols, reporter)
+                    {
                         fields.insert(item.id, expr);
                     }
                 }

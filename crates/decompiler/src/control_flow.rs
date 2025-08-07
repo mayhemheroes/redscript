@@ -58,14 +58,14 @@ impl ControlFlowBlock {
     }
 
     pub fn get_block(&self, bounds: Bounds) -> &ControlFlowBlock {
-        if let Some((_, parent)) = self
+        if let Some((b, parent)) = self
             .children
             .range(
                 Bounds::new(Location::ZERO, bounds.end())
                     ..=Bounds::new(bounds.start(), Location::MAX),
             )
             .next_back()
-            .filter(|(b, _)| b.contains(bounds))
+            && b.contains(bounds)
         {
             parent.get_block(bounds)
         } else {
@@ -78,7 +78,7 @@ impl ControlFlowBlock {
             .children
             .range(Bounds::new(Location::ZERO, loc)..=Bounds::new(loc, Location::MAX))
             .next_back()
-            .filter(|(bounds, _)| bounds.contains_location(loc))
+            && bounds.contains_location(loc)
         {
             (bounds, parent.get_containing(loc).1)
         } else {
@@ -87,14 +87,14 @@ impl ControlFlowBlock {
     }
 
     fn insert(&mut self, bounds: Bounds, block: ControlFlowBlock) {
-        if let Some((_, parent)) = self
+        if let Some((b, parent)) = self
             .children
             .range_mut(
                 Bounds::new(Location::ZERO, bounds.end())
                     ..Bounds::new(bounds.start(), Location::MAX),
             )
             .next_back()
-            .filter(|(b, _)| b.contains(bounds))
+            && b.contains(bounds)
         {
             parent.children.insert(bounds, block);
         } else {
@@ -177,7 +177,9 @@ impl<'ctx, 'i> ControlFlowBuilder<'ctx, 'i> {
                     let exit = nested.exit;
                     self.block.insert(Bounds::new(pos, target), nested);
 
-                    if let (BlockType::Conditional, Some(target)) = (kind, exit) {
+                    if kind == BlockType::Conditional
+                        && let Some(target) = exit
+                    {
                         while self.position() < target {
                             let offset = self.position();
                             let branches =

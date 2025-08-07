@@ -543,7 +543,9 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                         .map_err(|_| Diagnostic::NameRedefinition(name_span));
                     let idx = self.reporter.unwrap_err(res);
 
-                    if let (Some(idx), Some(default)) = (idx, let_.default) {
+                    if let Some(idx) = idx
+                        && let Some(default) = let_.default
+                    {
                         field_items.push(FieldItem::new(idx, Some(default)));
                     }
                 }
@@ -629,11 +631,12 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
             let val = if let Some(val) = variant.value {
                 val
             } else if let Some(last) = by_val.last() {
-                let Some(next) = last.checked_add(1) else {
+                if let Some(next) = last.checked_add(1) {
+                    next
+                } else {
                     self.reporter.report(Diagnostic::ValueOverflow(*span));
                     continue;
-                };
-                next
+                }
             } else {
                 0
             };

@@ -322,7 +322,9 @@ impl<'ctx> Expr<'ctx> {
                 .unwrap_or(self),
             Expr::NewClosure { closure, .. } => closure.block.find_at(pos).unwrap_or(self),
             Expr::Call { call, .. } => {
-                if let Some(receiver) = call.receiver().filter(|r| r.span().contains(pos)) {
+                if let Some(receiver) = call.receiver()
+                    && receiver.span().contains(pos)
+                {
                     return receiver.find_at(pos);
                 };
                 let args = call.args();
