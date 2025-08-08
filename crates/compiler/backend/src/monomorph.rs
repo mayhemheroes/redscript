@@ -375,10 +375,9 @@ impl<'ctx> Monomorphizer<'ctx> {
         symbols: &Symbols<'ctx>,
         bundle: &mut ScriptBundle<'ctx>,
     ) -> Result<(), AssembleError<'ctx>> {
-        let locals = func.locals.iter().cloned();
         let code = block_builder()
             .function_index(index)
-            .locals(locals)
+            .locals(func.locals.iter().cloned())
             .block(&func.block)
             .symbols(symbols)
             .type_env(env)
