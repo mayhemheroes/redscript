@@ -26,7 +26,7 @@ use redscript_io::{
 use smallvec::{SmallVec, smallvec};
 
 use crate::IndexMap;
-use crate::assemble::{AssembleError, assemble_block};
+use crate::assemble::{AssembleError, block_builder};
 use crate::inputs::{ClassMappings, Signature};
 
 pub struct Monomorphizer<'ctx> {
@@ -376,7 +376,15 @@ impl<'ctx> Monomorphizer<'ctx> {
         bundle: &mut ScriptBundle<'ctx>,
     ) -> Result<(), AssembleError<'ctx>> {
         let locals = func.locals.iter().cloned();
-        let code = assemble_block(index, locals, [], &func.block, symbols, env, bundle, self)?;
+        let code = block_builder()
+            .function_index(index)
+            .locals(locals)
+            .block(&func.block)
+            .symbols(symbols)
+            .type_env(env)
+            .bundle(bundle)
+            .monomorphizer(self)
+            .build()?;
 
         bundle[index].set_code(code);
         Ok(())

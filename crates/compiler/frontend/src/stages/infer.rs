@@ -2,6 +2,7 @@ use std::mem;
 use std::ops::Not;
 use std::rc::Rc;
 
+use bon::builder;
 use identity_hash::BuildIdentityHasher;
 use redscript_ast::{self as ast, FileId, Span, Spanned};
 use smallvec::smallvec;
@@ -50,19 +51,18 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
 
                 let mut methods = IndexMap::default();
                 for item in class.methods {
-                    let id = MethodId::new(class.id, item.id);
-                    let method = &self.symbols[id];
-                    let func = lower_function(
-                        method.type_(),
-                        &item.params_names,
-                        &item.body,
-                        Env::new(&types.push_scope(item.scope), &scope.funcs),
-                        method.flags().is_static().not().then(|| this_t.clone()),
-                        Some(class.id),
-                        &self.symbols,
-                        reporter,
-                        item.span,
-                    );
+                    let method = &self.symbols[MethodId::new(class.id, item.id)];
+                    let func = function_builder()
+                        .type_(method.type_())
+                        .param_names(&item.params_names)
+                        .body(&item.body)
+                        .env(Env::new(&types.push_scope(item.scope), &scope.funcs))
+                        .maybe_this_type(method.flags().is_static().not().then(|| this_t.clone()))
+                        .context(class.id)
+                        .symbols(&self.symbols)
+                        .reporter(reporter)
+                        .span(item.span)
+                        .build();
                     methods.insert(item.id, func);
                 }
 
@@ -96,56 +96,56 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
             for func in mod_.functions {
                 match func {
                     FuncItemKind::FreeFunction(func) => {
-                        let value = lower_function(
-                            self.symbols[func.id].type_(),
-                            &func.params_names,
-                            &func.body,
-                            Env::new(&scope.types.push_scope(func.scope), &scope.funcs),
-                            None,
-                            None,
-                            &self.symbols,
-                            reporter,
-                            func.span,
-                        );
+                        let value = function_builder()
+                            .type_(self.symbols[func.id].type_())
+                            .param_names(&func.params_names)
+                            .body(&func.body)
+                            .env(Env::new(&scope.types.push_scope(func.scope), &scope.funcs))
+                            .symbols(&self.symbols)
+                            .reporter(reporter)
+                            .span(func.span)
+                            .build();
                         compiled.functions.insert(func.id, value);
                     }
                     FuncItemKind::ReplaceMethod(func) => {
                         let sym = &self.symbols[func.id];
-                        let lowered = lower_function(
-                            sym.type_(),
-                            &func.params_names,
-                            &func.body,
-                            Env::new(&scope.types.push_scope(func.scope), &scope.funcs),
-                            sym.flags()
-                                .is_static()
-                                .not()
-                                .then(|| PolyType::nullary(func.id.parent())),
-                            Some(func.id.parent()),
-                            &self.symbols,
-                            reporter,
-                            func.span,
-                        );
+                        let this_t = sym
+                            .flags()
+                            .is_static()
+                            .not()
+                            .then(|| PolyType::nullary(func.id.parent()));
+                        let lowered = function_builder()
+                            .type_(sym.type_())
+                            .param_names(&func.params_names)
+                            .body(&func.body)
+                            .env(Env::new(&scope.types.push_scope(func.scope), &scope.funcs))
+                            .maybe_this_type(this_t)
+                            .context(func.id.parent())
+                            .symbols(&self.symbols)
+                            .reporter(reporter)
+                            .span(func.span)
+                            .build();
                         compiled.method_replacements.insert(func.id, lowered);
                     }
                     FuncItemKind::AddMethod(func) => {
                         let lowered = func.body.as_ref().map(|body| {
                             let sym = &self.symbols[func.id];
-                            let this = sym
+                            let this_t = sym
                                 .flags()
                                 .is_static()
                                 .not()
                                 .then(|| PolyType::nullary(func.id.parent()));
-                            lower_function(
-                                sym.type_(),
-                                &func.params_names,
-                                body,
-                                Env::new(&scope.types.push_scope(func.scope), &scope.funcs),
-                                this,
-                                Some(func.id.parent()),
-                                &self.symbols,
-                                reporter,
-                                func.span,
-                            )
+                            function_builder()
+                                .type_(sym.type_())
+                                .param_names(&func.params_names)
+                                .body(body)
+                                .env(Env::new(&scope.types.push_scope(func.scope), &scope.funcs))
+                                .maybe_this_type(this_t)
+                                .context(func.id.parent())
+                                .symbols(&self.symbols)
+                                .reporter(reporter)
+                                .span(func.span)
+                                .build()
                         });
                         compiled.added_methods.insert(func.id, lowered);
                     }
@@ -160,20 +160,22 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                         funcs.insert(WRAPPED_METHOD_IDENT, smallvec![free_func]);
 
                         let sym = &self.symbols[func.id];
-                        let lowered = lower_function(
-                            sym.type_(),
-                            &func.params_names,
-                            &func.body,
-                            Env::new(&scope.types.push_scope(func.scope), &funcs),
-                            sym.flags()
-                                .is_static()
-                                .not()
-                                .then(|| PolyType::nullary(func.id.parent())),
-                            Some(func.id.parent()),
-                            &self.symbols,
-                            reporter,
-                            func.span,
-                        );
+                        let this_t = sym
+                            .flags()
+                            .is_static()
+                            .not()
+                            .then(|| PolyType::nullary(func.id.parent()));
+                        let lowered = function_builder()
+                            .type_(sym.type_())
+                            .param_names(&func.params_names)
+                            .body(&func.body)
+                            .env(Env::new(&scope.types.push_scope(func.scope), &funcs))
+                            .maybe_this_type(this_t)
+                            .context(func.id.parent())
+                            .symbols(&self.symbols)
+                            .reporter(reporter)
+                            .span(func.span)
+                            .build();
                         compiled
                             .method_wrappers
                             .entry(func.id)
@@ -210,29 +212,29 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-fn lower_function<'ctx>(
-    func_type: &FunctionType<'ctx>,
+#[builder(finish_fn = build)]
+fn function_builder<'ctx>(
+    type_: &FunctionType<'ctx>,
     param_names: &[&'ctx str],
     body: &ast::SourceFunctionBody<'ctx>,
     mut env: Env<'_, 'ctx>,
-    this: Option<PolyType<'ctx>>,
+    this_type: Option<PolyType<'ctx>>,
     context: Option<TypeId<'ctx>>,
     symbols: &Symbols<'ctx>,
     reporter: &mut CompileErrorReporter<'ctx>,
     span: Span,
 ) -> LoweredFunction<'ctx> {
-    let this = this.map(|lt| ir::LocalInfo::new(ir::Local::This, lt, None));
+    let this = this_type.map(|lt| ir::LocalInfo::new(ir::Local::This, lt, None));
     if let Some(this) = &this {
         env.define_local(THIS_IDENT, this.clone());
     }
 
-    let params = func_type
+    let params = type_
         .params()
         .iter()
         .zip(param_names)
         .map(|(param, &name)| (name, PolyType::from_type(param.type_())));
-    let return_t = PolyType::from_type(func_type.return_type());
+    let return_t = PolyType::from_type(type_.return_type());
 
     let (block, output, errors) = Lower::function(body, params, env, return_t, context, symbols);
     reporter.report_many(errors);

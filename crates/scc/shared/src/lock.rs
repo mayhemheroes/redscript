@@ -1,7 +1,5 @@
-use std::{
-    fs, io,
-    ops::{Deref, DerefMut},
-};
+use std::ops::{Deref, DerefMut};
+use std::{fs, io};
 
 pub struct FileLock(fs::File);
 

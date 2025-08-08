@@ -1,3 +1,4 @@
+use bon::{bon, builder};
 use closure::{CALL_METHOD, emit_closure};
 use redscript_compiler_frontend::ast::Span;
 use redscript_compiler_frontend::utils::ScopedMap;
@@ -18,20 +19,26 @@ use crate::monomorph::{MethodWithReceiver, Monomorphizer};
 
 mod closure;
 
-#[allow(clippy::too_many_arguments)]
-pub fn assemble_block<'ctx>(
-    index: PoolFunctionIndex,
+#[builder(finish_fn = build)]
+pub fn block_builder<'ctx>(
+    function_index: PoolFunctionIndex,
     locals: impl IntoIterator<Item = ir::LocalInfo<'ctx>>,
-    captures: impl IntoIterator<Item = (ir::Local, PoolFieldIndex)>,
+    #[builder(default = vec![])] captures: Vec<(ir::Local, PoolFieldIndex)>,
     block: &ir::Block<'ctx>,
     symbols: &Symbols<'ctx>,
     type_env: &ScopedMap<'_, &'ctx str, MonoType<'ctx>>,
     bundle: &mut ScriptBundle<'ctx>,
-    monomorph: &mut Monomorphizer<'ctx>,
+    monomorphizer: &mut Monomorphizer<'ctx>,
 ) -> Result<Vec<Instr>, AssembleError<'ctx>> {
-    let mut assembler = Assembler::new(
-        index, locals, captures, symbols, type_env, bundle, monomorph,
-    )?;
+    let mut assembler = Assembler::builder()
+        .function_index(function_index)
+        .locals(locals)
+        .captures(captures)
+        .symbols(symbols)
+        .type_env(type_env)
+        .bundle(bundle)
+        .monomorphizer(monomorphizer)
+        .build()?;
     assembler.assemble_block(block, None)?;
     assembler.into_code()
 }
@@ -52,15 +59,17 @@ struct Assembler<'scope, 'ctx> {
     monomorph: &'scope mut Monomorphizer<'ctx>,
 }
 
+#[bon]
 impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
+    #[builder]
     fn new(
-        index: PoolFunctionIndex,
+        function_index: PoolFunctionIndex,
         locals: impl IntoIterator<Item = ir::LocalInfo<'ctx>>,
-        captures: impl IntoIterator<Item = (ir::Local, PoolFieldIndex)>,
+        mut captures: Vec<(ir::Local, PoolFieldIndex)>,
         symbols: &'scope Symbols<'ctx>,
         type_env: &'scope ScopedMap<'scope, &'ctx str, MonoType<'ctx>>,
         bundle: &'scope mut ScriptBundle<'ctx>,
-        monomorph: &'scope mut Monomorphizer<'ctx>,
+        monomorphizer: &'scope mut Monomorphizer<'ctx>,
     ) -> Result<Self, AssembleError<'ctx>> {
         let mut local_indices = vec![];
         let mut param_indices = vec![];
@@ -79,13 +88,13 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                             )
                         })?
                         .assume_mono(type_env);
-                    let typ = monomorph.type_(&typ, symbols, bundle);
+                    let typ = monomorphizer.type_(&typ, symbols, bundle);
                     let flags = PoolLocalFlags::default();
-                    let idx = bundle.define(PoolLocal::new(name, index, typ, flags));
+                    let idx = bundle.define(PoolLocal::new(name, function_index, typ, flags));
                     local_indices.push((local.id, idx));
                 }
                 ir::Local::Param(_) => {
-                    let idx = bundle[index].parameters()[param_indices.len()];
+                    let idx = bundle[function_index].parameters()[param_indices.len()];
                     param_indices.push((local.id, idx));
                 }
                 ir::Local::This => {}
@@ -98,24 +107,23 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
             .iter()
             .map(|&(_, idx)| idx)
             .collect::<Vec<_>>();
-        bundle[index].set_locals(locals);
+        bundle[function_index].set_locals(locals);
 
-        let mut capture_indices = captures.into_iter().collect::<Vec<_>>();
-        capture_indices.sort_by_key(|&(l, _)| l);
+        captures.sort_by_key(|&(l, _)| l);
 
         Ok(Self {
             code: Vec::new(),
             locals: local_indices,
             params: param_indices,
-            captures: capture_indices,
-            has_return_value: bundle[index].return_type().is_some(),
+            captures,
+            has_return_value: bundle[function_index].return_type().is_some(),
 
             labels: Slab::new(),
             virtual_offset: 0,
 
             symbols,
             bundle,
-            monomorph,
+            monomorph: monomorphizer,
             type_env,
         })
     }

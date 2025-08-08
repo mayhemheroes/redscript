@@ -1339,6 +1339,7 @@ name = "redscript-compiler-frontend"
 version = "1.0.0-preview.15"
 dependencies = [
  "bitfield-struct",
+ "bon",
  "derive-where",
  "elsa",
  "hashbrown 0.15.4",

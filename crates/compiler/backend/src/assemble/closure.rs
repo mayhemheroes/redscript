@@ -1,5 +1,6 @@
 use std::mem;
 
+use bon::builder;
 use redscript_compiler_frontend::ast::Span;
 use redscript_compiler_frontend::{MonoType, Symbols, ir, predef};
 use redscript_io::{
@@ -11,7 +12,7 @@ use redscript_io::{
     ParameterFlags as PoolParameterFlags, ScriptBundle, TypeIndex as PoolTypeIndex, Visibility,
 };
 
-use super::{AssembleError, Assembler, assemble_block};
+use super::{AssembleError, Assembler, block_builder};
 use crate::monomorph::Monomorphizer;
 
 pub(super) const INSTANTIATE_METHOD: &str = "Instantiate";
@@ -85,22 +86,33 @@ pub fn emit_closure<'ctx>(
     let call =
         PoolFunction::new(call_name, Visibility::Public, call_flags).with_source(Some(source_ref));
     let call = assembler.bundle.define_and_init(call, |bundle, idx, func| {
-        let symbols = assembler.symbols;
-        let monomorph = &mut assembler.monomorph;
-        create_apply_method(idx, func, class, &func_t, symbols, bundle, monomorph)
+        apply_method_builder()
+            .function_index(idx)
+            .function(func)
+            .class_index(class)
+            .function_type(&func_t)
+            .symbols(assembler.symbols)
+            .bundle(bundle)
+            .monomorphizer(assembler.monomorph)
+            .build()
     });
 
-    let captures = closure.captures.iter().copied().zip(fields.iter().copied());
-    let code = assemble_block(
-        call,
-        closure.locals.iter().cloned(),
-        captures,
-        &closure.block,
-        symbols,
-        type_env,
-        assembler.bundle,
-        assembler.monomorph,
-    )?;
+    let captures = closure
+        .captures
+        .iter()
+        .copied()
+        .zip(fields.iter().copied())
+        .collect();
+    let code = block_builder()
+        .function_index(call)
+        .locals(closure.locals.iter().cloned())
+        .captures(captures)
+        .block(&closure.block)
+        .symbols(symbols)
+        .type_env(type_env)
+        .bundle(assembler.bundle)
+        .monomorphizer(assembler.monomorph)
+        .build()?;
 
     assembler.bundle[call].set_code(code);
 
@@ -127,17 +139,17 @@ pub fn emit_closure<'ctx>(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
-fn create_apply_method<'ctx>(
-    index: PoolFunctionIndex,
-    func: PoolFunction<'ctx>,
+#[builder(finish_fn = build)]
+fn apply_method_builder<'ctx>(
+    function_index: PoolFunctionIndex,
+    function: PoolFunction<'ctx>,
     class_index: PoolClassIndex,
-    typ: &MonoType<'ctx>,
+    function_type: &MonoType<'ctx>,
     symbols: &Symbols<'ctx>,
     bundle: &mut ScriptBundle<'ctx>,
-    monomorph: &mut Monomorphizer<'ctx>,
+    monomorphizer: &mut Monomorphizer<'ctx>,
 ) -> PoolFunction<'ctx> {
-    let (return_t, param_types) = typ
+    let (return_t, param_types) = function_type
         .args()
         .split_last()
         .expect("lambda should have at least one type argument");
@@ -146,20 +158,21 @@ fn create_apply_method<'ctx>(
         .iter()
         .enumerate()
         .map(|(i, typ)| {
-            let typ = monomorph.type_(typ, symbols, bundle);
+            let typ = monomorphizer.type_(typ, symbols, bundle);
             let name = bundle.cnames_mut().add(format!("arg${i}"));
             let flags = PoolParameterFlags::default();
-            let param = PoolParameter::new(name, index, typ, flags);
+            let param = PoolParameter::new(name, function_index, typ, flags);
             bundle.define(param)
         })
         .collect::<Vec<_>>();
 
     let return_t_idx = match return_t.id() {
         id if id == predef::VOID || id == predef::NOTHING => None,
-        _ => Some(monomorph.type_(return_t, symbols, bundle)),
+        _ => Some(monomorphizer.type_(return_t, symbols, bundle)),
     };
 
-    func.with_class(Some(class_index))
+    function
+        .with_class(Some(class_index))
         .with_parameters(apply_params)
         .with_return_type(return_t_idx)
 }

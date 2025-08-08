@@ -3,6 +3,7 @@ use std::ops::RangeInclusive;
 use std::rc::Rc;
 use std::{iter, mem, slice};
 
+use bon::bon;
 use env::{Capture, Locals};
 pub use env::{Env, TypeEnv, TypeRef};
 pub use error::{CoalesceError, Error, LowerResult, TypeError};
@@ -37,6 +38,7 @@ pub struct Lower<'scope, 'ctx> {
     context: Option<TypeId<'ctx>>,
 }
 
+#[bon]
 impl<'scope, 'ctx> Lower<'scope, 'ctx> {
     #[inline]
     fn new(
@@ -72,26 +74,26 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
     ) -> (ir::Block<'ctx>, LowerOutput<'ctx>, Vec<Error<'ctx>>) {
         let counter = Cell::new(0);
         let mut reporter = LowerReporter::default();
-        let (block, output) = Lower::function_with(
-            body,
-            &counter,
-            params,
-            env,
-            return_t,
-            context,
-            symbols,
-            &mut reporter,
-        );
+        let (block, output) = Lower::function_builder()
+            .body(body)
+            .local_counter(&counter)
+            .params(params)
+            .env(env)
+            .return_type(return_t)
+            .maybe_context(context)
+            .symbols(symbols)
+            .reporter(&mut reporter)
+            .build();
         (block, output, reporter.into_reported())
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn function_with(
+    #[builder(finish_fn = build)]
+    fn function_builder(
         body: &ast::SourceFunctionBody<'ctx>,
         local_counter: &Cell<u16>,
         params: impl IntoIterator<Item = (&'ctx str, PolyType<'ctx>)>,
         mut env: Env<'_, 'ctx>,
-        return_t: PolyType<'ctx>,
+        return_type: PolyType<'ctx>,
         context: Option<TypeId<'ctx>>,
         symbols: &Symbols<'ctx>,
         reporter: &mut LowerReporter<'ctx>,
@@ -122,7 +124,15 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         for (name, typ) in params {
             env.define_local(name, locals.add_param(typ, None).clone());
         }
-        inner(symbols, reporter, locals, return_t, context, body, &mut env)
+        inner(
+            symbols,
+            reporter,
+            locals,
+            return_type,
+            context,
+            body,
+            &mut env,
+        )
     }
 
     pub fn constant(
@@ -1096,9 +1106,15 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             };
 
             let res = self
-                .resolve_overload(
-                    name, args, type_args, candidates, None, hint, env, *expr_span,
-                )?
+                .overload_resolver()
+                .name(name)
+                .args(args)
+                .type_args(type_args)
+                .candidates(candidates)
+                .maybe_return_hint(hint)
+                .env(env)
+                .span(*expr_span)
+                .resolve()?
                 .into_call();
             return Ok(res);
         };
@@ -1136,16 +1152,16 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 let typ = TypeApp::new(typ, parent_args);
 
                 let res = self
-                    .resolve_overload(
-                        member,
-                        args,
-                        type_args,
-                        candidates,
-                        Some(typ.clone()),
-                        hint,
-                        env,
-                        *expr_span,
-                    )?
+                    .overload_resolver()
+                    .name(member)
+                    .args(args)
+                    .type_args(type_args)
+                    .candidates(candidates)
+                    .receiver(typ.clone())
+                    .maybe_return_hint(hint)
+                    .env(env)
+                    .span(*expr_span)
+                    .resolve()?
                     .into_static_call(typ.id(), typ.args().iter().cloned());
                 return Ok(res);
             }
@@ -1181,16 +1197,17 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 break 'instance Some((field_expr, field_t));
             }
 
-            let resolved = self.resolve_overload(
-                member,
-                args,
-                type_args,
-                candidates,
-                Some(upper_bound.clone()),
-                hint,
-                env,
-                *expr_span,
-            )?;
+            let resolved = self
+                .overload_resolver()
+                .name(member)
+                .args(args)
+                .type_args(type_args)
+                .candidates(candidates)
+                .receiver(upper_bound.clone())
+                .maybe_return_hint(hint)
+                .env(env)
+                .span(*expr_span)
+                .resolve()?;
 
             let id = resolved.resulution.function;
             self.check_visibility(
@@ -1254,7 +1271,14 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 )
             });
         let res = self
-            .resolve_overload("Cast", args, &[], candidates, None, hint, env, expr_span)?
+            .overload_resolver()
+            .name("Cast")
+            .args(args)
+            .candidates(candidates)
+            .maybe_return_hint(hint)
+            .env(env)
+            .span(expr_span)
+            .resolve()?
             .into_call();
         Ok(res)
     }
@@ -1296,16 +1320,16 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             .map(|((param, _), typ)| (param.name, typ.clone()));
         let counter = self.locals.counter();
         let env = env.introduce_scope();
-        let (block, output) = Lower::function_with(
-            body,
-            counter,
-            types,
-            env,
-            return_t,
-            self.context,
-            self.symbols,
-            self.reporter,
-        );
+        let (block, output) = Lower::function_builder()
+            .body(body)
+            .local_counter(counter)
+            .params(types)
+            .env(env)
+            .return_type(return_t)
+            .maybe_context(self.context)
+            .symbols(self.symbols)
+            .reporter(self.reporter)
+            .build();
 
         let (locals, captures) = output.into_inner();
         let captured = captures.iter().map(|cap| cap.captured).collect::<Box<_>>();
@@ -1530,14 +1554,14 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn resolve_overload<'a, Key, Name, Func>(
+    #[builder(finish_fn = resolve)]
+    fn overload_resolver<'a, Key, Name, Func>(
         &mut self,
         name: &'ctx str,
         args: impl IntoIterator<
             IntoIter = impl ExactSizeIterator<Item = &'a Spanned<ast::SourceExpr<'ctx>>> + Clone,
         >,
-        type_args: &[Spanned<ast::SourceType<'ctx>>],
+        #[builder(default)] type_args: &[Spanned<ast::SourceType<'ctx>>],
         candidates: impl IntoIterator<Item = FunctionEntry<Key, Name, Func>>,
         receiver: Option<InferredTypeApp<'ctx>>,
         return_hint: Option<&PolyType<'ctx>>,
@@ -1629,29 +1653,29 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             let matches = iter::once(primary.clone()).chain(filtered);
             let fallback = Some(primary);
             let res = self
-                .resolve_overload_typed(
-                    name,
-                    &mut checked_args,
-                    arg_types,
-                    &type_args,
-                    matches,
-                    fallback,
-                    receiver,
-                    env,
-                    span,
-                )?
+                .typed_overload_resolver()
+                .name(name)
+                .args(&mut checked_args)
+                .arg_types(arg_types)
+                .type_args(&type_args)
+                .candidates(matches)
+                .maybe_fallback(fallback)
+                .maybe_receiver(receiver)
+                .env(env)
+                .span(span)
+                .resolve()?
                 .with_args(checked_args);
             Ok(res)
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn resolve_overload_typed<Key, Name, Func>(
+    #[builder(finish_fn = resolve)]
+    fn typed_overload_resolver<Key, Name, Func>(
         &mut self,
         name: &'ctx str,
         args: &mut [ir::Expr<'ctx>],
         arg_types: Vec<PolyType<'ctx>>,
-        type_args: &[PolyType<'ctx>],
+        #[builder(default)] type_args: &[PolyType<'ctx>],
         candidates: impl IntoIterator<Item = FunctionEntry<Key, Name, Func>>,
         fallback: Option<FunctionEntry<Key, Name, Func>>,
         receiver: Option<InferredTypeApp<'ctx>>,
@@ -1872,9 +1896,15 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         let (mut args, arg_types): (Vec<_>, Vec<_>) = args.into_iter().unzip();
         let candidates = env.query_free_functions(name, self.symbols);
         let res = self
-            .resolve_overload_typed(
-                name, &mut args, arg_types, type_args, candidates, None, None, env, span,
-            )?
+            .typed_overload_resolver()
+            .name(name)
+            .args(&mut args)
+            .arg_types(arg_types)
+            .type_args(type_args)
+            .candidates(candidates)
+            .env(env)
+            .span(span)
+            .resolve()?
             .with_args(args)
             .into_call();
         Ok(res)
@@ -1939,17 +1969,15 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             .filter(|entry| !entry.func().flags().is_static());
         let mut args = [ir::Expr::call(name_of, span)];
         let (call, _) = self
-            .resolve_overload_typed(
-                "IsA",
-                &mut args,
-                vec![name_t],
-                &[],
-                candidates,
-                None,
-                Some(upper_bound.clone()),
-                env,
-                span,
-            )?
+            .typed_overload_resolver()
+            .name("IsA")
+            .args(&mut args)
+            .arg_types(vec![name_t])
+            .candidates(candidates)
+            .receiver(upper_bound.clone())
+            .env(env)
+            .span(span)
+            .resolve()?
             .with_args(args)
             .into_instance_call(receiver, upper_bound, ref_type, ir::CallMode::Normal);
         Ok(call)

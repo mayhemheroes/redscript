@@ -11,6 +11,7 @@ redscript-parser.workspace = true
 thiserror.workspace = true
 derive-where.workspace = true
 paste.workspace = true
+bon.workspace = true
 bitfield-struct.workspace = true
 identity-hash.workspace = true
 slab.workspace = true
