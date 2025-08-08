@@ -17,7 +17,6 @@ toml = { workspace = true, features = ["parse"] }
 flexi_logger.workspace = true
 vmap.workspace = true
 file-id.workspace = true
-fd-lock.workspace = true
 msgbox.workspace = true
 
 [dev-dependencies]

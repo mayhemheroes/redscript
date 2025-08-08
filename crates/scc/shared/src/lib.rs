@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use std::{env, fs, io};
 
 use anyhow::Context;
-use fd_lock::RwLock;
 use output::extract_refs;
 pub use output::{SccOutput, SourceRef, SourceRefType};
 use redscript_compiler_api::ast::SourceMap;
@@ -17,7 +16,10 @@ use settings::{BACKUP_FILE_EXT, TIMESTAMP_FILE_EXT};
 use timestamp::CompileTimestamp;
 use vmap::Map;
 
+use crate::lock::FileLock;
+
 mod hints;
+mod lock;
 mod logger;
 mod output;
 mod report;
@@ -51,7 +53,7 @@ fn compile_inner(settings: &SccSettings) -> anyhow::Result<SccOutput> {
     let cache_file = settings.cache_file_path();
 
     let ts_path = cache_file.with_extension(TIMESTAMP_FILE_EXT);
-    let mut ts_lock = RwLock::new(
+    let mut ts_file = FileLock::new(
         fs::OpenOptions::new()
             .read(true)
             .write(true)
@@ -59,10 +61,8 @@ fn compile_inner(settings: &SccSettings) -> anyhow::Result<SccOutput> {
             .truncate(false)
             .open(&ts_path)
             .context("failed to open the timestamp file")?,
-    );
-    let mut ts_file = ts_lock
-        .write()
-        .context("failed to acquire a write lock on the timestamp file")?;
+    )
+    .context("failed to acquire a write lock on the timestamp file")?;
 
     let input_file = prepare_input_cache(settings, &mut ts_file)?;
     let output_file = settings.output_cache_file_path();
