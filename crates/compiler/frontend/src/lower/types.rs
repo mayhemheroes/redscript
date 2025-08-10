@@ -455,9 +455,12 @@ impl<'ctx> PolyType<'ctx> {
     ) -> bool {
         match self {
             Self::Mono(typ) => typ.is_subtype_compatible(other, variance, symbols),
-            Self::Var(var) => var
-                .upper()
-                .is_none_or(|typ| typ.is_subtype_compatible(other, variance, symbols)),
+            Self::Var(var) => {
+                var.lower().is_subtype_compatible(other, variance, symbols)
+                    && var
+                        .upper()
+                        .is_none_or(|u| u.is_subtype_compatible(other, !variance, symbols))
+            }
         }
     }
 }

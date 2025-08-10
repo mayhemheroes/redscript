@@ -70,7 +70,7 @@ pub fn lex<'src>(
         .then_ignore(any().and_is(just('\n').not()).repeated())
         .to_slice()
         .map(|str: &str| {
-            if str.starts_with("///") {
+            if str.starts_with("///") && !str.starts_with("////") {
                 Token::DocComment(str)
             } else {
                 Token::LineComment(str)

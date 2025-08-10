@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::fmt::Debug;
 use std::ops::RangeInclusive;
 use std::rc::Rc;
 use std::{iter, mem, slice};
@@ -13,7 +14,7 @@ use redscript_ast::{Span, Spanned};
 use types::Coercion;
 pub use types::{InferredTypeApp, Poly, PolyType};
 
-use crate::diagnostic::ErrorWithSpan;
+use crate::diagnostic::{ErrorWithSpan, MethodSignature};
 use crate::symbols::{
     FieldId, FreeFunctionIndex, FunctionEntry, FunctionKey, FunctionKind, FunctionType, Symbols,
     TypeSchema, Visibility,
@@ -1165,12 +1166,19 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 let Some(&TypeRef::Name(typ)) = env.types().get(ident) else {
                     break 'static_method;
                 };
-                let TypeSchema::Aggregate(agg) = self.symbols[typ].schema() else {
-                    break 'static_method;
-                };
-                let mut candidates = agg
-                    .methods()
-                    .by_name(member)
+                let mut candidates = self
+                    .symbols
+                    .base_iter(typ)
+                    .map(|(_, def)| {
+                        def.schema()
+                            .as_aggregate()
+                            .into_iter()
+                            .flat_map(|agg| agg.methods().by_name(member))
+                            .peekable()
+                    })
+                    .find_map(|mut matches| matches.peek().is_some().then_some(matches))
+                    .into_iter()
+                    .flatten()
                     .filter(|entry| entry.func().flags().is_static())
                     .map(|entry| entry.map_key(|i| MethodId::new(typ, i)))
                     .peekable();
@@ -1808,8 +1816,14 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 .next()
                 .ok_or(Error::UnresolvedFunction(name, span))?;
             if matches.peek().is_some() {
-                let count = matches.count() + 1;
-                return Err(Error::MultipleMatchingOverloads(name, count, span));
+                let matches = iter::once(primary)
+                    .chain(matches)
+                    .map(|entry| {
+                        let func_t = entry.func().type_();
+                        MethodSignature::new(name, func_t.params(), func_t.return_type().clone())
+                    })
+                    .collect();
+                return Err(Error::MultipleMatchingOverloads(matches, span));
             }
             primary
         };
@@ -1997,7 +2011,8 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             .is_some_and(|agg| agg.flags().is_struct())
             && receiver.is_prvalue(self.symbols)
         {
-            self.reporter.report(Error::InvalidTemporary(span));
+            self.reporter
+                .report(Error::InvalidTemporary(receiver.span()));
         }
 
         let ir = ir::Expr::Field {

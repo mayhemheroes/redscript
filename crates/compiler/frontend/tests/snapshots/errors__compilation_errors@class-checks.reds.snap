@@ -117,7 +117,7 @@ this class contains a duplicated implementation of the `Method` method
 class IncompleteClass extends AbstractClass<Int32> {}
       ^^^^^^^^^^^^^^^
 this class is missing some required method implementation(s):
-  func UnimplementedMethod(a: Int32) {}
+  func UnimplementedMethod(a: Int32) -> Void
 
 [FINAL_FN_OVERRIDE] At tests/data/class-checks.reds:30:7
 class ClassOverridingFinalMethod extends AbstractClass<Int32> {
@@ -128,4 +128,4 @@ this class overrides a final method `FinalMethod`
 class ClassWithInvalidTypeArgCounts extends AbstractClass<Int32, Int32> {
       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 this class is missing some required method implementation(s):
-  func UnimplementedMethod(a: Int32) {}
+  func UnimplementedMethod(a: Int32) -> Void

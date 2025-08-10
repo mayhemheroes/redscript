@@ -7,7 +7,7 @@ use {redscript_ast as ast, redscript_parser as parser};
 use crate::lower::{LowerResult, Poly, TypeError};
 use crate::stages::FunctionAnnotation;
 use crate::utils::fmt::{DisplayFn, lowercase, sep_by, surrounded_by};
-use crate::{CoalesceError, LowerError, Param, PolyType, Type, TypeId, Variance, cte, predef};
+use crate::{CoalesceError, LowerError, Param, Type, TypeId, TypeKind, Variance, cte};
 
 pub mod pass;
 
@@ -52,7 +52,7 @@ pub enum Diagnostic<'ctx> {
     #[error("the annotations on this function are incompatible with each other")]
     IncompatibleAnnotations(Span),
     #[error("this class is missing some required method implementation(s):\n{}", sep_by(.0, "\n"))]
-    MissingMethodImpls(Box<[MissingMethod<'ctx>]>, Span),
+    MissingMethodImpls(Box<[MethodSignature<'ctx, Poly>]>, Span),
     #[error("this class contains a duplicated implementation of the `{0}` method")]
     DuplicateMethod(&'ctx str, Span),
     #[error("this class overrides a final method `{0}`")]
@@ -95,6 +95,10 @@ pub enum Diagnostic<'ctx> {
     DuplicateImpl(Span),
     #[error("unused variable")]
     UnusedLocal(Span),
+    #[error(
+        "this `@addField` conflicts with an existing field, this operation will have no effect"
+    )]
+    AddFieldConflict(Span),
     #[error("{0}")]
     Other(Box<dyn std::error::Error + 'ctx>, DiagnosticLevel, Span),
 }
@@ -108,7 +112,8 @@ impl<'ctx> Diagnostic<'ctx> {
             }
             Self::UnusedItemQualifiers(_, _)
             | Self::DuplicateVariantName(_)
-            | Self::UnusedLocal(_) => DiagnosticLevel::Warning,
+            | Self::UnusedLocal(_)
+            | Self::AddFieldConflict(_) => DiagnosticLevel::Warning,
             Self::Other(_, level, _) => *level,
             _ => DiagnosticLevel::Error,
         }
@@ -164,6 +169,7 @@ impl<'ctx> Diagnostic<'ctx> {
             | Self::InvalidImplType(span)
             | Self::DuplicateImpl(span)
             | Self::UnusedLocal(span)
+            | Self::AddFieldConflict(span)
             | Self::Other(_, _, span) => *span,
         }
     }
@@ -211,6 +217,7 @@ impl<'ctx> Diagnostic<'ctx> {
             Self::InvalidImplType(_) => "INVALID_IMPL_TYPE",
             Self::DuplicateImpl(_) => "DUP_IMPL",
             Self::UnusedLocal(_) => "UNUSED_LOCAL",
+            Self::AddFieldConflict(_) => "ADD_FIELD_CONFLICT",
             Self::Other(_, _, _) => "OTHER",
         }
     }
@@ -312,34 +319,35 @@ impl<E> Default for Reporter<E> {
 }
 
 #[derive(Debug)]
-pub struct MissingMethod<'ctx> {
+pub struct MethodSignature<'ctx, K: TypeKind> {
     name: &'ctx str,
-    params: Box<[Param<'ctx, Poly>]>,
-    return_type: PolyType<'ctx>,
+    params: Box<[Param<'ctx, K>]>,
+    return_type: K::Type<'ctx>,
 }
 
-impl<'ctx> MissingMethod<'ctx> {
+impl<'ctx, K: TypeKind> MethodSignature<'ctx, K> {
     pub fn new(
         name: &'ctx str,
-        params: Box<[Param<'ctx, Poly>]>,
-        return_type: PolyType<'ctx>,
+        params: impl Into<Box<[Param<'ctx, K>]>>,
+        return_type: impl Into<K::Type<'ctx>>,
     ) -> Self {
         Self {
             name,
-            params,
-            return_type,
+            params: params.into(),
+            return_type: return_type.into(),
         }
     }
 }
 
-impl fmt::Display for MissingMethod<'_> {
+impl<K: TypeKind> fmt::Display for MethodSignature<'_, K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "  func {}({}) ", self.name, sep_by(&self.params, ", "),)?;
-        if !matches!(&self.return_type, PolyType::Mono(Type::Data(app)) if app.id() == predef::VOID)
-        {
-            write!(f, "-> {} ", self.return_type)?;
-        }
-        write!(f, "{{}}")
+        write!(
+            f,
+            "  func {}({}) -> {}",
+            self.name,
+            sep_by(&self.params, ", "),
+            self.return_type
+        )
     }
 }
 

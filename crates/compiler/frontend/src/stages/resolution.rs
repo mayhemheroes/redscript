@@ -11,7 +11,7 @@ use redscript_ast::{self as ast, Span, Spanned};
 use super::TypeInference;
 use super::infer::{ClassItem, FieldItem, FuncItem, FuncItemKind, InferStageModule};
 use crate::cte::{self, Evaluator};
-use crate::diagnostic::MissingMethod;
+use crate::diagnostic::MethodSignature;
 use crate::lower::{InferredTypeApp, TypeEnv};
 use crate::modules::{Export, ImportError, ModuleMap};
 use crate::symbols::{FreeFunctionIndexes, FunctionEntry, Visibility};
@@ -386,21 +386,24 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
 
     fn process_aggregate<'a>(
         &mut self,
-        entry: ParsedAggregate<'ctx>,
+        ParsedAggregate {
+            id,
+            meta,
+            aggregate,
+        }: ParsedAggregate<'ctx>,
         path: Option<&ast::Path<'ctx>>,
         types: &TypeEnv<'a, 'ctx>,
         is_struct: bool,
     ) -> ClassItem<'a, 'ctx> {
-        let aggregate = entry.aggregate;
         let (aggregate_name, name_span) = aggregate.name;
-        let span = entry.meta.span;
+        let span = meta.span;
+        let mut qs = meta.qualifiers;
 
-        let mut qs = entry.meta.qualifiers;
         let is_import_only = qs.take_flag(ast::ItemQualifiers::IMPORT_ONLY);
         let is_native = is_import_only || qs.take_flag(ast::ItemQualifiers::NATIVE);
         let class_flags = self
             .symbols
-            .get_type(entry.id)
+            .get_type(id)
             .and_then(|def| def.schema().as_aggregate())
             .map(Aggregate::flags)
             .unwrap_or_default()
@@ -418,7 +421,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         let mut implementations = HashMap::default();
         let mut derive_new = None;
 
-        for (ann, ann_span) in &entry.meta.annotations {
+        for (ann, ann_span) in &meta.annotations {
             match (ann.name, &ann.args[..]) {
                 (
                     NAME_IMPLEMENTATION_ANNOTATION,
@@ -578,7 +581,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
             });
 
         if let Some(derive_span) = derive_new {
-            let method = derive_new::derive_new_method(entry.id, &vars, fields.iter(), derive_span);
+            let method = derive_new::derive_new_method(id, &vars, fields.iter(), derive_span);
             let id = methods.add(NEW_METHOD_IDENT, method);
             method_items.push(derive_new::derive_new_method_item(
                 id,
@@ -597,22 +600,15 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
             Some(name_span),
         );
         let schema = TypeSchema::Aggregate(aggregate.into());
-        let def = TypeDef::new(vars, schema, entry.meta.doc);
-        self.symbols.add_type(entry.id, def);
+        let def = TypeDef::new(vars, schema, meta.doc);
+        self.symbols.add_type(id, def);
 
         let type_scope = types
             .pop_scope()
             .into_iter()
             .filter_map(|(k, v)| Some((k, v.force()?)))
             .collect();
-        ClassItem::new(
-            entry.id,
-            span,
-            name_span,
-            type_scope,
-            method_items,
-            field_items,
-        )
+        ClassItem::new(id, span, name_span, type_scope, method_items, field_items)
     }
 
     fn process_enum(&mut self, entry: ParsedEnum<'ctx>) {
@@ -658,27 +654,36 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
 
     fn process_free_function<'a>(
         &mut self,
-        entry: ParsedFunction<'ctx>,
+        ParsedFunction {
+            index,
+            meta,
+            function,
+            annotation,
+        }: ParsedFunction<'ctx>,
         types: &TypeEnv<'a, 'ctx>,
     ) -> Option<FuncItemKind<'a, 'ctx>> {
-        let func = entry.function;
-        let (name, name_span) = func.name;
-        let (func_t, type_scope) = self.create_function_env(&func, types);
-        let span = entry.meta.span;
-        let param_names = func.param_names().collect::<Box<[_]>>();
+        let (name, name_span) = function.name;
+        let (func_t, type_scope) = self.create_function_env(&function, types);
+        let param_names = function.param_names().collect::<Box<[_]>>();
+        let span = meta.span;
 
         let mut intrinsic: Option<ir::Intrinsic> = None;
         let mut replaced: Option<MethodId<'ctx>> = None;
         let mut wrapped: Option<MethodId<'ctx>> = None;
 
-        match &entry.annotation {
+        match &annotation {
             &Some(FunctionAnnotation::Intrinsic(i)) => {
                 intrinsic = Some(i);
             }
             Some(ann @ FunctionAnnotation::Replace(class)) => {
-                if let Some(id) =
-                    self.resolve_existing_annotated_method(func.name, *class, &func_t, ann, types)
-                {
+                if let Some(id) = self.resolve_existing_annotated_method(
+                    function.name,
+                    *class,
+                    &meta.qualifiers,
+                    &func_t,
+                    ann,
+                    types,
+                ) {
                     replaced = Some(id);
                 }
             }
@@ -713,16 +718,16 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     self.reporter
                         .report(Diagnostic::UserSymbolAnnotation(name_span));
                 }
-                let qs = entry.meta.qualifiers;
-                let flags = self.process_method_flags(qs, &func, parent_flags, name_span);
+                let qs = meta.qualifiers;
+                let flags = self.process_method_flags(qs, &function, parent_flags, name_span);
 
-                if func.body.is_none() && !flags.is_native() {
+                if function.body.is_none() && !flags.is_native() {
                     self.reporter
                         .report(Diagnostic::MissingFunctionBody(name_span));
                     return None;
                 };
 
-                let member = Method::new(flags, func_t, base, entry.meta.doc, Some(name_span));
+                let member = Method::new(flags, func_t, base, meta.doc, Some(name_span));
                 let idx = self.symbols[id]
                     .schema_mut()
                     .as_aggregate_mut()
@@ -735,26 +740,31 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     span,
                     name_span,
                     param_names,
-                    func.body,
+                    function.body,
                     type_scope,
                 );
                 return Some(FuncItemKind::AddMethod(item));
             }
             Some(ann @ FunctionAnnotation::Wrap(class)) => {
-                if let Some(id) =
-                    self.resolve_existing_annotated_method(func.name, *class, &func_t, ann, types)
-                {
+                if let Some(id) = self.resolve_existing_annotated_method(
+                    function.name,
+                    *class,
+                    &meta.qualifiers,
+                    &func_t,
+                    ann,
+                    types,
+                ) {
                     wrapped = Some(id);
                 }
             }
             _ => {}
         }
 
-        let mut qs = entry.meta.qualifiers;
-        let (free_func, body) = match (func.body, intrinsic, replaced, wrapped) {
+        let mut qs = meta.qualifiers;
+        let (free_func, body) = match (function.body, intrinsic, replaced, wrapped) {
             (None, Some(intrinsic), None, None) => {
                 let intrinsic =
-                    FreeFunction::new_intrinsic(func_t, intrinsic, entry.meta.doc, Some(name_span));
+                    FreeFunction::new_intrinsic(func_t, intrinsic, meta.doc, Some(name_span));
                 (intrinsic, None)
             }
             (body, None, None, None)
@@ -764,7 +774,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                 let flags = FreeFunctionFlags::default()
                     .with_is_exec(qs.take_flag(ast::ItemQualifiers::EXEC))
                     .with_is_native(qs.take_flag(ast::ItemQualifiers::NATIVE));
-                let func = FreeFunction::new(flags, func_t, entry.meta.doc, Some(name_span));
+                let func = FreeFunction::new(flags, func_t, meta.doc, Some(name_span));
                 (func, body)
             }
             (Some(body), None, Some(replaced), None) => {
@@ -792,10 +802,10 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                 .report(Diagnostic::UnusedItemQualifiers(qs, name_span));
         }
 
-        self.symbols.set_free_function(entry.index, free_func);
+        self.symbols.set_free_function(index, free_func);
         body.map(|body| {
             FuncItemKind::FreeFunction(FuncItem::new(
-                entry.index,
+                index,
                 span,
                 name_span,
                 param_names,
@@ -807,15 +817,14 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
 
     fn process_free_field<'a>(
         &mut self,
-        entry: ParsedLet<'ctx>,
+        ParsedLet { meta, let_: field }: ParsedLet<'ctx>,
         types: &TypeEnv<'a, 'ctx>,
     ) -> Option<FieldItem<'ctx, FieldId<'ctx>>> {
-        let field = entry.let_;
-        let mut doc = entry.meta.doc;
+        let mut doc = meta.doc;
         let (name, name_span) = field.name;
         let mut id = None;
 
-        let mut annotations = entry.meta.annotations;
+        let mut annotations = meta.annotations;
         let mut properties = self.extract_field_properties(&mut annotations);
 
         for (ann, ann_span) in &annotations {
@@ -842,12 +851,11 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     let typ = self
                         .reporter
                         .unwrap_err(types.resolve(typ, &self.symbols, *span))?;
-                    let visibility = entry
-                        .meta
+                    let visibility = meta
                         .visibility
                         .map_or(Visibility::Private, convert_visibility);
                     let flags = self
-                        .process_field_flags(entry.meta.qualifiers, flags, &typ, name_span)
+                        .process_field_flags(meta.qualifiers, flags, &typ, name_span)
                         .with_visibility(visibility);
 
                     let field = Field::new(
@@ -857,16 +865,20 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                         mem::take(&mut doc),
                         Some(name_span),
                     );
-                    let res = self.symbols[parent_t]
+
+                    if let Ok(idx) = self.symbols[parent_t]
                         .schema_mut()
                         .as_aggregate_mut()
                         .unwrap()
                         .fields_mut()
                         .add(name, field)
-                        .map_err(|_| Diagnostic::NameRedefinition(name_span));
-                    let idx = self.reporter.unwrap_err(res)?;
-
-                    id = Some(FieldId::new(parent_t, idx));
+                    {
+                        id = Some(FieldId::new(parent_t, idx));
+                    } else {
+                        self.reporter
+                            .report(Diagnostic::AddFieldConflict(name_span));
+                        return None;
+                    }
                 }
                 _ => {
                     self.reporter
@@ -1191,7 +1203,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     let return_t =
                         PolyType::from_type_with_env(base_method.type_().return_type(), &env)
                             .unwrap();
-                    missing.push(MissingMethod::new(name, params, return_t));
+                    missing.push(MethodSignature::new(name, params, return_t));
                 }
             }
 
@@ -1347,13 +1359,28 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         &mut self,
         (func_name, func_span): ast::Spanned<&'ctx str>,
         (cls_name, cls_span): ast::Spanned<&'ctx str>,
+        qualifiers: &ast::ItemQualifiers,
         func_type: &FunctionType<'ctx>,
         annotation: &FunctionAnnotation<'ctx>,
         types: &TypeEnv<'_, 'ctx>,
     ) -> Option<MethodId<'ctx>> {
-        let Some((id, method)) =
-            self.resolve_annotated_method(func_name, cls_name, func_type, types, cls_span)
-        else {
+        let res =
+            match self.resolve_annotated_method(func_name, cls_name, func_type, types, cls_span) {
+                Some(res) => Some(res),
+                // Retry in case the user marked a cb method that returns Bool as Void.
+                // This enables backward compatibility for some mods.
+                None if qualifiers.contains(ast::ItemQualifiers::CALLBACK)
+                    && func_type.return_type() == &Type::nullary(predef::VOID) =>
+                {
+                    let fallback = func_type
+                        .clone()
+                        .with_return_type(Type::nullary(predef::BOOL));
+                    self.resolve_annotated_method(func_name, cls_name, &fallback, types, cls_span)
+                }
+                _ => None,
+            };
+
+        let Some((id, method)) = res else {
             self.reporter.report(Diagnostic::AnnotatedMethodNotFound(
                 annotation.clone(),
                 func_span,

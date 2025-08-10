@@ -740,6 +740,13 @@ impl<'ctx> FunctionType<'ctx> {
         }
     }
 
+    pub fn with_return_type(self, ret_t: Type<'ctx>) -> Self {
+        Self {
+            return_type: ret_t,
+            ..self
+        }
+    }
+
     #[inline]
     pub fn type_params(&self) -> &[Rc<CtxVar<'ctx>>] {
         &self.type_params

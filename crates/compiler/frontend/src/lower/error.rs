@@ -1,12 +1,15 @@
 use std::fmt;
 use std::ops::RangeInclusive;
+use std::rc::Rc;
 
 use redscript_ast::Span;
 use thiserror::Error;
 
-use crate::diagnostic::DiagnosticLevel;
+use crate::Immutable;
+use crate::diagnostic::{DiagnosticLevel, MethodSignature};
 use crate::lower::types::{InferredType, InferredTypeApp};
 use crate::types::{MAX_FN_ARITY, MAX_STATIC_ARRAY_SIZE, TypeId, predef};
+use crate::utils::fmt::sep_by;
 
 pub type InferResult<'ctx, A> = Result<A, TypeError<'ctx>>;
 pub type LowerResult<'id, A, E = Error<'id>> = Result<A, E>;
@@ -21,8 +24,8 @@ pub enum Error<'ctx> {
     UnresolvedType(&'ctx str, Span),
     #[error("`{0}` has no member named `{1}`")]
     UnresolvedMember(TypeId<'ctx>, &'ctx str, Span),
-    #[error("{1} matching overloads found for `{0}`")]
-    MultipleMatchingOverloads(&'ctx str, usize, Span),
+    #[error("multiple overloads match the types of the provided arguments:\n{}", sep_by(.0.iter(), "\n"))]
+    MultipleMatchingOverloads(Rc<[MethodSignature<'ctx, Immutable>]>, Span),
     #[error("there's no matching `{0}` function")]
     UnresolvedFunction(&'ctx str, Span),
     #[error("invalid number of arguments, expected {}", DisplayRangeInclusive(.0))]
@@ -68,7 +71,10 @@ pub enum Error<'ctx> {
     NonExistentSuperType(Span),
     #[error("this expression is not a place that can be written to")]
     InvalidPlaceExpr(Span),
-    #[error("a temporary cannot be used here, consider storing this value in a variable")]
+    #[error(
+        "the highlighted temporary value cannot be used in this expression, consider extracting it \
+        to a local"
+    )]
     InvalidTemporary(Span),
     #[error("only constants can be used here")]
     UnexpectedNonConstant(Span),
@@ -101,7 +107,7 @@ impl Error<'_> {
             | Self::UnresolvedVar(_, span)
             | Self::UnresolvedType(_, span)
             | Self::UnresolvedMember(_, _, span)
-            | Self::MultipleMatchingOverloads(_, _, span)
+            | Self::MultipleMatchingOverloads(_, span)
             | Self::UnresolvedFunction(_, span)
             | Self::InvalidArgCount(_, span)
             | Self::InsufficientTypeInformation(span)
@@ -138,7 +144,7 @@ impl Error<'_> {
             Self::UnresolvedVar(_, _) => "UNRESOLVED_REF",
             Self::UnresolvedType(_, _) => "UNRESOLVED_TYPE",
             Self::UnresolvedMember(_, _, _) => "UNRESOLVED_MEMBER",
-            Self::MultipleMatchingOverloads(_, _, _) => "MULTIPLE_MATCHING_OVERLOADS",
+            Self::MultipleMatchingOverloads(_, _) => "MULTIPLE_MATCHING_OVERLOADS",
             Self::UnresolvedFunction(_, _) => "UNRESOLVED_FN",
             Self::InvalidArgCount(_, _) => "INVALID_ARG_COUNT",
             Self::InsufficientTypeInformation(_) => "CANNOT_LOOKUP_MEMBER",
