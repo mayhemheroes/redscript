@@ -178,9 +178,10 @@ impl Error<'_> {
     pub fn level(&self) -> DiagnosticLevel {
         match self {
             Self::DeprecatedNameOf(_) => DiagnosticLevel::Warning,
-            Self::PrivateMemberAccess(_) | Self::ProtectedMemberAccess(_) => {
-                DiagnosticLevel::ErrorAllowedAtRuntime
-            }
+            Self::InvalidTemporary(_)
+            | Self::NonFullyDefinedNativeStructConstruction(_, _)
+            | Self::PrivateMemberAccess(_)
+            | Self::ProtectedMemberAccess(_) => DiagnosticLevel::ErrorAllowedAtRuntime,
             _ => DiagnosticLevel::Error,
         }
     }
