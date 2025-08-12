@@ -1110,36 +1110,34 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         env: &Env<'_, 'ctx>,
         call_span: Span,
     ) -> LowerResult<'ctx, (ir::Call<'ctx>, PolyType<'ctx>)> {
-        'free_func: {
-            let &(ast::Expr::Ident(name), _) = expr else {
-                break 'free_func;
-            };
+        if let &(ast::Expr::Ident("Cast"), _) = expr
+            && let [] | [_] = type_args
+            && args.len() == 1
+        {
+            return self.lower_static_cast(args, type_args, hint, env, *expr_span);
+        };
 
-            match (name, type_args, args) {
-                ("Cast", [] | [_], [_]) => {
-                    return self.lower_static_cast(args, type_args, hint, env, *expr_span);
-                }
-                // legacy syntax
-                ("NameOf", [], [(ast::Expr::Ident(name), name_span)]) => {
-                    self.reporter.report(Error::DeprecatedNameOf(call_span));
+        // legacy syntax for NameOf
+        if let &(ast::Expr::Ident("NameOf"), _) = expr
+            && type_args.is_empty()
+            && let [(ast::Expr::Ident(name), name_span)] = args
+        {
+            self.reporter.report(Error::DeprecatedNameOf(call_span));
 
-                    return self.lower_call(
-                        expr,
-                        &[(ast::Type::plain(name), *name_span)],
-                        &[],
-                        hint,
-                        env,
-                        call_span,
-                    );
-                }
-                _ => {}
-            }
+            return self.lower_call(
+                expr,
+                &[(ast::Type::plain(name), *name_span)],
+                &[],
+                hint,
+                env,
+                call_span,
+            );
+        }
 
-            let mut candidates = env.query_free_functions(name, self.symbols).peekable();
-            if candidates.peek().is_none() {
-                break 'free_func;
-            };
-
+        if let &(ast::Expr::Ident(name), _) = expr
+            && let mut candidates = env.query_free_functions(name, self.symbols).peekable()
+            && candidates.peek().is_some()
+        {
             let res = self
                 .overload_resolver()
                 .name(name)
@@ -1159,14 +1157,9 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 break 'instance None;
             };
 
-            'static_method: {
-                let (ast::Expr::Ident(ident), _) = **expr else {
-                    break 'static_method;
-                };
-                let Some(&TypeRef::Name(typ)) = env.types().get(ident) else {
-                    break 'static_method;
-                };
-                let mut candidates = self
+            if let (ast::Expr::Ident(ident), _) = **expr
+                && let Some(&TypeRef::Name(typ)) = env.types().get(ident)
+                && let mut candidates = self
                     .symbols
                     .base_iter(typ)
                     .map(|(_, def)| {
@@ -1181,11 +1174,9 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                     .flatten()
                     .filter(|entry| entry.func().flags().is_static())
                     .map(|entry| entry.map_key(|i| MethodId::new(typ, i)))
-                    .peekable();
-                if candidates.peek().is_none() {
-                    break 'static_method;
-                }
-
+                    .peekable()
+                && candidates.peek().is_some()
+            {
                 let parent_args = self.symbols[typ]
                     .params()
                     .iter()
@@ -1399,16 +1390,10 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         env: &Env<'_, 'ctx>,
         span: Span,
     ) -> LowerResult<'ctx, (ir::Expr<'ctx>, PolyType<'ctx>)> {
-        'enum_case: {
-            let (ast::Expr::Ident(ident), _) = receiver else {
-                break 'enum_case;
-            };
-            let Some(&TypeRef::Name(type_id)) = env.types().get(ident) else {
-                break 'enum_case;
-            };
-            let TypeSchema::Enum(enum_) = self.symbols[type_id].schema() else {
-                break 'enum_case;
-            };
+        if let (ast::Expr::Ident(ident), _) = receiver
+            && let Some(&TypeRef::Name(type_id)) = env.types().get(ident)
+            && let TypeSchema::Enum(enum_) = self.symbols[type_id].schema()
+        {
             let (field_idx, _) = enum_
                 .variant_by_name(member)
                 .ok_or(Error::UnresolvedMember(type_id, member, span))?;
