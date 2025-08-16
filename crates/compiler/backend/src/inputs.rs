@@ -9,7 +9,7 @@ use redscript_compiler_frontend::utils::fmt::{DisplayFn, sep_by};
 use redscript_compiler_frontend::{
     Aggregate, AggregateFlags, Enum, Field, FieldFlags, FieldMap, FreeFunction, FreeFunctionFlags,
     FreeFunctionIndex, FunctionIndex, FunctionMap, FunctionType, Immutable, Method, MethodFlags,
-    MethodId, Mono, MonoType, Param, ParamFlags, Symbols, Type, TypeApp, TypeDef, TypeId,
+    MethodId, Mono, MonoType, Param, ParamFlags, RefType, Symbols, Type, TypeApp, TypeDef, TypeId,
     TypeInterner, TypeKind, TypeSchema, predef,
 };
 use redscript_io::{
@@ -128,6 +128,7 @@ impl<'ctx> CompilationInputs<'ctx> {
                         .as_ref()
                         .and_then(|base| virtual_map.get(&base.id()).cloned())
                         .unwrap_or_default();
+                    let mut script_ref_receiver_methods = vec![];
 
                     for &method_idx in cls.methods() {
                         let method = bundle
@@ -146,15 +147,39 @@ impl<'ctx> CompilationInputs<'ctx> {
                             .with_is_unimplemented(
                                 method.body().is_empty() && !method.flags().is_native(),
                             );
-                        let typ = load_function_type(method, bundle, interner, type_flags)?;
+                        let func_t = load_function_type(method, bundle, interner, type_flags)?;
                         let base = virtuals.get(&method.name()).copied();
 
-                        let idx = methods.add(name, Method::new(flags, typ, base, [], None));
+                        // Handle static methods that accept the struct by reference as the first
+                        // parameter. They're treated like instance methods.
+                        if flags.is_static()
+                            && let [fst, rem @ ..] = func_t.params()
+                            && (fst.type_() == &Type::nullary(class_id)
+                                || fst.type_().strip_ref()
+                                    == Some((RefType::Script, &Type::nullary(class_id))))
+                        {
+                            let func_t = func_t.clone().with_params(rem);
+                            let flags = flags.with_is_static(false).with_is_static_forwarder(true);
+                            let method = Method::new(flags, func_t, base, [], None);
+                            script_ref_receiver_methods.push((name, method_idx, method));
+                        }
+
+                        let idx = methods.add(name, Method::new(flags, func_t, base, [], None));
                         mappings.methods.insert(idx, method_idx);
+
                         let id = MethodId::new(class_id, idx);
                         if !method.flags().is_final() && !method.flags().is_static() {
                             virtuals.insert(method.name(), id);
                         }
+                    }
+
+                    for (name, method_idx, method) in script_ref_receiver_methods {
+                        // Avoid adding an alias when it could conflict with an existing method.
+                        if methods.by_name(name).count() > 1 {
+                            continue;
+                        }
+                        let idx = methods.add(name, method);
+                        mappings.methods.insert(idx, method_idx);
                     }
 
                     let flags = AggregateFlags::new()

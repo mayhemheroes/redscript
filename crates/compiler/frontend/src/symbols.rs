@@ -740,6 +740,13 @@ impl<'ctx> FunctionType<'ctx> {
         }
     }
 
+    pub fn with_params(self, params: impl Into<Box<[Param<'ctx>]>>) -> Self {
+        Self {
+            params: params.into(),
+            ..self
+        }
+    }
+
     pub fn with_return_type(self, ret_t: Type<'ctx>) -> Self {
         Self {
             return_type: ret_t,
@@ -894,6 +901,7 @@ pub struct Method<'ctx> {
     overloaded: Option<MethodId<'ctx>>,
     doc: Box<[&'ctx str]>,
     span: Option<Span>,
+    aliased_method: Option<MethodId<'ctx>>,
 }
 
 impl<'ctx> Method<'ctx> {
@@ -911,7 +919,14 @@ impl<'ctx> Method<'ctx> {
             overloaded,
             doc: doc.into(),
             span,
+            aliased_method: None,
         }
+    }
+
+    #[inline]
+    pub fn with_aliased(mut self, alias: MethodId<'ctx>) -> Self {
+        self.aliased_method = Some(alias);
+        self
     }
 
     #[inline]
@@ -947,6 +962,11 @@ impl<'ctx> Method<'ctx> {
     #[inline]
     pub fn is_user_defined(&self) -> bool {
         self.span().is_some()
+    }
+
+    #[inline]
+    pub fn aliased_method(&self) -> Option<MethodId<'ctx>> {
+        self.aliased_method
     }
 }
 
@@ -1198,7 +1218,7 @@ pub struct FreeFunctionFlags {
     __: u8,
 }
 
-#[bitfield(u8)]
+#[bitfield(u16)]
 pub struct MethodFlags {
     #[bits(2)]
     pub visibility: Visibility,
@@ -1207,8 +1227,10 @@ pub struct MethodFlags {
     pub is_native: bool,
     pub is_callback: bool,
     pub is_unimplemented: bool,
-    #[bits(1)]
-    __: u8,
+    pub is_static_forwarder: bool,
+
+    #[bits(8)]
+    __: u16,
 }
 
 #[bitfield(u8)]

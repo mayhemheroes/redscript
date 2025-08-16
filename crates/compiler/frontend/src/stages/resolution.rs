@@ -20,8 +20,8 @@ use crate::{
     Aggregate, AggregateFlags, CompileErrorReporter, CtxVar, Diagnostic, Enum, Field, FieldFlags,
     FieldId, FieldMap, FreeFunction, FreeFunctionFlags, FreeFunctionIndex, FunctionIndex,
     FunctionType, IndexMap, IndexSet, LowerError, Method, MethodFlags, MethodId, MethodMap, Param,
-    ParamFlags, PolyType, QualifiedName, Symbols, Type, TypeApp, TypeDef, TypeId, TypeInterner,
-    TypeRef, TypeSchema, TypeScope, Variance, ir, predef,
+    ParamFlags, PolyType, QualifiedName, RefType, Symbols, Type, TypeApp, TypeDef, TypeId,
+    TypeInterner, TypeRef, TypeSchema, TypeScope, Variance, ir, predef,
 };
 
 mod derive_new;
@@ -510,15 +510,21 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                             .report(Diagnostic::MissingFunctionBody(name_span));
                     };
 
+                    let forwarder =
+                        extract_static_forwarder(&func_t, id, flags, &meta.doc, name_span);
                     let method = Method::new(flags, func_t, None, item.doc, Some(name_span));
-                    let id = methods.add(name, method);
+                    let idx = methods.add(name, method);
                     let params = func.param_names().collect::<Box<[_]>>();
                     let Some(body) = func.body else {
                         continue;
                     };
                     method_items.push(FuncItem::new(
-                        id, item_span, name_span, params, body, type_scope,
+                        idx, item_span, name_span, params, body, type_scope,
                     ));
+
+                    if let Some(forwader) = forwarder {
+                        methods.add(name, forwader.with_aliased(MethodId::new(id, idx)));
+                    }
                 }
                 ast::Item::Let(let_) => {
                     let (name, name_span) = let_.name;
@@ -727,13 +733,18 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     return None;
                 };
 
+                let forwarder = extract_static_forwarder(&func_t, id, flags, &meta.doc, name_span);
                 let member = Method::new(flags, func_t, base, meta.doc, Some(name_span));
-                let idx = self.symbols[id]
+                let methods = self.symbols[id]
                     .schema_mut()
                     .as_aggregate_mut()
                     .unwrap()
-                    .methods_mut()
-                    .add(name, member);
+                    .methods_mut();
+                let idx = methods.add(name, member);
+
+                if let Some(forwader) = forwarder {
+                    methods.add(name, forwader.with_aliased(MethodId::new(id, idx)));
+                }
 
                 let item = FuncItem::new(
                     MethodId::new(id, idx),
@@ -1491,6 +1502,27 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
             self.check_type(param.type_(), Variance::Contravariant, span)?;
         }
         self.check_type(func_type.return_type(), Variance::Covariant, span)
+    }
+}
+
+fn extract_static_forwarder<'ctx>(
+    func_t: &FunctionType<'ctx>,
+    parent_id: TypeId<'ctx>,
+    flags: MethodFlags,
+    doc: &[&'ctx str],
+    span: Span,
+) -> Option<Method<'ctx>> {
+    if flags.is_static()
+        && func_t.type_params().is_empty()
+        && let [fst, rem @ ..] = func_t.params()
+        && (fst.type_() == &Type::nullary(parent_id)
+            || fst.type_().strip_ref() == Some((RefType::Script, &Type::nullary(parent_id))))
+    {
+        let func_t = func_t.clone().with_params(rem);
+        let flags = flags.with_is_static(false).with_is_static_forwarder(true);
+        Some(Method::new(flags, func_t, None, doc, Some(span)))
+    } else {
+        None
     }
 }
 

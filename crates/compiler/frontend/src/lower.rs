@@ -1199,7 +1199,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 return Ok(res);
             }
 
-            let (ir, typ) = self.lower_expr(expr, env)?;
+            let (mut ir, typ) = self.lower_expr(expr, env)?;
             let (ref_type, unref_t) = typ.strip_ref(self.symbols).unzip();
             let upper_bound = unref_t
                 .unwrap_or(typ.clone())
@@ -1249,11 +1249,25 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 .resolve()?;
 
             let id = resolved.resulution.function;
-            self.check_visibility(
-                id.parent(),
-                self.symbols[id].flags().visibility(),
-                call_span,
-            );
+            let method = &self.symbols[id];
+            self.check_visibility(id.parent(), method.flags().visibility(), call_span);
+
+            if let Some(aliased) = method.aliased_method()
+                && method.flags().is_static_forwarder()
+            {
+                let expected = &self.symbols[aliased]
+                    .type_()
+                    .param_types()
+                    .next()
+                    .expect("static alias must at least accept a receiver");
+                let span = ir.span();
+                self.coerce(&mut ir, typ, PolyType::from_type(expected), env, span)?;
+
+                return Ok(resolved
+                    .with_method(aliased)
+                    .map_args(|args| iter::once(ir).chain(args).collect())
+                    .into_static_call(upper_bound.id(), upper_bound.args().iter().cloned()));
+            }
 
             return Ok(resolved.into_instance_call(ir, upper_bound, ref_type, mode));
         };
@@ -2176,6 +2190,10 @@ impl<'ctx, K> FunctionResolution<'ctx, K> {
         }
     }
 
+    pub fn with_function(self, function: K) -> Self {
+        Self { function, ..self }
+    }
+
     #[inline]
     fn with_args(self, args: impl Into<Box<[ir::Expr<'ctx>]>>) -> FunctionResultWithArgs<'ctx, K> {
         FunctionResultWithArgs {
@@ -2204,6 +2222,23 @@ impl<'ctx> FunctionResultWithArgs<'ctx, FreeFunctionIndex> {
 }
 
 impl<'ctx> FunctionResultWithArgs<'ctx, MethodId<'ctx>> {
+    pub fn with_method(self, method: MethodId<'ctx>) -> Self {
+        Self {
+            resulution: self.resulution.with_function(method),
+            ..self
+        }
+    }
+
+    pub fn map_args<F>(self, f: F) -> Self
+    where
+        F: FnOnce(Box<[ir::Expr<'ctx>]>) -> Box<[ir::Expr<'ctx>]>,
+    {
+        Self {
+            resulution: self.resulution,
+            args: f(self.args),
+        }
+    }
+
     #[inline]
     fn into_instance_call(
         self,

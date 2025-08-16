@@ -912,7 +912,9 @@ impl<K: Hash + Eq, V> ops::IndexMut<&K> for IncrementalMap<K, V> {
 }
 
 pub fn should_method_monomorphize(m: &Method<'_>, this: &MonoType<'_>) -> bool {
-    (!m.flags().is_static() || this.args().is_empty()) && m.type_().type_params().is_empty()
+    (!m.flags().is_static() || this.args().is_empty())
+        && m.type_().type_params().is_empty()
+        && !m.flags().is_static_forwarder()
 }
 
 #[derive(Debug)]
