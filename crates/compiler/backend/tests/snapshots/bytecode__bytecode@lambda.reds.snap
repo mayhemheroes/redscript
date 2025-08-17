@@ -2,7 +2,6 @@
 source: crates/compiler/backend/tests/bytecode.rs
 expression: "BytecodePrinter::new(&bundle, bundle_len)"
 input_file: crates/compiler/backend/tests/data/lambda.reds
-snapshot_kind: text
 ---
 // Test; (f0)
 assign
@@ -64,4 +63,4 @@ param.end
 param 4
 param.end
 
-// OperatorAdd (f7)
+// OperatorAdd;Int32Int32 (f7)

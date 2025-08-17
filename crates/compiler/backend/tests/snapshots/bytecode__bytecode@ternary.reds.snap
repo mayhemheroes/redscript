@@ -25,6 +25,6 @@ param 1
 param 1
 wref.null
 
-// OperatorEqual (f1)
+// OperatorEqual;Int32Int32 (f1)
 
-// OperatorModulo (f2)
+// OperatorModulo;Int32Int32 (f2)

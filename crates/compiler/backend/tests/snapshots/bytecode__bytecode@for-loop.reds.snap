@@ -41,8 +41,8 @@ local 2
 param.end
 jump -146
 
-// OperatorLess (f1)
+// OperatorLess;Int32Int32 (f1)
 
-// OperatorAssignAdd (f2)
+// OperatorAssignAdd;OutInt32Int32 (f2)
 
 // Log (f3)

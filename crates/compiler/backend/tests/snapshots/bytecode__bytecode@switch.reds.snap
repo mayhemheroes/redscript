@@ -24,4 +24,4 @@ true.const
 return
 false.const
 
-// OperatorModulo (f1)
+// OperatorModulo;Int32Int32 (f1)

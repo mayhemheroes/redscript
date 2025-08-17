@@ -6,7 +6,7 @@ use std::{fmt, mem};
 
 use hashbrown::{HashMap, HashSet};
 use identity_hash::BuildIdentityHasher;
-use redscript_ast::{self as ast, Span, Spanned};
+use redscript_ast::{self as ast, BinOp, Span, Spanned, UnOp};
 
 use super::TypeInference;
 use super::infer::{ClassItem, FieldItem, FuncItem, FuncItemKind, InferStageModule};
@@ -782,9 +782,14 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                 if (body.is_some() && !qs.contains(ast::ItemQualifiers::NATIVE))
                     || (body.is_none() && qs.contains(ast::ItemQualifiers::NATIVE)) =>
             {
+                let is_cast = name == "Cast" && func_t.params().len() == 1;
+                let is_operator =
+                    BinOp::from_name(name).is_some() || UnOp::from_name(name).is_some();
                 let flags = FreeFunctionFlags::default()
                     .with_is_exec(qs.take_flag(ast::ItemQualifiers::EXEC))
-                    .with_is_native(qs.take_flag(ast::ItemQualifiers::NATIVE));
+                    .with_is_native(qs.take_flag(ast::ItemQualifiers::NATIVE))
+                    .with_is_cast(is_cast)
+                    .with_is_operator(is_operator);
                 let func = FreeFunction::new(flags, func_t, meta.doc, Some(name_span));
                 (func, body)
             }

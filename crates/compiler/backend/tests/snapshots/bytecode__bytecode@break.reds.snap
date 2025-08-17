@@ -44,8 +44,8 @@ jump 6
 jump 0
 jump -147
 
-// OperatorLess (f1)
+// OperatorLess;Int32Int32 (f1)
 
-// OperatorAssignAdd (f2)
+// OperatorAssignAdd;OutInt32Int32 (f2)
 
-// OperatorEqual (f3)
+// OperatorEqual;Int32Int32 (f3)

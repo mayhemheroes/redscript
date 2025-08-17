@@ -82,7 +82,7 @@ param 2
 i32.one
 param.end
 
-// OperatorAdd (f8)
+// OperatorAdd;Int32Int32 (f8)
 
 // Err<Int32,String>::New;String (f5)
 assign

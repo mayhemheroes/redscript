@@ -2,7 +2,6 @@
 source: crates/compiler/backend/tests/bytecode.rs
 expression: "BytecodePrinter::new(&bundle, bundle_len)"
 input_file: crates/compiler/backend/tests/data/string-interp.reds
-snapshot_kind: text
 ---
 // Test;Int32 (f0)
 assign
@@ -39,6 +38,6 @@ as_ref 0
 string.const 3
 param.end
 
-// OperatorAdd (f1)
+// OperatorAdd;StringString (f1)
 
-// OperatorSubtract (f2)
+// OperatorSubtract;Int32Int32 (f2)

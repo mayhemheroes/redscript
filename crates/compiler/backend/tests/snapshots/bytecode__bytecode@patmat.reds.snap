@@ -509,10 +509,10 @@ jump 3
 jump 3
 jump -151
 
-// OperatorGreaterEqual (f2)
+// OperatorGreaterEqual;Int32Int32 (f2)
 
-// OperatorSubtract (f3)
+// OperatorSubtract;Int32Int32 (f3)
 
-// OperatorEqual (f4)
+// OperatorEqual;Int32Int32 (f4)
 
-// OperatorLogicAnd (f11)
+// OperatorLogicAnd;BoolBool (f11)

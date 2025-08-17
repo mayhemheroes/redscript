@@ -2,7 +2,6 @@
 source: crates/compiler/backend/tests/bytecode.rs
 expression: "BytecodePrinter::new(&bundle, bundle_len)"
 input_file: crates/compiler/backend/tests/data/cast.reds
-snapshot_kind: text
 ---
 // Test; (f0)
 assign
@@ -16,6 +15,6 @@ invoke.static j21 l7 f2 0000000000000000
 i32.const 2
 param.end
 
-// Cast (f1)
+// Cast;Int32;Float (f1)
 
-// Cast (f2)
+// Cast;Int32;String (f2)

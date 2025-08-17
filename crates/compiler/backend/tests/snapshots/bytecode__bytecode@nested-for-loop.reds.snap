@@ -76,10 +76,10 @@ param.end
 jump -171
 jump -379
 
-// OperatorLess (f1)
+// OperatorLess;Int32Int32 (f1)
 
-// OperatorAssignAdd (f2)
+// OperatorAssignAdd;OutInt32Int32 (f2)
 
 // Log (f3)
 
-// OperatorAdd (f4)
+// OperatorAdd;Int32Int32 (f4)

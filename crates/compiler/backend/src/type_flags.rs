@@ -39,11 +39,18 @@ impl Default for TypeFlags {
     fn default() -> Self {
         Self {
             sealed: SEALED_TYPES.iter().map(|s| Cow::Borrowed(*s)).collect(),
-            never_ref: HashSet::new(),
+            never_ref: NEVER_REF_TYPES.iter().map(|s| Cow::Borrowed(*s)).collect(),
             mixed_ref: HashSet::new(),
         }
     }
 }
+
+const NEVER_REF_TYPES: &[&str] = &[
+    "ReactionData",
+    "JournalEntryOverrideData",
+    "vehicleCinematicCameraShotGroup",
+    "vehicleCinematicCameraShot",
+];
 
 // generated with https://github.com/jac3km4/redscript-sealed-struct-dumper
 // this is a list of native structs that are fully exposed to scripts

@@ -1224,7 +1224,9 @@ pub struct AggregateFlags {
 pub struct FreeFunctionFlags {
     pub is_exec: bool,
     pub is_native: bool,
-    #[bits(6)]
+    pub is_cast: bool,
+    pub is_operator: bool,
+    #[bits(4)]
     __: u8,
 }
 

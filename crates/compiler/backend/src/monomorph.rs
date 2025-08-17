@@ -991,10 +991,23 @@ impl<'a, 'ctx, K> MangledFreeFunction<'a, 'ctx, K> {
 impl<K> fmt::Display for MangledFreeFunction<'_, '_, K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}{}", self.name, self.signature.display_args())?;
-        if self.func.flags().is_exec() || self.func.flags().is_native() {
+        if !self.func.flags().is_cast()
+            && !self.func.flags().is_operator()
+            && (self.func.flags().is_exec() || self.func.flags().is_native())
+        {
             return Ok(());
         };
-        write!(f, ";{}", MangledParams::new(self.func, self.env))
+        write!(f, ";{}", MangledParams::new(self.func, self.env))?;
+        if self.func.flags().is_cast() {
+            let rt = self
+                .func
+                .type_()
+                .return_type()
+                .unwrap_ref_or_self()
+                .assume_mono(self.env);
+            write!(f, ";{rt}",)?;
+        }
+        Ok(())
     }
 }
 
