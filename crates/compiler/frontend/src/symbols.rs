@@ -610,13 +610,23 @@ where
 
     #[inline]
     pub fn add(&mut self, name: N, func: V) -> FunctionIndex {
+        self.add_with(name, move |_| func)
+    }
+
+    #[inline]
+    pub fn add_with<F>(&mut self, name: N, f: F) -> FunctionIndex
+    where
+        F: FnOnce(FunctionIndex) -> V,
+    {
         let entry = self.map.entry(name);
         let item_index = entry.index();
-        let overload_index = entry.or_default().insert(func);
-        FunctionIndex {
+        let slab = entry.or_default();
+        let index = FunctionIndex {
             item_index,
-            overload_index,
-        }
+            overload_index: slab.vacant_key(),
+        };
+        slab.insert(f(index));
+        index
     }
 
     pub fn iter(

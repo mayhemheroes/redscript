@@ -495,13 +495,16 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                     .map(|typ| self.mono_type(typ, span))
                     .collect::<Result<Box<_>, AssembleError<'ctx>>>()?;
                 let parent_t = MonoType::new(*parent_id, parent_t_args);
+                let parent_t = parent_t
+                    .instantiate_as(method.parent(), self.symbols)
+                    .expect("should instantiate as parent");
 
                 let function = if parent_t.args().is_empty() && type_args.is_empty() {
                     let index = method.index();
                     self.monomorph
                         .mono_method(&parent_t, index, self.symbols, self.bundle)
                 } else {
-                    let id = MethodWithReceiver::new(parent_t, method.index());
+                    let id = MethodWithReceiver::new(parent_t.into_owned(), method.index());
                     let types = type_args
                         .iter()
                         .map(|typ| self.mono_type(typ, span))

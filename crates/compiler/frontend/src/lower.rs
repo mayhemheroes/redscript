@@ -1162,18 +1162,18 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 && let mut candidates = self
                     .symbols
                     .base_iter(typ)
-                    .map(|(_, def)| {
+                    .map(|(id, def)| {
                         def.schema()
                             .as_aggregate()
                             .into_iter()
                             .flat_map(|agg| agg.methods().by_name(member))
+                            .map(move |entry| entry.map_key(|i| MethodId::new(id, i)))
                             .peekable()
                     })
                     .find_map(|mut matches| matches.peek().is_some().then_some(matches))
                     .into_iter()
                     .flatten()
                     .filter(|entry| entry.func().flags().is_static())
-                    .map(|entry| entry.map_key(|i| MethodId::new(typ, i)))
                     .peekable()
                 && candidates.peek().is_some()
             {

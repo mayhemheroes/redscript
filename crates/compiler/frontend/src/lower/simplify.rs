@@ -76,12 +76,7 @@ impl<'sym, 'ctx> Simplifier<'sym, 'ctx> {
                     {
                         self.simplify(&upper, variance)?
                     }
-                    (lower, Some(upper))
-                        if upper.constrain_invariant(&lower, self.symbols).is_ok() =>
-                    {
-                        self.simplify(&lower, variance)?
-                    }
-                    (lower, upper) => return Err(CoalesceError::CannotCoalesce(lower, upper)),
+                    (lower, _) => self.simplify(&lower, variance)?,
                 };
 
                 self.cache
