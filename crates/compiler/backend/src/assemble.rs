@@ -472,16 +472,19 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                     return Ok(());
                 }
 
-                let idx = if let Some(method) = free_function.method_alias() {
-                    self.monomorph
+                let (idx, mode) = if let Some(method) = free_function.method_alias() {
+                    let idx = self
+                        .monomorph
                         .existing_alias(method)
-                        .expect("method alias should be defined")
+                        .expect("method alias should be defined");
+                    (idx, ir::CallMode::ForceStatic)
                 } else {
                     let sig = Signature::new(*function, type_args);
-                    self.monomorph.function(sig, self.symbols, self.bundle)
+                    let idx = self.monomorph.function(sig, self.symbols, self.bundle);
+                    (idx, ir::CallMode::default())
                 };
 
-                self.emit_call(idx, args, ir::CallMode::default(), span)?;
+                self.emit_call(idx, args, mode, span)?;
             }
             ir::Call::Static {
                 parent_id,

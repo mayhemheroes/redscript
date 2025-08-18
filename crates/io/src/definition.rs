@@ -776,6 +776,15 @@ impl<'i> Function<'i> {
     }
 
     pub fn into_owned(self) -> Function<'static> {
+        debug_assert_eq!(self.flags().has_base_method(), self.base_method.is_some());
+        debug_assert_eq!(self.flags().has_return_value(), self.return_type.is_some());
+        debug_assert_eq!(self.flags().has_parameters(), !self.parameters.is_empty());
+        debug_assert_eq!(self.flags().has_locals(), !self.locals.is_empty());
+        debug_assert_eq!(self.flags().has_body(), !self.body.is_empty());
+        debug_assert_eq!(self.flags().is_operator(), self.operator.is_some());
+        debug_assert_eq!(self.flags().is_cast(), self.cast_cost != 0);
+        debug_assert_eq!(self.flags().is_native(), self.source.is_none());
+
         Function {
             name: self.name,
             class: self.class,
