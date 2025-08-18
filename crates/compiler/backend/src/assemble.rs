@@ -77,7 +77,9 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
         for local in locals {
             match local.id {
                 ir::Local::Var(i) => {
-                    let name = bundle.cnames_mut().add(format!("var{i}"));
+                    let name = bundle
+                        .cnames_mut()
+                        .add(format!("{}${i}", local.name.unwrap_or("var")));
                     let typ = local
                         .typ
                         .coalesce(symbols)

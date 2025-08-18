@@ -219,13 +219,18 @@ impl<'scope, 'ctx> Locals<'scope, 'ctx> {
     }
 
     #[inline]
-    pub fn add_var(&mut self, typ: PolyType<'ctx>, span: Span) -> &ir::LocalInfo<'ctx> {
-        self.add(ir::Local::Var(self.counter.get()), typ, Some(span))
+    pub fn add_var(
+        &mut self,
+        name: Option<&'ctx str>,
+        typ: PolyType<'ctx>,
+        span: Span,
+    ) -> &ir::LocalInfo<'ctx> {
+        self.add(ir::Local::Var(self.counter.get()), name, typ, Some(span))
     }
 
     #[inline]
     pub fn add_param(&mut self, typ: PolyType<'ctx>, span: Option<Span>) -> &ir::LocalInfo<'ctx> {
-        self.add(ir::Local::Param(self.counter.get()), typ, span)
+        self.add(ir::Local::Param(self.counter.get()), None, typ, span)
     }
 
     pub fn into_vec(self) -> Vec<ir::LocalInfo<'ctx>> {
@@ -244,12 +249,13 @@ impl<'scope, 'ctx> Locals<'scope, 'ctx> {
     fn add(
         &mut self,
         local: ir::Local,
+        name: Option<&'ctx str>,
         typ: PolyType<'ctx>,
         span: Option<Span>,
     ) -> &ir::LocalInfo<'ctx> {
         self.counter.set(self.counter.get() + 1);
         let len = self.locals.len();
-        self.locals.push(ir::LocalInfo::new(local, typ, span));
+        self.locals.push(ir::LocalInfo::new(local, name, typ, span));
         &self.locals[len]
     }
 }

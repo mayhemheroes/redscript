@@ -224,7 +224,7 @@ fn function_builder<'ctx>(
     reporter: &mut CompileErrorReporter<'ctx>,
     span: Span,
 ) -> LoweredFunction<'ctx> {
-    let this = this_type.map(|lt| ir::LocalInfo::new(ir::Local::This, lt, None));
+    let this = this_type.map(|lt| ir::LocalInfo::new(ir::Local::This, None, lt, None));
     if let Some(this) = &this {
         env.define_local(THIS_IDENT, this.clone());
     }

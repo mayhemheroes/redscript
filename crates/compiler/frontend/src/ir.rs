@@ -648,14 +648,25 @@ impl Local {
 #[derive(Debug, Clone)]
 pub struct LocalInfo<'ctx> {
     pub id: Local,
+    pub name: Option<&'ctx str>,
     pub typ: PolyType<'ctx>,
     pub span: Option<Span>,
 }
 
 impl<'ctx> LocalInfo<'ctx> {
     #[inline]
-    pub fn new(id: Local, typ: PolyType<'ctx>, span: Option<Span>) -> Self {
-        Self { id, typ, span }
+    pub fn new(
+        id: Local,
+        name: Option<&'ctx str>,
+        typ: PolyType<'ctx>,
+        span: Option<Span>,
+    ) -> Self {
+        Self {
+            id,
+            name,
+            typ,
+            span,
+        }
     }
 }
 

@@ -233,7 +233,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 let (_, span) = pattern;
                 let (expr, expr_t) = self.lower_expr(val, env)?;
 
-                let local = self.locals.add_var(expr_t.clone(), expr.span()).id;
+                let local = self.locals.add_var(None, expr_t.clone(), expr.span()).id;
                 let mut scope = env.introduce_scope();
                 let (prologue, condition) = self.lower_pattern_into_prologue_and_condition(
                     local, &expr_t, &mut scope, pattern,
@@ -331,7 +331,9 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
     ) -> LowerResult<'ctx, Pattern<'ctx>> {
         match pattern {
             ast::Pattern::Name((name, name_span)) => {
-                let local = self.locals.add_var(projection_t.clone(), *name_span);
+                let local = self
+                    .locals
+                    .add_var(Some(name), projection_t.clone(), *name_span);
                 let local = env.define_local(name, local.clone());
                 let projected = self.lower_projection(projection, env, *name_span)?;
                 Ok(Pattern {
@@ -652,7 +654,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 )?;
 
                 let array_t = Type::app(predef::ARRAY, [elem_typ.clone()]).into_poly();
-                let local = self.locals.add_var(array_t.clone(), *span).id;
+                let local = self.locals.add_var(None, array_t.clone(), *span).id;
 
                 self.push_prefix(ir::Stmt::InitArray {
                     local,
@@ -974,7 +976,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                     } else {
                         value_t
                     };
-                    let local = self.locals.add_var(typ, name_span);
+                    let local = self.locals.add_var(Some(name), typ, name_span);
                     let local = env.define_local(name, local.clone());
 
                     ir::Expr::Assign {
@@ -985,7 +987,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                     .into()
                 } else {
                     let typ = typ.unwrap_or_else(PolyType::fresh);
-                    let local = self.locals.add_var(typ.clone(), name_span);
+                    let local = self.locals.add_var(Some(name), typ.clone(), name_span);
                     let local = env.define_local(name, local.clone());
                     ir::Stmt::InitDefault {
                         local,
@@ -1456,9 +1458,9 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
 
         let mut env = env.introduce_scope();
         let counter_t = PolyType::nullary(predef::INT32);
-        let counter = self.locals.add_var(counter_t.clone(), init_span).id;
+        let counter = self.locals.add_var(None, counter_t.clone(), init_span).id;
         let array_local = self.extract_local(array, &array_t, init_span);
-        let elem = env.define_local(name, self.locals.add_var(elem_t, name_span).clone());
+        let elem = env.define_local(name, self.locals.add_var(None, elem_t, name_span).clone());
 
         let loop_body = {
             let (increment, _) = self
@@ -2122,7 +2124,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         if let ir::Expr::Local(local, _) = expr {
             local
         } else {
-            let local = self.locals.add_var(expr_t.clone(), span).id;
+            let local = self.locals.add_var(None, expr_t.clone(), span).id;
             self.push_prefix(ir::Expr::Assign {
                 place: ir::Expr::Local(local, span).into(),
                 expr: expr.into(),
