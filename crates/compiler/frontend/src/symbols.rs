@@ -1217,7 +1217,7 @@ pub struct AggregateFlags {
     pub is_struct: bool,
     pub is_never_ref: bool,
     pub is_mixed_ref: bool,
-    pub is_sealed: bool,
+    pub is_fully_defined: bool,
 }
 
 #[bitfield(u8)]

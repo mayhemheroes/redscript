@@ -862,7 +862,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                     TypeSchema::Aggregate(aggregate) if aggregate.flags().is_struct() => {
                         let field_count = aggregate.fields().len();
 
-                        if aggregate.flags().is_native() && !aggregate.flags().is_sealed() {
+                        if aggregate.flags().is_native() && !aggregate.flags().is_fully_defined() {
                             if !args.is_empty() {
                                 self.reporter.report(
                                     Error::NonFullyDefinedNativeStructConstruction(typ.id(), *span),

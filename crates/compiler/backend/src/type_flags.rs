@@ -4,14 +4,14 @@ use hashbrown::HashSet;
 
 #[derive(Debug, Clone)]
 pub struct TypeFlags {
-    sealed: HashSet<Cow<'static, str>>,
+    fully_defined: HashSet<Cow<'static, str>>,
     never_ref: HashSet<Cow<'static, str>>,
     mixed_ref: HashSet<Cow<'static, str>>,
 }
 
 impl TypeFlags {
-    pub fn register_sealed(&mut self, name: impl Into<Cow<'static, str>>) {
-        self.sealed.insert(name.into());
+    pub fn register_fully_defined(&mut self, name: impl Into<Cow<'static, str>>) {
+        self.fully_defined.insert(name.into());
     }
 
     pub fn register_never_ref(&mut self, name: impl Into<Cow<'static, str>>) {
@@ -22,8 +22,8 @@ impl TypeFlags {
         self.mixed_ref.insert(name.into());
     }
 
-    pub fn is_sealed(&self, name: &str) -> bool {
-        self.sealed.contains(name)
+    pub fn is_fully_defined(&self, name: &str) -> bool {
+        self.fully_defined.contains(name)
     }
 
     pub fn is_never_ref(&self, name: &str) -> bool {
@@ -38,23 +38,28 @@ impl TypeFlags {
 impl Default for TypeFlags {
     fn default() -> Self {
         Self {
-            sealed: SEALED_TYPES.iter().map(|s| Cow::Borrowed(*s)).collect(),
+            fully_defined: FULLY_DEFINED_TYPES
+                .iter()
+                .map(|s| Cow::Borrowed(*s))
+                .collect(),
             never_ref: NEVER_REF_TYPES.iter().map(|s| Cow::Borrowed(*s)).collect(),
-            mixed_ref: HashSet::new(),
+            mixed_ref: MIXED_REF_TYPES.iter().map(|s| Cow::Borrowed(*s)).collect(),
         }
     }
 }
 
-const NEVER_REF_TYPES: &[&str] = &[
-    "ReactionData",
+const NEVER_REF_TYPES: &[&str] = &["ReactionData", "vehicleCinematicCameraShotGroup"];
+
+const MIXED_REF_TYPES: &[&str] = &[
     "JournalEntryOverrideData",
-    "vehicleCinematicCameraShotGroup",
+    "StatusEffect",
+    "StatusEffectBase",
     "vehicleCinematicCameraShot",
 ];
 
 // generated with https://github.com/jac3km4/redscript-sealed-struct-dumper
 // this is a list of native structs that are fully exposed to scripts
-const SEALED_TYPES: &[&str] = &[
+const FULLY_DEFINED_TYPES: &[&str] = &[
     "AIActiveCommandList",
     "AICommandNodeFunction",
     "AIDelegateAttrRef",

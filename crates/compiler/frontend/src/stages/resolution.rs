@@ -855,7 +855,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                             .report(Diagnostic::UserSymbolAnnotation(name_span));
                     }
 
-                    if flags.is_sealed() {
+                    if flags.is_fully_defined() {
                         self.reporter
                             .report(Diagnostic::FullyDefinedNativeTypeFieldAddition(name_span));
                     } else if flags.is_struct() && !flags.is_native() {

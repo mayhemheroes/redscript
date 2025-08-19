@@ -193,7 +193,7 @@ impl<'ctx> CompilationInputs<'ctx> {
                         .with_is_struct(cls.flags().is_struct())
                         .with_is_never_ref(type_flags.is_never_ref(class_name.as_ref()))
                         .with_is_mixed_ref(type_flags.is_mixed_ref(class_name.as_ref()))
-                        .with_is_sealed(type_flags.is_sealed(class_name.as_ref()));
+                        .with_is_fully_defined(type_flags.is_fully_defined(class_name.as_ref()));
                     let agg =
                         Aggregate::new(flags, base, fields, methods, HashMap::default(), None);
                     let def = TypeDef::new([], TypeSchema::Aggregate(agg.into()), []);

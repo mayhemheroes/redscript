@@ -165,7 +165,7 @@ impl Error<'_> {
             Self::InvalidTemporary(_) => "INVALID_TEMP",
             Self::UnexpectedNonConstant(_) => "INVALID_CONSTANT",
             Self::DeprecatedNameOf(_) => "DEPRECATED_SYNTAX",
-            Self::NonFullyDefinedNativeStructConstruction(_, _) => "NON_SEALED_CTR",
+            Self::NonFullyDefinedNativeStructConstruction(_, _) => "NON_FULLY_DEFINED_CTR",
             Self::MissingBreakInCaseLet(_) => "MISSING_BREAK",
             Self::RefOnNeverRefType(_) => "REF_ON_NEVER_REF",
             Self::ImpossibleDynCast(_, _) => "IMPOSSIBLE_DYN_CAST",
