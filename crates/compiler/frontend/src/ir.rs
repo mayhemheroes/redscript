@@ -654,7 +654,6 @@ pub struct LocalInfo<'ctx> {
 }
 
 impl<'ctx> LocalInfo<'ctx> {
-    #[inline]
     pub fn new(
         id: Local,
         name: Option<&'ctx str>,
@@ -679,7 +678,6 @@ pub struct Closure<'ctx> {
 }
 
 impl<'ctx> Closure<'ctx> {
-    #[inline]
     pub fn new(
         typ: impl Into<TypeApp<'ctx>>,
         locals: impl Into<Box<[LocalInfo<'ctx>]>>,

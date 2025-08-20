@@ -150,7 +150,6 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
         self.labels[usize::from(label)] = self.virtual_offset;
     }
 
-    #[inline]
     fn assemble_block(
         &mut self,
         block: &ir::Block<'ctx>,
@@ -972,7 +971,6 @@ impl AssembleError<'_> {
 struct Label(u16);
 
 impl From<Label> for usize {
-    #[inline]
     fn from(label: Label) -> usize {
         usize::from(label.0)
     }

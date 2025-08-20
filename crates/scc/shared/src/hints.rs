@@ -67,7 +67,6 @@ impl UserHints {
         Ok(Self { hints })
     }
 
-    #[inline]
     pub fn get_by_code(&self, error_code: &str) -> Option<&[UserHint]> {
         self.hints.get(error_code).map(Vec::as_slice)
     }

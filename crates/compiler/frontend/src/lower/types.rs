@@ -83,7 +83,6 @@ impl<'ctx> InferredTypeApp<'ctx> {
         TypeApp::from_type_with_env(class.schema().base_type()?, &env).ok()
     }
 
-    #[inline]
     pub fn base_type_env<'scope, 'sym>(
         self,
         target: TypeId<'ctx>,
@@ -211,6 +210,7 @@ impl<'ctx> InferredType<'ctx> {
         variance: Variance,
         symbols: &Symbols<'ctx>,
     ) -> bool {
+        #[inline]
         fn check<'ctx>(
             lhs: TypeId<'ctx>,
             rhs: TypeId<'ctx>,
@@ -381,7 +381,6 @@ impl<'ctx> PolyType<'ctx> {
         }
     }
 
-    #[inline]
     fn constrain_invariant(&self, other: &Self, symbols: &Symbols<'ctx>) -> InferResult<'ctx, ()> {
         match (self, other) {
             (Self::Mono(l), Self::Mono(r)) => l.constrain_invariant(r, symbols),

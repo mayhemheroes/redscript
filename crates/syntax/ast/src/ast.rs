@@ -21,7 +21,6 @@ pub struct Module<'src, K: AstKind = Identity> {
 }
 
 impl<'src, K: AstKind> Module<'src, K> {
-    #[inline]
     pub fn new(path: Option<Path<'src>>, items: impl Into<Box<[ItemDeclT<'src, K>]>>) -> Self {
         Self {
             path,
@@ -76,7 +75,6 @@ pub struct ItemDecl<'src, K: AstKind = Identity> {
 }
 
 impl<'src, K: AstKind> ItemDecl<'src, K> {
-    #[inline]
     pub fn new(
         annotations: impl Into<Vec<AnnotationT<'src, K>>>,
         visibility: Option<Visibility>,
@@ -172,7 +170,6 @@ pub struct Aggregate<'src, K: AstKind = Identity> {
 }
 
 impl<'src, K: AstKind> Aggregate<'src, K> {
-    #[inline]
     pub fn new(
         name: K::Inner<&'src str>,
         type_params: impl Into<Box<[TypeParam<'src, K>]>>,
@@ -232,7 +229,6 @@ pub struct Field<'src, K: AstKind = Identity> {
 }
 
 impl<'src, K: AstKind> Field<'src, K> {
-    #[inline]
     pub fn new(
         name: K::Inner<&'src str>,
         typ: Box<TypeT<'src, K>>,
@@ -260,7 +256,6 @@ pub struct Function<'src, K: AstKind = Identity> {
 }
 
 impl<'src, K: AstKind> Function<'src, K> {
-    #[inline]
     pub fn new(
         name: K::Inner<&'src str>,
         type_params: impl Into<Box<[TypeParam<'src, K>]>>,
@@ -338,7 +333,6 @@ pub struct Enum<'src, K: AstKind = Identity> {
 }
 
 impl<'src, K: AstKind> Enum<'src, K> {
-    #[inline]
     pub fn new(
         name: K::Inner<&'src str>,
         variants: impl Into<Box<[K::Inner<EnumVariant<'src>>]>>,
@@ -369,7 +363,6 @@ pub struct EnumVariant<'src> {
 }
 
 impl<'src> EnumVariant<'src> {
-    #[inline]
     pub fn new(name: &'src str, value: Option<impl Into<i64>>) -> Self {
         Self {
             name,
@@ -385,7 +378,6 @@ pub struct Annotation<'src, K: AstKind = Identity> {
 }
 
 impl<'src, K: AstKind> Annotation<'src, K> {
-    #[inline]
     pub fn new(name: &'src str, args: impl Into<Box<[ExprT<'src, K>]>>) -> Self {
         Self {
             name,
@@ -421,7 +413,6 @@ pub enum Type<'src, K: AstKind = Identity> {
 }
 
 impl<'src, K: AstKind> Type<'src, K> {
-    #[inline]
     pub fn plain(name: &'src str) -> Self {
         Self::Named {
             name,
@@ -500,7 +491,6 @@ pub struct TypeParam<'src, K: AstKind = Identity> {
 }
 
 impl<'src, K: AstKind> TypeParam<'src, K> {
-    #[inline]
     pub fn new(
         variance: Variance,
         name: K::Inner<&'src str>,
@@ -539,7 +529,6 @@ pub struct Param<'src, K: AstKind = Identity> {
 }
 
 impl<'src, K: AstKind> Param<'src, K> {
-    #[inline]
     pub fn new(name: &'src str, typ: Option<TypeT<'src, K>>, qualifiers: ParamQualifiers) -> Self {
         Self {
             name,
@@ -563,7 +552,6 @@ pub struct Path<'src> {
 }
 
 impl<'src> Path<'src> {
-    #[inline]
     pub fn new(segments: impl Into<Box<[&'src str]>>) -> Self {
         Self {
             segments: segments.into(),
@@ -572,7 +560,6 @@ impl<'src> Path<'src> {
 }
 
 impl<'src> AsRef<[&'src str]> for Path<'src> {
-    #[inline]
     fn as_ref(&self) -> &[&'src str] {
         &self.segments
     }
@@ -584,14 +571,12 @@ pub struct Block<'src, K: AstKind = Identity> {
 }
 
 impl<'src, K: AstKind> Block<'src, K> {
-    #[inline]
     pub fn new(stmts: impl Into<Box<[StmtT<'src, K>]>>) -> Self {
         Self {
             stmts: stmts.into(),
         }
     }
 
-    #[inline]
     pub fn single(stmt: StmtT<'src, K>) -> Self {
         Self {
             stmts: [stmt].into(),
@@ -771,7 +756,6 @@ pub struct ConditionalBlock<'src, K: AstKind = Identity> {
 }
 
 impl<'src, K: AstKind> ConditionalBlock<'src, K> {
-    #[inline]
     pub fn new(condition: LetCondition<'src, K>, body: Block<'src, K>) -> Self {
         Self { condition, body }
     }
@@ -799,7 +783,6 @@ pub struct Case<'src, K: AstKind = Identity> {
 }
 
 impl<'src, K: AstKind> Case<'src, K> {
-    #[inline]
     pub fn new(condition: Condition<'src, K>, body: impl Into<Box<[StmtT<'src, K>]>>) -> Self {
         Self {
             condition,

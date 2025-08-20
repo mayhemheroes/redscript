@@ -48,10 +48,12 @@ impl<'ctx, K: TypeKind> Type<'ctx, K> {
         Some(self.strip_ref()?.1)
     }
 
+    #[inline]
     pub fn strip_ref(&self) -> Option<(RefType, &K::Type<'ctx>)> {
         self.upper_bound().and_then(TypeApp::strip_ref)
     }
 
+    #[inline]
     pub fn ref_type(&self) -> Option<RefType> {
         self.upper_bound().and_then(TypeApp::ref_type)
     }
@@ -100,6 +102,7 @@ impl<'ctx> Type<'ctx> {
         }
     }
 
+    #[inline]
     pub fn assume_mono(&self, env: &ScopedMap<'_, &'ctx str, MonoType<'ctx>>) -> MonoType<'ctx> {
         self.mono(env)
             .expect("all vars should be resolved at this point")
@@ -114,7 +117,6 @@ impl<'ctx> From<(TypeId<'ctx>, Rc<[Type<'ctx>]>)> for Type<'ctx> {
 }
 
 impl<K: TypeKind> PartialEq for Type<'_, K> {
-    #[inline]
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (Self::Nothing, Self::Nothing) => true,
@@ -207,7 +209,6 @@ impl<'ctx, K: TypeKind> TypeApp<'ctx, K> {
         }
     }
 
-    #[inline]
     pub fn ref_type(&self) -> Option<RefType> {
         match self.id {
             id if id == predef::REF => Some(RefType::Strong),
@@ -315,7 +316,6 @@ pub struct CtxVar<'ctx, K: TypeKind = Immutable> {
 }
 
 impl<'ctx, K: TypeKind> CtxVar<'ctx, K> {
-    #[inline]
     pub fn new(
         name: &'ctx str,
         variance: Variance,
@@ -386,6 +386,7 @@ impl Variance {
 impl ops::Not for Variance {
     type Output = Self;
 
+    #[inline]
     fn not(self) -> Self::Output {
         match self {
             Self::Covariant => Self::Contravariant,
@@ -447,12 +448,10 @@ impl TypeId<'_> {
         predef::STATIC_ARRAY_TYPES.contains(self)
     }
 
-    #[inline]
     pub fn fn_with_arity(arity: usize) -> Option<Self> {
         predef::FN_BY_ARITY.get(arity).copied()
     }
 
-    #[inline]
     pub fn array_with_size(size: usize) -> Option<Self> {
         match size {
             0 => Some(predef::ARRAY0),
@@ -566,12 +565,10 @@ impl TypeInterner {
         }
     }
 
-    #[inline]
     pub fn get_index_of(&self, name: impl AsRef<str>) -> Option<TypeIndex> {
         self.names.get_index_of(name.as_ref()).map(TypeIndex)
     }
 
-    #[inline]
     pub fn get_index(&self, index: TypeIndex) -> Option<TypeId<'_>> {
         self.names.get_index(index.0).map(TypeId)
     }

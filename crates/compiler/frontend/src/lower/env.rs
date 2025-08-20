@@ -37,7 +37,6 @@ impl<'scope, 'ctx> Env<'scope, 'ctx> {
         id
     }
 
-    #[inline]
     pub fn introduce_scope(&'scope self) -> Self {
         Self {
             types: self.types,
@@ -59,10 +58,12 @@ impl<'scope, 'ctx> Env<'scope, 'ctx> {
             .map(move |&idx| FunctionEntry::new(idx, name, &symbols[idx]))
     }
 
+    #[inline]
     pub fn locals(&self) -> &ScopedMap<'scope, &'ctx str, ir::LocalInfo<'ctx>> {
         &self.locals
     }
 
+    #[inline]
     pub fn types(&self) -> &TypeEnv<'scope, 'ctx> {
         self.types
     }
@@ -209,7 +210,6 @@ pub struct Locals<'scope, 'ctx> {
 }
 
 impl<'scope, 'ctx> Locals<'scope, 'ctx> {
-    #[inline]
     pub fn new(counter: &'scope Cell<u16>, depth: usize) -> Self {
         Self {
             locals: vec![],
@@ -237,15 +237,16 @@ impl<'scope, 'ctx> Locals<'scope, 'ctx> {
         self.locals
     }
 
+    #[inline]
     pub fn counter(&self) -> &'scope Cell<u16> {
         self.counter
     }
 
+    #[inline]
     pub fn depth(&self) -> usize {
         self.depth
     }
 
-    #[inline]
     fn add(
         &mut self,
         local: ir::Local,
@@ -267,12 +268,10 @@ pub struct Capture {
 }
 
 impl Capture {
-    #[inline]
     pub fn new(captured: ir::Local, depth: u16) -> Self {
         Self { captured, depth }
     }
 
-    #[inline]
     pub fn pop_scope(&self) -> Option<Self> {
         Some(Self::new(self.captured, self.depth.checked_sub(1)?))
     }

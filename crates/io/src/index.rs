@@ -207,7 +207,6 @@ impl<A> From<NzPoolIndex<A>> for u32 {
 }
 
 impl<A, Ctx: Endianess> TryRead<'_, Ctx> for NzPoolIndex<A> {
-    #[inline]
     fn try_read(bytes: &[u8], ctx: Ctx) -> byte::Result<(Self, usize)> {
         let (index, size) = TryRead::try_read(bytes, ctx)?;
         let result = NzPoolIndex::new(index).ok_or(byte::Error::BadInput {

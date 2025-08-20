@@ -89,7 +89,6 @@ pub struct FormatCtx<'a> {
 }
 
 impl<'a> FormatCtx<'a> {
-    #[inline]
     pub fn new(
         settings: &'a FormatSettings,
         prefixes: &'a HashMap<NodeId, Vec<Prefix<'a>>>,
@@ -102,7 +101,6 @@ impl<'a> FormatCtx<'a> {
         }
     }
 
-    #[inline]
     fn ws(&self) -> Indent {
         Indent(self.depth * self.settings.indent)
     }
@@ -121,7 +119,6 @@ impl<'a> FormatCtx<'a> {
         }
     }
 
-    #[inline]
     fn current_indent(&self) -> u16 {
         self.depth * self.settings.indent
     }

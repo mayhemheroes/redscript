@@ -96,12 +96,10 @@ impl<'ctx> Symbols<'ctx> {
         self.types.get(&id)
     }
 
-    #[inline]
     pub fn add_type(&mut self, id: TypeId<'ctx>, def: TypeDef<'ctx>) {
         self.types.insert(id, def);
     }
 
-    #[inline]
     pub fn add_type_if_none(&mut self, id: TypeId<'ctx>, def: TypeDef<'ctx>) {
         self.types.entry(id).or_insert(def);
     }
@@ -308,7 +306,6 @@ pub struct TypeDef<'ctx> {
 }
 
 impl<'ctx> TypeDef<'ctx> {
-    #[inline]
     pub fn new_primitive(doc: impl Into<Box<[&'ctx str]>>) -> Self {
         Self {
             params: Box::default(),
@@ -317,7 +314,6 @@ impl<'ctx> TypeDef<'ctx> {
         }
     }
 
-    #[inline]
     pub fn new(
         params: impl Into<Box<[Rc<CtxVar<'ctx>>]>>,
         schema: TypeSchema<'ctx>,
@@ -346,13 +342,12 @@ impl<'ctx> TypeDef<'ctx> {
     }
 
     #[inline]
-    pub fn vars(&self) -> impl ExactSizeIterator<Item = &'ctx str> + use<'_, 'ctx> {
-        self.params.iter().map(|v| v.name())
-    }
-
-    #[inline]
     pub fn doc(&self) -> &[&'ctx str] {
         &self.doc
+    }
+
+    pub fn vars(&self) -> impl ExactSizeIterator<Item = &'ctx str> + use<'_, 'ctx> {
+        self.params.iter().map(|v| v.name())
     }
 
     pub fn span(&self) -> Option<Span> {
@@ -371,13 +366,12 @@ pub enum TypeSchema<'ctx> {
 }
 
 impl<'ctx> TypeSchema<'ctx> {
+    #[inline]
     pub fn base_type(&self) -> Option<&TypeApp<'ctx>> {
-        match self {
-            Self::Aggregate(agg) => agg.base.as_ref(),
-            _ => None,
-        }
+        self.as_aggregate().and_then(|agg| agg.base.as_ref())
     }
 
+    #[inline]
     pub fn as_aggregate(&self) -> Option<&Aggregate<'ctx>> {
         match self {
             Self::Aggregate(agg) => Some(agg),
@@ -385,6 +379,7 @@ impl<'ctx> TypeSchema<'ctx> {
         }
     }
 
+    #[inline]
     pub fn as_aggregate_mut(&mut self) -> Option<&mut Aggregate<'ctx>> {
         match self {
             Self::Aggregate(agg) => Some(agg),
@@ -392,6 +387,7 @@ impl<'ctx> TypeSchema<'ctx> {
         }
     }
 
+    #[inline]
     pub fn as_enum(&self) -> Option<&Enum<'ctx>> {
         match self {
             Self::Enum(enm) => Some(enm),
@@ -406,7 +402,6 @@ pub struct Enum<'ctx> {
 }
 
 impl<'ctx> Enum<'ctx> {
-    #[inline]
     pub fn new(variants: impl Into<IndexMap<&'ctx str, i64>>) -> Self {
         Self {
             variants: variants.into(),
@@ -419,12 +414,10 @@ impl<'ctx> Enum<'ctx> {
         Some((FieldIndex(index), *value))
     }
 
-    #[inline]
     pub fn add_variant(&mut self, name: &'ctx str, value: i64) -> FieldIndex {
         FieldIndex(self.variants.insert_full(name, value).0)
     }
 
-    #[inline]
     pub fn variants(&self) -> impl ExactSizeIterator<Item = (&'ctx str, i64)> + use<'_, 'ctx> {
         self.variants.iter().map(|(&name, &value)| (name, value))
     }
@@ -441,7 +434,6 @@ pub struct Aggregate<'ctx> {
 }
 
 impl<'ctx> Aggregate<'ctx> {
-    #[inline]
     pub fn new(
         flags: AggregateFlags,
         base: Option<TypeApp<'ctx>>,
@@ -509,7 +501,6 @@ impl<'ctx> Aggregate<'ctx> {
         self.span
     }
 
-    #[inline]
     pub fn is_user_defined(&self) -> bool {
         self.span().is_some()
     }
@@ -558,12 +549,10 @@ impl<'ctx> FieldMap<'ctx> {
             })
     }
 
-    #[inline]
     pub fn len(&self) -> usize {
         self.map.len()
     }
 
-    #[inline]
     pub fn is_empty(&self) -> bool {
         self.map.is_empty()
     }
@@ -613,7 +602,6 @@ where
         self.add_with(name, move |_| func)
     }
 
-    #[inline]
     pub fn add_with<F>(&mut self, name: N, f: F) -> FunctionIndex
     where
         F: FnOnce(FunctionIndex) -> V,
@@ -644,7 +632,6 @@ where
 }
 
 impl<N, V> Default for FunctionMap<N, V> {
-    #[inline]
     fn default() -> Self {
         Self {
             map: IndexMap::default(),
@@ -831,7 +818,6 @@ pub struct FreeFunction<'ctx> {
 }
 
 impl<'ctx> FreeFunction<'ctx> {
-    #[inline]
     pub fn new(
         flags: FreeFunctionFlags,
         type_: FunctionType<'ctx>,
@@ -847,7 +833,6 @@ impl<'ctx> FreeFunction<'ctx> {
         }
     }
 
-    #[inline]
     pub fn new_intrinsic(
         type_: FunctionType<'ctx>,
         intrinsic: ir::Intrinsic,
@@ -863,7 +848,6 @@ impl<'ctx> FreeFunction<'ctx> {
         }
     }
 
-    #[inline]
     pub fn new_alias(type_: FunctionType<'ctx>, alias: MethodId<'ctx>, span: Option<Span>) -> Self {
         Self {
             type_,
@@ -915,7 +899,6 @@ pub struct Method<'ctx> {
 }
 
 impl<'ctx> Method<'ctx> {
-    #[inline]
     pub fn new(
         flags: MethodFlags,
         typ: FunctionType<'ctx>,
@@ -933,7 +916,6 @@ impl<'ctx> Method<'ctx> {
         }
     }
 
-    #[inline]
     pub fn with_aliased(mut self, alias: MethodId<'ctx>) -> Self {
         self.aliased_method = Some(alias);
         self
@@ -954,7 +936,6 @@ impl<'ctx> Method<'ctx> {
         self.overloaded
     }
 
-    #[inline]
     pub fn set_overloaded(&mut self, overloaded: MethodId<'ctx>) {
         self.overloaded = Some(overloaded);
     }
@@ -969,7 +950,6 @@ impl<'ctx> Method<'ctx> {
         self.span
     }
 
-    #[inline]
     pub fn is_user_defined(&self) -> bool {
         self.span().is_some()
     }
@@ -1085,7 +1065,6 @@ pub struct Param<'ctx, K: TypeKind = Immutable> {
 }
 
 impl<'ctx, K: TypeKind> Param<'ctx, K> {
-    #[inline]
     pub fn new(name: &'ctx str, flags: ParamFlags, typ: K::Type<'ctx>, span: Option<Span>) -> Self {
         Self {
             name,
@@ -1141,7 +1120,6 @@ pub struct Field<'ctx> {
 }
 
 impl<'ctx> Field<'ctx> {
-    #[inline]
     pub fn new(
         flags: FieldFlags,
         typ: Type<'ctx>,
@@ -1291,7 +1269,6 @@ impl<'ctx> QualifiedName<'ctx> {
 }
 
 impl<'ctx> From<&'ctx str> for QualifiedName<'ctx> {
-    #[inline]
     fn from(value: &'ctx str) -> Self {
         QualifiedName(SmallVec::from_slice(&[value]))
     }
@@ -1316,14 +1293,12 @@ impl<'a, 'ctx> IntoIterator for &'a QualifiedName<'ctx> {
     type IntoIter = std::iter::Copied<std::slice::Iter<'a, &'ctx str>>;
     type Item = &'ctx str;
 
-    #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.0.iter().copied()
     }
 }
 
 impl<'ctx> FromIterator<&'ctx str> for QualifiedName<'ctx> {
-    #[inline]
     fn from_iter<T: IntoIterator<Item = &'ctx str>>(iter: T) -> Self {
         Self(iter.into_iter().collect())
     }
@@ -1338,6 +1313,7 @@ impl fmt::Display for QualifiedName<'_> {
 #[derive(Debug)]
 pub struct FieldRedefinition;
 
+#[inline]
 fn method_dedup<'ctx: 'a, 'a>() -> impl FnMut(
     FunctionEntry<MethodId<'ctx>, &'ctx str, &'a Method<'ctx>>,
 ) -> Option<

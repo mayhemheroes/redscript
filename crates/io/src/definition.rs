@@ -383,39 +383,33 @@ impl Class {
         &self.overrides
     }
 
-    #[inline]
     pub fn with_base(mut self, base: Option<ClassIndex>) -> Self {
         self.base = base;
         self
     }
 
-    #[inline]
     pub fn with_methods(mut self, methods: impl Into<Vec<FunctionIndex>>) -> Self {
         self.methods = methods.into();
         self.flags.set_has_functions(!self.methods.is_empty());
         self
     }
 
-    #[inline]
     pub fn add_method(&mut self, method: FunctionIndex) {
         self.methods.push(method);
         self.flags.set_has_functions(true);
     }
 
-    #[inline]
     pub fn with_fields(mut self, fields: impl Into<Vec<FieldIndex>>) -> Self {
         self.fields = fields.into();
         self.flags.set_has_fields(!self.fields.is_empty());
         self
     }
 
-    #[inline]
     pub fn add_field(&mut self, field: FieldIndex) {
         self.fields.push(field);
         self.flags.set_has_fields(true);
     }
 
-    #[inline]
     pub fn with_overrides(mut self, overrides: impl Into<Vec<FieldIndex>>) -> Self {
         self.overrides = overrides.into();
         self.flags.set_has_overrides(!self.overrides.is_empty());
@@ -533,13 +527,11 @@ impl Enum {
         self.is_native
     }
 
-    #[inline]
     pub fn with_values(mut self, values: impl Into<Vec<EnumValueIndex>>) -> Self {
         self.values = values.into();
         self
     }
 
-    #[inline]
     pub fn with_is_native(mut self, is_native: bool) -> Self {
         self.is_native = is_native;
         self
@@ -670,25 +662,21 @@ impl<'i> Function<'i> {
         &self.body
     }
 
-    #[inline]
     pub fn with_name(mut self, name: CNameIndex) -> Self {
         self.name = name;
         self
     }
 
-    #[inline]
     pub fn with_flags(mut self, flags: FunctionFlags) -> Self {
         self.flags = flags;
         self
     }
 
-    #[inline]
     pub fn with_class(mut self, class: Option<ClassIndex>) -> Self {
         self.class = class;
         self
     }
 
-    #[inline]
     pub fn with_source(mut self, source: Option<SourceReference>) -> Self {
         assert!(
             !self.flags.is_native() || source.is_none(),
@@ -698,66 +686,56 @@ impl<'i> Function<'i> {
         self
     }
 
-    #[inline]
     pub fn with_return_type(mut self, return_type: Option<TypeIndex>) -> Self {
         self.return_type = return_type;
         self.flags.set_has_return_value(return_type.is_some());
         self
     }
 
-    #[inline]
     pub fn with_const_return_type(mut self, return_type: TypeIndex) -> Self {
         self.is_const_return = true;
         self.with_return_type(Some(return_type))
     }
 
-    #[inline]
     pub fn with_base_method(mut self, base_method: Option<FunctionIndex>) -> Self {
         self.base_method = base_method;
         self.flags.set_has_base_method(base_method.is_some());
         self
     }
 
-    #[inline]
     pub fn with_parameters(mut self, parameters: impl Into<Vec<ParameterIndex>>) -> Self {
         self.parameters = parameters.into();
         self.flags.set_has_parameters(!self.parameters.is_empty());
         self
     }
 
-    #[inline]
     pub fn with_locals(mut self, locals: impl Into<Vec<LocalIndex>>) -> Self {
         self.set_locals(locals);
         self
     }
 
-    #[inline]
     pub fn set_locals(&mut self, locals: impl Into<Vec<LocalIndex>>) {
         self.locals = locals.into();
         self.flags.set_has_locals(!self.locals.is_empty());
     }
 
-    #[inline]
     pub fn with_operator(mut self, operator: Option<CNameIndex>) -> Self {
         self.operator = operator;
         self.flags.set_is_operator(operator.is_some());
         self
     }
 
-    #[inline]
     pub fn with_cast_cost(mut self, cast_cost: u8) -> Self {
         self.cast_cost = cast_cost;
         self.flags.set_is_cast(cast_cost != 0);
         self
     }
 
-    #[inline]
     pub fn with_body(mut self, body: FunctionBody<'i>) -> Self {
         self.set_body(body);
         self
     }
 
-    #[inline]
     pub fn with_code(self, code: Vec<Instr>) -> Self {
         self.with_body(FunctionBody::Code(code))
     }
@@ -770,7 +748,6 @@ impl<'i> Function<'i> {
         self.body = body;
     }
 
-    #[inline]
     pub fn set_code(&mut self, code: Vec<Instr>) {
         self.set_body(FunctionBody::Code(code));
     }
@@ -887,7 +864,6 @@ impl Parameter {
         self.flags
     }
 
-    #[inline]
     pub fn with_function(mut self, function: FunctionIndex) -> Self {
         self.function = function;
         self
@@ -960,7 +936,6 @@ impl Local {
         self.flags
     }
 
-    #[inline]
     pub fn with_function(mut self, function: FunctionIndex) -> Self {
         self.function = function;
         self
@@ -1061,26 +1036,22 @@ impl<'i> Field<'i> {
         &self.defaults
     }
 
-    #[inline]
     pub fn with_hint(mut self, hint: impl Into<Str<'i>>) -> Self {
         self.hint = Some(hint.into());
         self.flags.set_has_hint(true);
         self
     }
 
-    #[inline]
     pub fn with_attributes(mut self, attributes: impl Into<Vec<Property<'i>>>) -> Self {
         self.attributes = attributes.into();
         self
     }
 
-    #[inline]
     pub fn with_defaults(mut self, defaults: impl Into<Vec<Property<'i>>>) -> Self {
         self.set_defaults(defaults);
         self
     }
 
-    #[inline]
     pub fn set_defaults(&mut self, defaults: impl Into<Vec<Property<'i>>>) {
         self.defaults = defaults.into();
         self.flags.set_has_default(!self.defaults.is_empty());
@@ -1109,7 +1080,6 @@ impl<'i> Field<'i> {
 }
 
 impl<'i> From<Field<'i>> for Definition<'i> {
-    #[inline]
     fn from(f: Field<'i>) -> Self {
         Definition::Field(Box::new(f))
     }
@@ -1233,7 +1203,6 @@ impl FunctionBody<'_> {
 }
 
 impl Default for FunctionBody<'_> {
-    #[inline]
     fn default() -> Self {
         FunctionBody::Code(vec![])
     }

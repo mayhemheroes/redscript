@@ -41,7 +41,6 @@ pub struct Lower<'scope, 'ctx> {
 
 #[bon]
 impl<'scope, 'ctx> Lower<'scope, 'ctx> {
-    #[inline]
     fn new(
         locals: Locals<'scope, 'ctx>,
         return_type: PolyType<'ctx>,
@@ -2196,7 +2195,6 @@ impl<'ctx, K> FunctionResolution<'ctx, K> {
         Self { function, ..self }
     }
 
-    #[inline]
     fn with_args(self, args: impl Into<Box<[ir::Expr<'ctx>]>>) -> FunctionResultWithArgs<'ctx, K> {
         FunctionResultWithArgs {
             resulution: self,
@@ -2250,7 +2248,7 @@ impl<'ctx> FunctionResultWithArgs<'ctx, MethodId<'ctx>> {
         mode: ir::CallMode,
     ) -> (ir::Call<'ctx>, PolyType<'ctx>) {
         let call = ir::Call::Instance {
-            receiver: Box::new(receiver),
+            receiver: receiver.into(),
             receiver_type: receiver_type.into(),
             receiver_ref,
             method: self.resulution.function,

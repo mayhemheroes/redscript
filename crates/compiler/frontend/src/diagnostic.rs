@@ -265,7 +265,6 @@ pub enum DiagnosticLevel {
 }
 
 impl<'ctx> From<LowerError<'ctx>> for Diagnostic<'ctx> {
-    #[inline]
     fn from(err: LowerError<'ctx>) -> Self {
         Self::TypeError(err)
     }
@@ -290,7 +289,6 @@ impl<A> Reporter<A> {
         }
     }
 
-    #[inline]
     pub fn report(&mut self, error: impl Into<A>) {
         self.reported.push(error.into());
     }
@@ -299,12 +297,10 @@ impl<A> Reporter<A> {
         self.reported.extend(errors.into_iter().map(Into::into));
     }
 
-    #[inline]
     pub fn reported(&self) -> &[A] {
         &self.reported
     }
 
-    #[inline]
     pub fn into_reported(self) -> Vec<A> {
         self.reported
     }

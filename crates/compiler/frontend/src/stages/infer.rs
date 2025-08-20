@@ -274,7 +274,6 @@ pub struct InferStageModule<'scope, 'ctx> {
 }
 
 impl<'scope, 'ctx> InferStageModule<'scope, 'ctx> {
-    #[inline]
     pub fn new(
         type_scope: IndexMap<&'ctx str, TypeRef<'scope, 'ctx>>,
         func_scope: IndexMap<&'ctx str, FreeFunctionIndexes>,
@@ -295,17 +294,14 @@ impl<'scope, 'ctx> InferStageModule<'scope, 'ctx> {
         }
     }
 
-    #[inline]
     pub fn classes(&self) -> &[ClassItem<'scope, 'ctx>] {
         &self.classes
     }
 
-    #[inline]
     pub fn functions(&self) -> &[FuncItemKind<'scope, 'ctx>] {
         &self.functions
     }
 
-    #[inline]
     pub fn fields(&self) -> &[FieldItem<'ctx, FieldId<'ctx>>] {
         &self.fields
     }
@@ -318,12 +314,10 @@ pub struct FieldItem<'ctx, K> {
 }
 
 impl<'ctx, K> FieldItem<'ctx, K> {
-    #[inline]
     pub fn new(id: K, default: Option<Box<Spanned<ast::SourceExpr<'ctx>>>>) -> Self {
         Self { id, default }
     }
 
-    #[inline]
     pub fn id(&self) -> &K {
         &self.id
     }
@@ -340,7 +334,6 @@ pub struct FuncItem<'scope, 'ctx, K, B = ast::SourceFunctionBody<'ctx>> {
 }
 
 impl<'scope, 'ctx, K, B> FuncItem<'scope, 'ctx, K, B> {
-    #[inline]
     pub fn new(
         id: K,
         span: Span,
@@ -359,7 +352,6 @@ impl<'scope, 'ctx, K, B> FuncItem<'scope, 'ctx, K, B> {
         }
     }
 
-    #[inline]
     pub fn id(&self) -> &K {
         &self.id
     }
@@ -376,7 +368,6 @@ pub struct ClassItem<'scope, 'ctx> {
 }
 
 impl<'scope, 'ctx> ClassItem<'scope, 'ctx> {
-    #[inline]
     pub fn new(
         id: TypeId<'ctx>,
         span: Span,
@@ -395,12 +386,10 @@ impl<'scope, 'ctx> ClassItem<'scope, 'ctx> {
         }
     }
 
-    #[inline]
     pub fn id(&self) -> TypeId<'ctx> {
         self.id
     }
 
-    #[inline]
     pub fn name_span(&self) -> Span {
         self.name_span
     }

@@ -302,7 +302,6 @@ pub struct ClassMappings {
 }
 
 impl ClassMappings {
-    #[inline]
     pub fn new(index: PoolClassIndex, methods: IndexMap<FunctionIndex, PoolFunctionIndex>) -> Self {
         Self {
             index,
@@ -331,7 +330,6 @@ impl ClassMappings {
         &self.aliases
     }
 
-    #[inline]
     pub fn set_alias(&mut self, index: FunctionIndex, alias: PoolFunctionIndex) {
         self.aliases.insert(index, alias);
     }
@@ -344,7 +342,6 @@ pub struct Signature<'ctx, A> {
 }
 
 impl<'ctx, A> Signature<'ctx, A> {
-    #[inline]
     pub fn new(item: A, types: impl Into<Box<[MonoType<'ctx>]>>) -> Self {
         Self {
             id: item,

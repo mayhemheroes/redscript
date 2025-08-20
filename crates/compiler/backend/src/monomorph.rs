@@ -801,7 +801,6 @@ impl<'ctx> Monomorphizer<'ctx> {
             .copied()
     }
 
-    #[inline]
     fn has_backlog(&self) -> bool {
         self.classes.has_backlog() || self.methods.has_backlog() || self.functions.has_backlog()
     }
@@ -839,6 +838,7 @@ impl<'ctx> MethodWithReceiver<'ctx> {
         Self { receiver, index }
     }
 
+    #[inline]
     pub fn method(&self) -> MethodId<'ctx> {
         MethodId::new(self.receiver.id(), self.index)
     }

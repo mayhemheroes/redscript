@@ -22,14 +22,17 @@ impl TypeFlags {
         self.mixed_ref.insert(name.into());
     }
 
+    #[inline]
     pub fn is_fully_defined(&self, name: &str) -> bool {
         self.fully_defined.contains(name)
     }
 
+    #[inline]
     pub fn is_never_ref(&self, name: &str) -> bool {
         self.never_ref.contains(name)
     }
 
+    #[inline]
     pub fn is_mixed_ref(&self, name: &str) -> bool {
         self.mixed_ref.contains(name)
     }

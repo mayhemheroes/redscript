@@ -11,7 +11,6 @@ pub struct ModuleMap<'ctx> {
 }
 
 impl<'ctx> ModuleMap<'ctx> {
-    #[inline]
     pub fn add_type(
         &mut self,
         path: QualifiedName<'ctx>,
@@ -143,7 +142,6 @@ pub enum Export<'ctx> {
 }
 
 impl<'ctx> Export<'ctx> {
-    #[inline]
     pub fn is_public(&self) -> bool {
         match self {
             Export::FreeFunction { public, .. } | Export::Type { public, .. } => *public,

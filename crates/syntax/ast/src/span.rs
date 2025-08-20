@@ -12,7 +12,6 @@ impl Span {
         Span { start, end, file }
     }
 
-    #[inline]
     pub fn contains(&self, pos: u32) -> bool {
         self.start <= pos && pos < self.end
     }

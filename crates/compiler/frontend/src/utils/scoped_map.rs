@@ -22,7 +22,6 @@ where
         Some(self.get_with_depth(key)?.0)
     }
 
-    #[inline]
     pub fn get_with_depth<Q>(&self, key: &Q) -> Option<(&V, u16)>
     where
         K: Borrow<Q>,
@@ -93,7 +92,6 @@ where
 }
 
 impl<K, V> Default for ScopedMap<'_, K, V> {
-    #[inline]
     fn default() -> Self {
         Self::Tail(IndexMap::default())
     }
@@ -106,7 +104,6 @@ impl<K: Eq + Hash, V> Extend<(K, V)> for ScopedMap<'_, K, V> {
 }
 
 impl<K: Eq + Hash, V> FromIterator<(K, V)> for ScopedMap<'_, K, V> {
-    #[inline]
     fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
         Self::Tail(iter.into_iter().collect())
     }
@@ -126,7 +123,6 @@ pub struct ScopeIter<'a, 'b, K, V> {
 impl<'a, K, V> Iterator for ScopeIter<'a, '_, K, V> {
     type Item = &'a IndexMap<K, V>;
 
-    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         match self.map? {
             ScopedMap::Cons(head, tail) => {

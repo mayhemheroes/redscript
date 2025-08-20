@@ -43,7 +43,6 @@ struct Decompiler<'scope, 'ctx, 'i> {
 }
 
 impl<'scope, 'ctx: 'i, 'i> Decompiler<'scope, 'ctx, 'i> {
-    #[inline]
     fn new(
         function: &'ctx Function<'i>,
         code: &'scope [Instr],

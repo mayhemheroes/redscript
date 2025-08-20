@@ -303,7 +303,6 @@ pub enum Token<'src, S = Span> {
 }
 
 impl<'src, S1> Token<'src, S1> {
-    #[inline]
     pub fn is_ws_or_comment(&self) -> bool {
         matches!(
             self,
