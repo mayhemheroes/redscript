@@ -16,8 +16,8 @@ pub use types::{InferredTypeApp, Poly, PolyType};
 
 use crate::diagnostic::{ErrorWithSpan, MethodSignature};
 use crate::symbols::{
-    FieldId, FreeFunctionIndex, FunctionEntry, FunctionKey, FunctionKind, FunctionType, Symbols,
-    TypeSchema, Visibility,
+    AnyBaseType, FieldId, FreeFunctionIndex, FunctionEntry, FunctionKey, FunctionKind,
+    FunctionType, Symbols, TypeSchema, Visibility,
 };
 use crate::types::{RefType, Type, TypeApp, TypeId, predef};
 use crate::utils::ScopedMap;
@@ -223,7 +223,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 let (_, span) = expr;
                 let (condition, expr_t) = self.lower_expr(expr, env)?;
                 expr_t
-                    .constrain(&PolyType::nullary(predef::BOOL), self.symbols)
+                    .constrain_base(&PolyType::nullary(predef::BOOL), self.symbols)
                     .with_span(*span)?;
                 let block = self.lower_scoped_block(&block.body.stmts, env);
                 Ok((ir::ConditionalBlock::new(condition, block), None))
@@ -355,7 +355,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
 
                 let as_type = self.resolve_type(as_type, env, *type_span)?;
                 as_type
-                    .constrain(&unref_t, self.symbols)
+                    .constrain_base(&unref_t, self.symbols)
                     .with_span(*pattern_span)?;
 
                 let Pattern {
@@ -390,7 +390,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 let unref_t = unref_t.unwrap_or(projection_t.clone());
 
                 aggregate_t
-                    .constrain(&unref_t, self.symbols)
+                    .constrain_base(&unref_t, self.symbols)
                     .with_span(*span)?;
 
                 let projected = self.lower_projection(projection, env, *span)?;
@@ -463,7 +463,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 let elem_t = PolyType::fresh();
                 let expected = Type::app(predef::ARRAY, [elem_t.clone()]).into_poly();
                 projection_t
-                    .constrain(&expected, self.symbols)
+                    .constrain_base(&expected, self.symbols)
                     .with_span(*patterns_span)?;
 
                 let projected = self.lower_projection(projection, env, *patterns_span)?;
@@ -516,7 +516,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         };
         let (expr, expr_t) = self.lower_expr(expr, env)?;
         expr_t
-            .constrain(scrutinee_t, self.symbols)
+            .constrain_base(scrutinee_t, self.symbols)
             .with_span(expr.span())?;
         let block = self.lower_scoped_block(&case.body, env);
         Ok(ir::Case::new(expr, block))
@@ -535,7 +535,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 let (_, span) = expr;
                 let (expr, expr_t) = self.lower_expr_with(expr, Some(scrutinee_t), &scope)?;
                 scrutinee_t
-                    .constrain(&expr_t, self.symbols)
+                    .constrain_base(&expr_t, self.symbols)
                     .with_span(*span)?;
 
                 let (call, _) = self
@@ -780,7 +780,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 let index @ (_, index_span) = &**index;
                 let (index, index_t) = self.lower_expr(index, env)?;
                 index_t
-                    .constrain(&PolyType::nullary(predef::INT32), self.symbols)
+                    .constrain_base(&PolyType::nullary(predef::INT32), self.symbols)
                     .with_span(*index_span)?;
 
                 if expr.is_prvalue(self.symbols) {
@@ -808,19 +808,19 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 let inferred = if let Some((RefType::Weak, inner)) = expr_t.strip_ref(self.symbols)
                 {
                     expected
-                        .constrain(&inner, self.symbols)
+                        .constrain_base(&inner, self.symbols)
                         .map(|_| Type::app(predef::WREF, [expected.clone()]).into_poly())
                         .map_err(|err| (err, inner))
                 } else {
                     expected
-                        .constrain(&expr_t, self.symbols)
+                        .constrain_base(&expr_t, self.symbols)
                         .map(|_| expected.clone())
                         .map_err(|err| (err, expr_t.clone()))
                 };
 
                 match inferred {
                     Err((err, inner)) => {
-                        if inner.constrain(&expected, self.symbols).is_ok() {
+                        if inner.constrain_base(&expected, self.symbols).is_ok() {
                             return Err(Error::RedundantDynCast(*span));
                         }
                         return Err(Error::ImpossibleDynCast(err.into(), *span));
@@ -910,7 +910,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 let cond @ (_, cond_span) = &**cond;
                 let (cond, cond_t) = self.lower_expr(cond, env)?;
                 cond_t
-                    .constrain(&PolyType::nullary(predef::BOOL), self.symbols)
+                    .constrain_base(&PolyType::nullary(predef::BOOL), self.symbols)
                     .with_span(*cond_span)?;
 
                 let (then, then_t) = self.lower_expr_with(then, hint, env)?;
@@ -1088,7 +1088,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             }
             ast::Stmt::Return(None) => {
                 self.return_type
-                    .constrain(&PolyType::nullary(predef::VOID), self.symbols)
+                    .constrain_base(&PolyType::nullary(predef::VOID), self.symbols)
                     .with_span(span)?;
                 ir::Stmt::Return(None, span)
             }
@@ -1162,12 +1162,10 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 && let Some(&TypeRef::Name(typ)) = env.types().get(ident)
                 && let mut candidates = self
                     .symbols
-                    .base_iter(typ)
+                    .base_iter_with_self::<AnyBaseType>(typ)
                     .map(|(id, def)| {
-                        def.schema()
-                            .as_aggregate()
-                            .into_iter()
-                            .flat_map(|agg| agg.methods().by_name(member))
+                        def.methods()
+                            .by_name(member)
                             .map(move |entry| entry.map_key(|i| MethodId::new(id, i)))
                             .peekable()
                     })
@@ -1212,7 +1210,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             let (upper_bound, mode) = if matches!(**expr, (ast::Expr::Super, _)) {
                 (
                     upper_bound
-                        .instantiate_base(self.symbols)
+                        .instantiate_base::<AnyBaseType>(self.symbols)
                         .ok_or(Error::NonExistentSuperType(*expr_span))?,
                     ir::CallMode::ForceStatic,
                 )
@@ -1290,7 +1288,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             .collect::<Rc<_>>();
         let func_t = TypeApp::new(id, func_t_args);
 
-        typ.constrain(&func_t.clone().into_type().into_poly(), self.symbols)
+        typ.constrain_base(&func_t.clone().into_type().into_poly(), self.symbols)
             .with_span(*expr_span)?;
 
         let call = ir::Call::Closure {
@@ -1452,7 +1450,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         let elem_t = PolyType::fresh();
         let expected_t = Type::app(predef::ARRAY, [elem_t.clone()]).into_poly();
         array_t
-            .constrain(&expected_t, self.symbols)
+            .constrain_base(&expected_t, self.symbols)
             .with_span(init_span)?;
 
         let mut env = env.introduce_scope();
@@ -1618,7 +1616,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         span: Span,
     ) -> LowerResult<'ctx, ()> {
         if param.flags().is_out() {
-            rhs.constrain(&lhs, self.symbols).with_span(span)?;
+            rhs.constrain_base(&lhs, self.symbols).with_span(span)?;
             if expr.is_prvalue(self.symbols) {
                 self.reporter.report(Error::InvalidTemporary(span));
             }
@@ -1676,7 +1674,9 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
 
         if filtered.peek().is_none() {
             let type_env = receiver
-                .and_then(|typ| typ.base_type_env(primary.key().parent()?, self.symbols))
+                .and_then(|typ| {
+                    typ.base_type_env::<AnyBaseType>(primary.key().parent()?, self.symbols)
+                })
                 .unwrap_or_default();
 
             let type_env = type_env.push_scope(
@@ -1692,7 +1692,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 PolyType::from_type_with_env(primary.func().type_().return_type(), &type_env)
                     .map_err(|var| Error::UnresolvedVar(var, span))?;
             if let Some(hint) = return_hint {
-                return_t.constrain(hint, self.symbols).ok();
+                return_t.constrain_base(hint, self.symbols).ok();
             }
 
             let mut checked_args = Vec::with_capacity(args.len());
@@ -1829,7 +1829,9 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         };
 
         let type_env = receiver
-            .and_then(|typ| typ.base_type_env(selected.key().parent()?, self.symbols))
+            .and_then(|typ| {
+                typ.base_type_env::<AnyBaseType>(selected.key().parent()?, self.symbols)
+            })
             .unwrap_or_default();
         let type_env = type_env.push_scope(
             self.function_env_builder()
@@ -1873,16 +1875,14 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
     ) -> Result<(FieldId<'ctx>, PolyType<'ctx>, InferredTypeApp<'ctx>), Error<'ctx>> {
         let (target_id, (field_idx, field)) = self
             .symbols
-            .base_iter(receiver_t.id())
-            .find_map(|(id, typ)| {
-                Some((id, typ.schema().as_aggregate()?.fields().by_name(member)?))
-            })
+            .base_iter_with_self::<AnyBaseType>(receiver_t.id())
+            .find_map(|(id, agg)| Some((id, agg.fields().by_name(member)?)))
             .ok_or_else(|| Error::UnresolvedMember(receiver_t.id(), member, span))?;
 
         self.check_visibility(receiver_t.id(), field.flags().visibility(), span);
 
         let this_t = receiver_t
-            .instantiate_as(target_id, self.symbols)
+            .instantiate_as::<AnyBaseType>(target_id, self.symbols)
             .expect("should instantiate as base type");
         let env = this_t.type_env(self.symbols);
         let typ = PolyType::from_type_with_env(field.type_(), &env)
@@ -1958,7 +1958,10 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             }
             Visibility::Protected
                 if self.context.is_none_or(|context| {
-                    !self.symbols.base_iter(context).any(|(id, _)| id == parent)
+                    !self
+                        .symbols
+                        .base_iter_with_self::<AnyBaseType>(context)
+                        .any(|(id, _)| id == parent)
                 }) =>
             {
                 self.reporter.report(Error::ProtectedMemberAccess(span));
@@ -2040,7 +2043,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             .ok_or(Error::InsufficientTypeInformation(span))?
             .into_owned();
         target_type
-            .constrain(&PolyType::nullary(predef::ISCRIPTABLE), self.symbols)
+            .constrain_base(&PolyType::nullary(predef::ISCRIPTABLE), self.symbols)
             .with_span(span)?;
 
         let (name_of, name_t) = self
@@ -2088,12 +2091,13 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             if let Some(upper) = param.upper() {
                 let constraint = PolyType::from_type_with_env(upper, &map)
                     .map_err(|var| Error::UnresolvedVar(var, span))?;
-                var.constrain(&constraint, self.symbols).with_span(span)?;
+                var.constrain_base(&constraint, self.symbols)
+                    .with_span(span)?;
             }
             if let Some(lower) = param.lower() {
                 PolyType::from_type_with_env(lower, &map)
                     .map_err(|var| Error::UnresolvedVar(var, span))?
-                    .constrain(var, self.symbols)
+                    .constrain_base(var, self.symbols)
                     .with_span(span)?;
             }
         }
@@ -2108,7 +2112,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         }
 
         for ((_, var), arg) in map.top().iter().zip(type_args) {
-            arg.constrain(var, self.symbols).with_span(span)?;
+            arg.constrain_base(var, self.symbols).with_span(span)?;
         }
 
         Ok(map)

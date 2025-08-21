@@ -14,7 +14,7 @@ use crate::cte::{self, Evaluator};
 use crate::diagnostic::MethodSignature;
 use crate::lower::{InferredTypeApp, TypeEnv};
 use crate::modules::{Export, ImportError, ModuleMap};
-use crate::symbols::{FreeFunctionIndexes, FunctionEntry, Visibility};
+use crate::symbols::{AnyBaseType, FreeFunctionIndexes, FunctionEntry, Visibility};
 use crate::utils::{Lazy, ScopedMap};
 use crate::{
     Aggregate, AggregateFlags, CompileErrorReporter, CtxVar, Diagnostic, Enum, Field, FieldFlags,
@@ -471,6 +471,13 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         }
 
         let (types, vars) = self.create_scope_env(types, &aggregate.type_params);
+
+        if class_flags.is_struct() {
+            if vars.iter().any(|v| v.variance() != Variance::Invariant) {
+                self.reporter
+                    .report(Diagnostic::InvalidStructVariance(name_span));
+            }
+        }
 
         let mut fields = FieldMap::default();
         let mut methods = MethodMap::default();
@@ -1031,7 +1038,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         for class in module.classes() {
             if self
                 .symbols
-                .base_iter(class.id())
+                .base_iter_with_self::<AnyBaseType>(class.id())
                 .skip(1)
                 .any(|(id, _)| id == class.id())
             {
@@ -1103,7 +1110,11 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         'ctx: 'a,
     {
         let mut classes = classes.into_iter().collect::<Vec<_>>();
-        classes.sort_unstable_by_key(|class| self.symbols.base_iter(class.id()).count());
+        classes.sort_unstable_by_key(|class| {
+            self.symbols
+                .base_iter_with_self::<AnyBaseType>(class.id())
+                .count()
+        });
 
         let mut virtuals =
             HashMap::<TypeId<'ctx>, HashSet<MethodId<'ctx>>, BuildIdentityHasher<usize>>::default();
@@ -1154,7 +1165,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
 
                         let entry_this_t = this_t
                             .clone()
-                            .instantiate_as(entry.key().parent(), &self.symbols)
+                            .instantiate_as::<AnyBaseType>(entry.key().parent(), &self.symbols)
                             .expect("should instantiate as parent type");
                         let env = entry_this_t.type_env(&self.symbols);
 
@@ -1199,7 +1210,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
 
                     let parent = this_t
                         .clone()
-                        .instantiate_as(id.parent(), &self.symbols)
+                        .instantiate_as::<AnyBaseType>(id.parent(), &self.symbols)
                         .expect("should instantiate as parent type");
                     let env = parent.type_env(&self.symbols);
                     let base_types = base_method

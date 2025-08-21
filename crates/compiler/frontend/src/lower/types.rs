@@ -7,6 +7,7 @@ use identity_hash::IdentityHashable;
 
 use crate::lower::error::{CoalesceError, InferResult, TypeError};
 use crate::lower::simplify::Simplifier;
+use crate::symbols::{AnyBaseType, AnySupertype, BaseMode};
 use crate::types::{CtxVar, RefType, Type, TypeApp, TypeId, Variance, predef};
 use crate::utils::ScopedMap;
 use crate::{Symbols, TypeKind};
@@ -60,19 +61,22 @@ impl<'ctx> InferredTypeApp<'ctx> {
         TypeApp::new(id, args)
     }
 
-    pub fn instantiate_as(
+    pub fn instantiate_as<Mode: BaseMode>(
         self,
         target: TypeId<'ctx>,
         symbols: &Symbols<'ctx>,
     ) -> Option<InferredTypeApp<'ctx>> {
         let mut cur = self;
         while cur.id() != target {
-            cur = cur.instantiate_base(symbols)?;
+            cur = cur.instantiate_base::<Mode>(symbols)?;
         }
         Some(cur)
     }
 
-    pub fn instantiate_base(self, symbols: &Symbols<'ctx>) -> Option<InferredTypeApp<'ctx>> {
+    pub fn instantiate_base<Mode: BaseMode>(
+        self,
+        symbols: &Symbols<'ctx>,
+    ) -> Option<InferredTypeApp<'ctx>> {
         let class = &symbols[self.id()];
         let args = self
             .args()
@@ -80,15 +84,18 @@ impl<'ctx> InferredTypeApp<'ctx> {
             .cloned()
             .chain(iter::repeat_with(PolyType::fresh));
         let env = class.vars().zip(args).collect();
-        TypeApp::from_type_with_env(class.schema().base_type()?, &env).ok()
+        TypeApp::from_type_with_env(Mode::base(class.schema().as_aggregate()?)?, &env).ok()
     }
 
-    pub fn base_type_env<'scope, 'sym>(
+    pub fn base_type_env<'scope, 'sym, Mode: BaseMode>(
         self,
         target: TypeId<'ctx>,
         symbols: &'sym Symbols<'ctx>,
     ) -> Option<ScopedMap<'scope, &'ctx str, PolyType<'ctx>>> {
-        Some(self.instantiate_as(target, symbols)?.type_env(symbols))
+        Some(
+            self.instantiate_as::<Mode>(target, symbols)?
+                .type_env(symbols),
+        )
     }
 
     fn glb(&self, other: &Self, symbols: &Symbols<'ctx>) -> InferResult<'ctx, Self> {
@@ -108,11 +115,11 @@ impl<'ctx> InferredTypeApp<'ctx> {
             .ok_or_else(|| TypeError::Incompatible(self.clone(), other.clone()))?;
         let lhs = self
             .clone()
-            .instantiate_as(id, symbols)
+            .instantiate_as::<AnyBaseType>(id, symbols)
             .expect("should always match the lub type");
         let rhs = other
             .clone()
-            .instantiate_as(id, symbols)
+            .instantiate_as::<AnyBaseType>(id, symbols)
             .expect("should always match the lub type");
         let args = symbols[id]
             .params()
@@ -167,13 +174,17 @@ impl<'ctx> InferredType<'ctx> {
         Ok(typ)
     }
 
-    fn constrain(&self, other: &Self, symbols: &Symbols<'ctx>) -> InferResult<'ctx, ()> {
+    fn constrain<Mode: BaseMode>(
+        &self,
+        other: &Self,
+        symbols: &Symbols<'ctx>,
+    ) -> InferResult<'ctx, ()> {
         match (self, other) {
             (Self::Nothing, _) => {}
             (Self::Data(lhs), Self::Data(rhs)) => {
                 let l0 = lhs
                     .clone()
-                    .instantiate_as(rhs.id(), symbols)
+                    .instantiate_as::<Mode>(rhs.id(), symbols)
                     .ok_or_else(|| TypeError::Mismatch(self.clone(), other.clone()))?;
                 let r0 = rhs;
                 for (v, (l, r)) in symbols[r0.id()]
@@ -182,8 +193,8 @@ impl<'ctx> InferredType<'ctx> {
                     .zip(l0.args().iter().zip(r0.args()))
                 {
                     let res = match v.variance() {
-                        Variance::Covariant => l.constrain(r, symbols),
-                        Variance::Contravariant => r.constrain(l, symbols),
+                        Variance::Covariant => l.constrain::<AnySupertype>(r, symbols),
+                        Variance::Contravariant => r.constrain::<AnySupertype>(l, symbols),
                         Variance::Invariant => l.constrain_invariant(r, symbols),
                     };
                     res.map_err(|err| TypeError::Nested(err.into(), self.clone(), other.clone()))?;
@@ -200,8 +211,8 @@ impl<'ctx> InferredType<'ctx> {
         other: &Self,
         symbols: &Symbols<'ctx>,
     ) -> InferResult<'ctx, ()> {
-        self.constrain(other, symbols)?;
-        other.constrain(self, symbols)
+        self.constrain::<AnyBaseType>(other, symbols)?;
+        other.constrain::<AnyBaseType>(self, symbols)
     }
 
     fn is_subtype_compatible(
@@ -218,8 +229,8 @@ impl<'ctx> InferredType<'ctx> {
             symbols: &Symbols<'ctx>,
         ) -> bool {
             match variance {
-                Variance::Covariant => symbols.is_subtype(lhs, rhs),
-                Variance::Contravariant => symbols.is_subtype(rhs, lhs),
+                Variance::Covariant => symbols.has_base_type(lhs, rhs),
+                Variance::Contravariant => symbols.has_base_type(rhs, lhs),
                 Variance::Invariant => lhs == rhs,
             }
         }
@@ -372,9 +383,18 @@ impl<'ctx> PolyType<'ctx> {
         Ok(typ)
     }
 
-    pub fn constrain(&self, other: &Self, symbols: &Symbols<'ctx>) -> InferResult<'ctx, ()> {
+    #[inline]
+    pub fn constrain_base(&self, other: &Self, symbols: &Symbols<'ctx>) -> InferResult<'ctx, ()> {
+        self.constrain::<AnyBaseType>(other, symbols)
+    }
+
+    pub fn constrain<Mode: BaseMode>(
+        &self,
+        other: &Self,
+        symbols: &Symbols<'ctx>,
+    ) -> InferResult<'ctx, ()> {
         match (self, other) {
-            (Self::Mono(l), Self::Mono(r)) => l.constrain(r, symbols),
+            (Self::Mono(l), Self::Mono(r)) => l.constrain::<Mode>(r, symbols),
             (Self::Mono(l), Self::Var(r)) => r.add_lower(l, symbols),
             (Self::Var(l), Self::Mono(r)) => l.add_upper(r, symbols),
             (Self::Var(l), Self::Var(r)) => l.unify(r, symbols),
@@ -403,11 +423,11 @@ impl<'ctx> PolyType<'ctx> {
     ) -> InferResult<'ctx, Option<Coercion>> {
         match (self.strip_ref(symbols), other.strip_ref(symbols)) {
             (Some((from, pointee)), None) => {
-                pointee.constrain(other, symbols)?;
+                pointee.constrain::<AnyBaseType>(other, symbols)?;
                 Ok(Some(Coercion::FromRef(from)))
             }
             (None, Some((to, pointee))) => {
-                self.constrain(&pointee, symbols)?;
+                self.constrain::<AnyBaseType>(&pointee, symbols)?;
                 Ok(Some(Coercion::IntoRef(to)))
             }
             _ if matches!(other.upper_bound(symbols), Some(app) if app.id() == predef::VARIANT)
@@ -416,7 +436,7 @@ impl<'ctx> PolyType<'ctx> {
                 Ok(Some(Coercion::IntoVariant))
             }
             _ => {
-                self.constrain(other, symbols)?;
+                self.constrain::<AnyBaseType>(other, symbols)?;
                 Ok(None)
             }
         }
@@ -532,7 +552,7 @@ impl<'ctx> Var<'ctx> {
             .as_ref()
             .map_or_else(|| Ok(ub.clone()), |u| u.glb(ub, symbols))?;
         repr.upper = Some(new);
-        repr.lower.constrain(ub, symbols)
+        repr.lower.constrain::<AnySupertype>(ub, symbols)
     }
 
     fn constrain_lower(
@@ -540,7 +560,11 @@ impl<'ctx> Var<'ctx> {
         ub: &InferredType<'ctx>,
         symbols: &Symbols<'ctx>,
     ) -> InferResult<'ctx, ()> {
-        self.repr().0.borrow().lower.constrain(ub, symbols)
+        self.repr()
+            .0
+            .borrow()
+            .lower
+            .constrain::<AnySupertype>(ub, symbols)
     }
 
     fn add_lower(&self, lb: &InferredType<'ctx>, symbols: &Symbols<'ctx>) -> InferResult<'ctx, ()> {
@@ -549,7 +573,7 @@ impl<'ctx> Var<'ctx> {
         let mut repr = repr.0.borrow_mut();
         repr.lower = repr.lower.lub(lb, symbols)?;
         if let Some(ub) = &repr.upper {
-            lb.constrain(ub, symbols)?;
+            lb.constrain::<AnySupertype>(ub, symbols)?;
         }
         Ok(())
     }
@@ -564,7 +588,7 @@ impl<'ctx> Var<'ctx> {
             .borrow()
             .upper
             .iter()
-            .try_for_each(|ub| lb.constrain(ub, symbols))
+            .try_for_each(|ub| lb.constrain::<AnySupertype>(ub, symbols))
     }
 
     fn unify(&self, other: &Var<'ctx>, symbols: &Symbols<'ctx>) -> InferResult<'ctx, ()> {

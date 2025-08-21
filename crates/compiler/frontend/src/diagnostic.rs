@@ -99,6 +99,8 @@ pub enum Diagnostic<'ctx> {
         "this `@addField` conflicts with an existing field, this operation will have no effect"
     )]
     AddFieldConflict(Span),
+    #[error("structures cannot have variance annotations")]
+    InvalidStructVariance(Span),
     #[error("{0}")]
     Other(Box<dyn std::error::Error + 'ctx>, DiagnosticLevel, Span),
 }
@@ -170,6 +172,7 @@ impl<'ctx> Diagnostic<'ctx> {
             | Self::DuplicateImpl(span)
             | Self::UnusedLocal(span)
             | Self::AddFieldConflict(span)
+            | Self::InvalidStructVariance(span)
             | Self::Other(_, _, span) => *span,
         }
     }
@@ -218,6 +221,7 @@ impl<'ctx> Diagnostic<'ctx> {
             Self::DuplicateImpl(_) => "DUP_IMPL",
             Self::UnusedLocal(_) => "UNUSED_LOCAL",
             Self::AddFieldConflict(_) => "ADD_FIELD_CONFLICT",
+            Self::InvalidStructVariance(_) => "INVALID_STRUCT_VARIANCE",
             Self::Other(_, _, _) => "OTHER",
         }
     }

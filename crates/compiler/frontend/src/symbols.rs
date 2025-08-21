@@ -2,7 +2,7 @@ use std::borrow::{Borrow, Cow};
 use std::hash::Hash;
 use std::ops::Not;
 use std::rc::Rc;
-use std::{fmt, ops};
+use std::{fmt, iter, ops};
 
 use bitfield_struct::bitfield;
 use derive_where::derive_where;
@@ -169,13 +169,13 @@ impl<'ctx> Symbols<'ctx> {
         if lhs == rhs {
             Some(lhs)
         } else {
-            let count_left = self.base_iter(lhs).count();
-            let count_right = self.base_iter(rhs).count();
+            let count_left = self.supertype_iter_with_self(lhs).count();
+            let count_right = self.supertype_iter_with_self(rhs).count();
 
-            self.base_iter(lhs)
+            self.supertype_iter_with_self(lhs)
                 .skip(count_left.saturating_sub(count_right))
                 .zip(
-                    self.base_iter(rhs)
+                    self.supertype_iter_with_self(rhs)
                         .skip(count_right.saturating_sub(count_left)),
                 )
                 .find(|((l, _), (r, _))| l == r)
@@ -193,16 +193,29 @@ impl<'ctx> Symbols<'ctx> {
         }
     }
 
+    pub(super) fn has_base_type(&self, lhs: TypeId<'ctx>, rhs: TypeId<'ctx>) -> bool {
+        self.base_iter_with_self::<AnyBaseType>(lhs)
+            .any(|(t, _)| t == rhs)
+    }
+
     pub(super) fn is_subtype(&self, lhs: TypeId<'ctx>, rhs: TypeId<'ctx>) -> bool {
-        self.base_iter(lhs).any(|(t, _)| t == rhs)
+        self.supertype_iter_with_self(lhs).any(|(t, _)| t == rhs)
+    }
+
+    pub fn base_iter_with_self<Mode: BaseMode>(
+        &self,
+        typ: TypeId<'ctx>,
+    ) -> impl Iterator<Item = (TypeId<'ctx>, &Aggregate<'ctx>)> + use<'_, 'ctx, Mode> {
+        let pair = |id| Some((id, self.get_type(id)?.schema.as_aggregate()?));
+        iter::successors(pair(typ), move |(_, agg)| pair(Mode::base(agg)?.id()))
     }
 
     #[inline]
-    pub fn base_iter(&self, ty: TypeId<'ctx>) -> BaseIter<'_, 'ctx> {
-        BaseIter {
-            symbols: self,
-            current: Some(ty),
-        }
+    pub fn supertype_iter_with_self(
+        &self,
+        typ: TypeId<'ctx>,
+    ) -> impl Iterator<Item = (TypeId<'ctx>, &Aggregate<'ctx>)> + use<'_, 'ctx> {
+        self.base_iter_with_self::<AnySupertype>(typ)
     }
 
     pub fn query_methods_by_name<'a>(
@@ -210,8 +223,7 @@ impl<'ctx> Symbols<'ctx> {
         typ: TypeId<'ctx>,
         name: &'a str,
     ) -> impl Iterator<Item = MethodEntry<'a, 'ctx>> + use<'a, 'ctx> {
-        self.base_iter(typ)
-            .filter_map(|(id, typ)| Some((id, typ.schema().as_aggregate()?)))
+        self.base_iter_with_self::<AnyBaseType>(typ)
             .flat_map(|(id, agg)| {
                 agg.methods().by_name(name).map(move |entry| {
                     MethodEntry::new(MethodId::new(id, *entry.key()), entry.name(), entry.func())
@@ -224,8 +236,7 @@ impl<'ctx> Symbols<'ctx> {
         &'a self,
         typ: TypeId<'ctx>,
     ) -> impl Iterator<Item = MethodEntry<'a, 'ctx>> + use<'a, 'ctx> {
-        self.base_iter(typ)
-            .filter_map(|(id, typ)| Some((id, typ.schema().as_aggregate()?)))
+        self.base_iter_with_self::<AnyBaseType>(typ)
             .flat_map(|(id, agg)| {
                 agg.methods().iter().map(move |entry| {
                     MethodEntry::new(MethodId::new(id, *entry.key()), entry.name(), entry.func())
@@ -278,23 +289,6 @@ impl<'ctx> ops::Index<FieldId<'ctx>> for Symbols<'ctx> {
     #[inline]
     fn index(&self, index: FieldId<'ctx>) -> &Self::Output {
         self.get_field(index).expect("field id not found").1
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct BaseIter<'sym, 'ctx> {
-    symbols: &'sym Symbols<'ctx>,
-    current: Option<TypeId<'ctx>>,
-}
-
-impl<'sym, 'ctx> Iterator for BaseIter<'sym, 'ctx> {
-    type Item = (TypeId<'ctx>, &'sym TypeDef<'ctx>);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let current = self.current.take()?;
-        let def = self.symbols.types.get(&current)?;
-        self.current = def.schema.base_type().map(TypeApp::id);
-        Some((current, def))
     }
 }
 
@@ -464,6 +458,11 @@ impl<'ctx> Aggregate<'ctx> {
     #[inline]
     pub fn base(&self) -> Option<&TypeApp<'ctx>> {
         self.base.as_ref()
+    }
+
+    #[inline]
+    pub fn supertype(&self) -> Option<&TypeApp<'ctx>> {
+        self.base.as_ref().filter(|_| !self.flags.is_struct())
     }
 
     #[inline]
@@ -1352,5 +1351,28 @@ impl Visibility {
             2 => Self::Protected,
             _ => unreachable!(),
         }
+    }
+}
+
+pub trait BaseMode {
+    fn base<'a, 'ctx>(agg: &'a Aggregate<'ctx>) -> Option<&'a TypeApp<'ctx>>;
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct AnyBaseType;
+
+impl BaseMode for AnyBaseType {
+    #[inline]
+    fn base<'a, 'ctx>(agg: &'a Aggregate<'ctx>) -> Option<&'a TypeApp<'ctx>> {
+        agg.base.as_ref()
+    }
+}
+
+pub struct AnySupertype;
+
+impl BaseMode for AnySupertype {
+    #[inline]
+    fn base<'a, 'ctx>(agg: &'a Aggregate<'ctx>) -> Option<&'a TypeApp<'ctx>> {
+        agg.supertype()
     }
 }

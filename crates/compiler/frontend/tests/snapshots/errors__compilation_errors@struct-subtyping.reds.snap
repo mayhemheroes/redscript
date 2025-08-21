@@ -1,0 +1,32 @@
+---
+source: crates/compiler/frontend/tests/errors.rs
+expression: "DisplayDiagnostics(reporter.into_reported(), &sources)"
+input_file: crates/compiler/frontend/tests/data/struct-subtyping.reds
+---
+[TYPE_ERR] At tests/data/struct-subtyping.reds:25:12
+  AcceptFn(subToSuper); // Error
+           ^^^^^^^^^^
+type mismatch: found `Super` when expected `Sub`
+  when comparing `Function1<Sub, Super>` and `Function1<Super, Sub>`
+
+[TYPE_ERR] At tests/data/struct-subtyping.reds:27:12
+  AcceptFn(subToSub); // Error
+           ^^^^^^^^
+type mismatch: found `Super` when expected `Sub`
+  when comparing `Function1<Sub, Sub>` and `Function1<Super, Sub>`
+
+[TYPE_ERR] At tests/data/struct-subtyping.reds:28:12
+  AcceptFn(superToSuper); // Error
+           ^^^^^^^^^^^^
+type mismatch: found `Super` when expected `Sub`
+  when comparing `Function1<Super, Super>` and `Function1<Super, Sub>`
+
+[TYPE_ERR] At tests/data/struct-subtyping.reds:33:13
+  AcceptSub(sup); // Error
+            ^^^
+type mismatch: found `Super` when expected `Sub`
+
+[TYPE_ERR] At tests/data/struct-subtyping.reds:38:16
+  AcceptSubRef(sup); // Error
+               ^^^
+type mismatch: found `Super` when expected `Sub`
