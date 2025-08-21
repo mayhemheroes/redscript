@@ -1320,6 +1320,7 @@ dependencies = [
 name = "redscript-compiler-backend"
 version = "1.0.0-preview.16"
 dependencies = [
+ "bitfield-struct",
  "bon",
  "hashbrown 0.15.5",
  "identity-hash",

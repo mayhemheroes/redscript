@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::{io, iter};
 
 use file_id::get_file_id;
-use redscript_compiler_api::TypeFlags;
+use redscript_compiler_api::TypeFlagRegistry;
 
 const BUNDLE_FILE: &str = "final.redscripts";
 const BACKUP_BUNDLE_FILE: &str = "final.redscripts.bk";
@@ -26,7 +26,7 @@ pub struct SccSettings {
     output_cache_file: Option<PathBuf>,
     additional_script_paths: Vec<PathBuf>,
     show_error_report: bool,
-    type_flags: TypeFlags,
+    type_flags: TypeFlagRegistry,
 }
 
 impl SccSettings {
@@ -37,7 +37,7 @@ impl SccSettings {
             output_cache_file: None,
             additional_script_paths: vec![],
             show_error_report: true,
-            type_flags: TypeFlags::default(),
+            type_flags: TypeFlagRegistry::default(),
         }
     }
 
@@ -108,7 +108,7 @@ impl SccSettings {
         self.show_error_report
     }
 
-    pub fn type_flags(&self) -> &TypeFlags {
+    pub fn type_flags(&self) -> &TypeFlagRegistry {
         &self.type_flags
     }
 
@@ -129,10 +129,14 @@ impl SccSettings {
     }
 
     pub fn register_never_ref_type(&mut self, name: impl Into<Cow<'static, str>>) {
-        self.type_flags.register_never_ref(name);
+        self.type_flags
+            .entry_or_default_mut(name)
+            .set_is_never_ref(true);
     }
 
     pub fn register_mixed_ref_type(&mut self, name: impl Into<Cow<'static, str>>) {
-        self.type_flags.register_mixed_ref(name);
+        self.type_flags
+            .entry_or_default_mut(name)
+            .set_is_mixed_ref(true);
     }
 }

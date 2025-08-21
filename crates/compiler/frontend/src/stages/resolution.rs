@@ -472,11 +472,9 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
 
         let (types, vars) = self.create_scope_env(types, &aggregate.type_params);
 
-        if class_flags.is_struct() {
-            if vars.iter().any(|v| v.variance() != Variance::Invariant) {
-                self.reporter
-                    .report(Diagnostic::InvalidStructVariance(name_span));
-            }
+        if class_flags.is_struct() && vars.iter().any(|v| v.variance() != Variance::Invariant) {
+            self.reporter
+                .report(Diagnostic::InvalidStructVariance(name_span));
         }
 
         let mut fields = FieldMap::default();

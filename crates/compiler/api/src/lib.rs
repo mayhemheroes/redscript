@@ -6,7 +6,7 @@ use bon::bon;
 pub use redscript_ast as ast;
 use redscript_ast::SourceMap;
 use redscript_compiler_backend::{AssembleError, PoolError, PoolMappings};
-pub use redscript_compiler_backend::{CompilationInputs, TypeFlags};
+pub use redscript_compiler_backend::{CompilationInputs, TypeFlagRegistry, TypeFlags};
 use redscript_compiler_frontend::UnknownSource;
 use redscript_compiler_frontend::pass::{DiagnosticPass, UnusedLocals};
 pub use redscript_compiler_frontend::{
@@ -38,7 +38,7 @@ impl<'ctx> Compilation<'ctx> {
         bundle: &'ctx [u8],
         sources: &'ctx SourceMap,
         type_interner: &'ctx TypeInterner,
-        #[builder(default = Cow::Owned(TypeFlags::default()))] type_flags: Cow<'_, TypeFlags>,
+        #[builder(default = Cow::Owned(Default::default()))] type_flags: Cow<'_, TypeFlagRegistry>,
         #[builder(default = DEFAULT_DIAGNOSTICS)] diagnostics: &[&'static dyn DiagnosticPass],
         #[builder(default = DiagnosticLevel::ErrorAllowedAtRuntime)]
         fatal_diagnostic_level: DiagnosticLevel,

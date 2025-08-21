@@ -315,6 +315,7 @@ impl<'ctx> Monomorphizer<'ctx> {
         if let TypeSchema::Aggregate(agg) = schema
             && !agg.flags().is_struct()
             && !agg.flags().is_never_ref()
+            && !agg.flags().is_mixed_ref()
         {
             return self.type_(&MonoType::new(predef::REF, [typ.clone()]), symbols, bundle);
         }
@@ -935,7 +936,10 @@ impl fmt::Display for MangledType<'_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.symbols[self.typ.id()].schema() {
             TypeSchema::Aggregate(agg) => {
-                if !agg.flags().is_struct() && !agg.flags().is_never_ref() {
+                if !agg.flags().is_struct()
+                    && !agg.flags().is_never_ref()
+                    && !agg.flags().is_mixed_ref()
+                {
                     write!(f, "ref:")?;
                 }
                 if let Some(name) = agg.named_implementation(self.typ) {

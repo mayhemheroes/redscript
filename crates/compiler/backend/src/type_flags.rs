@@ -1,53 +1,63 @@
 use std::borrow::Cow;
 
-use hashbrown::HashSet;
+use bitfield_struct::bitfield;
+use hashbrown::HashMap;
 
-#[derive(Debug, Clone)]
+#[bitfield(u8)]
 pub struct TypeFlags {
-    fully_defined: HashSet<Cow<'static, str>>,
-    never_ref: HashSet<Cow<'static, str>>,
-    mixed_ref: HashSet<Cow<'static, str>>,
+    pub is_fully_defined: bool,
+    pub is_never_ref: bool,
+    pub is_mixed_ref: bool,
+
+    #[bits(5)]
+    __: u8,
 }
 
 impl TypeFlags {
-    pub fn register_fully_defined(&mut self, name: impl Into<Cow<'static, str>>) {
-        self.fully_defined.insert(name.into());
-    }
-
-    pub fn register_never_ref(&mut self, name: impl Into<Cow<'static, str>>) {
-        self.never_ref.insert(name.into());
-    }
-
-    pub fn register_mixed_ref(&mut self, name: impl Into<Cow<'static, str>>) {
-        self.mixed_ref.insert(name.into());
-    }
-
-    #[inline]
-    pub fn is_fully_defined(&self, name: &str) -> bool {
-        self.fully_defined.contains(name)
-    }
-
-    #[inline]
-    pub fn is_never_ref(&self, name: &str) -> bool {
-        self.never_ref.contains(name)
-    }
-
-    #[inline]
-    pub fn is_mixed_ref(&self, name: &str) -> bool {
-        self.mixed_ref.contains(name)
+    pub fn is_mixed_or_never_ref(&self) -> bool {
+        self.is_mixed_ref() || self.is_never_ref()
     }
 }
 
-impl Default for TypeFlags {
+#[derive(Debug, Clone)]
+pub struct TypeFlagRegistry {
+    map: HashMap<Cow<'static, str>, TypeFlags>,
+}
+
+impl TypeFlagRegistry {
+    #[inline]
+    pub fn get(&self, name: &str) -> TypeFlags {
+        self.map.get(name).copied().unwrap_or_default()
+    }
+
+    pub fn entry_or_default_mut(&mut self, name: impl Into<Cow<'static, str>>) -> &mut TypeFlags {
+        self.map.entry(name.into()).or_default()
+    }
+}
+
+impl Default for TypeFlagRegistry {
     fn default() -> Self {
-        Self {
-            fully_defined: FULLY_DEFINED_TYPES
-                .iter()
-                .map(|s| Cow::Borrowed(*s))
-                .collect(),
-            never_ref: NEVER_REF_TYPES.iter().map(|s| Cow::Borrowed(*s)).collect(),
-            mixed_ref: MIXED_REF_TYPES.iter().map(|s| Cow::Borrowed(*s)).collect(),
+        let mut map = HashMap::<Cow<'static, str>, TypeFlags>::new();
+
+        for &name in FULLY_DEFINED_TYPES {
+            map.entry(Cow::Borrowed(name))
+                .or_default()
+                .set_is_fully_defined(true);
         }
+
+        for &name in NEVER_REF_TYPES {
+            map.entry(Cow::Borrowed(name))
+                .or_default()
+                .set_is_never_ref(true);
+        }
+
+        for &name in MIXED_REF_TYPES {
+            map.entry(Cow::Borrowed(name))
+                .or_default()
+                .set_is_mixed_ref(true);
+        }
+
+        Self { map }
     }
 }
 

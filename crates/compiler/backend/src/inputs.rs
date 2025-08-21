@@ -21,7 +21,7 @@ use thiserror::Error;
 
 use crate::IndexMap;
 use crate::monomorph::Monomorphizer;
-use crate::type_flags::TypeFlags;
+use crate::type_flags::TypeFlagRegistry;
 
 #[derive(Debug)]
 pub struct CompilationInputs<'ctx> {
@@ -33,7 +33,7 @@ impl<'ctx> CompilationInputs<'ctx> {
     pub fn load(
         bundle: &ScriptBundle<'ctx>,
         interner: &'ctx TypeInterner,
-        flags: &TypeFlags,
+        flags: &TypeFlagRegistry,
     ) -> Result<Self, Error> {
         Self::load_with::<true>(bundle, interner, flags)
     }
@@ -41,7 +41,7 @@ impl<'ctx> CompilationInputs<'ctx> {
     pub fn load_without_mapping(
         bundle: &ScriptBundle<'ctx>,
         interner: &'ctx TypeInterner,
-        flags: &TypeFlags,
+        flags: &TypeFlagRegistry,
     ) -> Result<Symbols<'ctx>, Error> {
         Ok(Self::load_with::<false>(bundle, interner, flags)?.symbols)
     }
@@ -49,7 +49,7 @@ impl<'ctx> CompilationInputs<'ctx> {
     fn load_with<const LOAD_MAPPING: bool>(
         bundle: &ScriptBundle<'ctx>,
         interner: &'ctx TypeInterner,
-        type_flags: &TypeFlags,
+        type_flags: &TypeFlagRegistry,
     ) -> Result<Self, Error> {
         let mut inputs = CompilationInputs::default();
         let mut virtual_map: HashMap<
@@ -185,15 +185,16 @@ impl<'ctx> CompilationInputs<'ctx> {
                         methods.add(name, method);
                     }
 
+                    let type_flags = type_flags.get(class_name.as_ref());
                     let flags = AggregateFlags::new()
                         .with_is_abstract(cls.flags().is_abstract())
                         .with_is_native(cls.flags().is_native())
                         .with_is_final(cls.flags().is_final())
                         .with_is_import_only(cls.flags().is_import_only())
                         .with_is_struct(cls.flags().is_struct())
-                        .with_is_never_ref(type_flags.is_never_ref(class_name.as_ref()))
-                        .with_is_mixed_ref(type_flags.is_mixed_ref(class_name.as_ref()))
-                        .with_is_fully_defined(type_flags.is_fully_defined(class_name.as_ref()));
+                        .with_is_never_ref(type_flags.is_never_ref())
+                        .with_is_mixed_ref(type_flags.is_mixed_ref())
+                        .with_is_fully_defined(type_flags.is_fully_defined());
                     let agg =
                         Aggregate::new(flags, base, fields, methods, HashMap::default(), None);
                     let def = TypeDef::new([], TypeSchema::Aggregate(agg.into()), []);
@@ -373,15 +374,15 @@ fn load_type<'ctx, K: TypeKind>(
     typ: &PoolType,
     bundle: &ScriptBundle<'ctx>,
     interner: &'ctx TypeInterner,
-    flags: &TypeFlags,
+    flags: &TypeFlagRegistry,
 ) -> Result<LoadedType<'ctx, K>, Error> {
     let (id, arg) = match typ.kind() {
         PoolTypeKind::Class | PoolTypeKind::Primitive => {
             let name = bundle
                 .get_item(typ.name())
                 .ok_or_else(|| Error::MissingPoolItem("type name", typ.name().into()))?;
-            let unsupported =
-                typ.kind() == PoolTypeKind::Class && flags.is_never_ref(name.as_ref());
+            let unsupported = typ.kind() == PoolTypeKind::Class
+                && flags.get(name.as_ref()).is_mixed_or_never_ref();
             let typ = K::Type::from((interner.intern(name.as_ref()), Rc::new([])));
             return Ok(LoadedType { typ, unsupported });
         }
@@ -414,7 +415,7 @@ fn load_function_type<'ctx>(
     func: &PoolFunction<'ctx>,
     bundle: &ScriptBundle<'ctx>,
     interner: &'ctx TypeInterner,
-    flags: &TypeFlags,
+    flags: &TypeFlagRegistry,
 ) -> Result<FunctionType<'ctx>, Error> {
     let typ = func
         .return_type()
@@ -444,7 +445,7 @@ fn load_param<'ctx>(
     param: &PoolParameter,
     bundle: &ScriptBundle<'ctx>,
     interner: &'ctx TypeInterner,
-    flags: &TypeFlags,
+    flags: &TypeFlagRegistry,
 ) -> Result<Param<'ctx>, Error> {
     let name = bundle
         .get_item(param.name())
