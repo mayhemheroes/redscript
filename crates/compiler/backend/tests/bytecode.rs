@@ -3,8 +3,10 @@ use std::fmt;
 
 use indexmap::IndexSet;
 use redscript_compiler_api::ast::SourceMap;
-use redscript_compiler_api::{CompileErrorReporter, Diagnostics, SourceMapExt, TypeInterner};
-use redscript_compiler_backend::{CompilationInputs, TypeFlags};
+use redscript_compiler_api::{
+    CompileErrorReporter, Diagnostics, SourceMapExt, TypeFlagRegistry, TypeInterner,
+};
+use redscript_compiler_backend::CompilationInputs;
 use redscript_compiler_frontend::infer_from_sources;
 use redscript_io::{
     CNameIndex, Class, ClassFlags, ClassIndex, EnumIndex, EnumValueIndex, FieldIndex,
@@ -25,7 +27,7 @@ fn bytecode() {
         bundle.define(Class::new(name, Visibility::Public, ClassFlags::default()));
 
         let (symbols, mappings) =
-            CompilationInputs::load(&bundle, &interner, &TypeFlags::default())
+            CompilationInputs::load(&bundle, &interner, &TypeFlagRegistry::default())
                 .unwrap()
                 .into_inner();
         let mut reporter = CompileErrorReporter::default();
