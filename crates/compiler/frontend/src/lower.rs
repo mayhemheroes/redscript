@@ -628,81 +628,9 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 let const_t = PolyType::nullary(const_.type_id());
                 (ir::Expr::Const(const_, *span), const_t)
             }
-            ast::Expr::ArrayLit(elems) => {
-                let elem_hint = hint.and_then(|typ| {
-                    let typ = typ.upper_bound(self.symbols)?;
-                    (typ.id() == predef::ARRAY)
-                        .then_some(typ.args().first().cloned())
-                        .flatten()
-                });
-
-                let (elems, elem_typ) = elems.iter().try_fold(
-                    (vec![], PolyType::fresh()),
-                    |(mut acc, elem_typ), elem| {
-                        let (mut elem, typ) = self.lower_expr(elem, env)?;
-                        let typ = if let Some(hint) = &elem_hint {
-                            let span = elem.span();
-                            self.coerce(&mut elem, typ.clone(), hint.clone(), env, span)?;
-                            hint.clone()
-                        } else {
-                            typ
-                        };
-                        acc.push(elem);
-                        Ok((acc, elem_typ.lub(&typ, self.symbols).with_span(*span)?))
-                    },
-                )?;
-
-                let array_t = Type::app(predef::ARRAY, [elem_typ.clone()]).into_poly();
-                let local = self.locals.add_var(None, array_t.clone(), *span).id;
-
-                self.push_prefix(ir::Stmt::InitArray {
-                    local,
-                    elements: elems.into(),
-                    element_type: elem_typ.into(),
-                    span: *span,
-                });
-
-                (ir::Expr::Local(local, *span), array_t)
-            }
+            ast::Expr::ArrayLit(elems) => self.lower_array_lit(elems, hint, env, *span)?,
             ast::Expr::InterpolatedString(elems) => {
-                let str = elems
-                    .iter()
-                    .try_fold(None, |acc, elem| {
-                        let elem = match elem {
-                            ast::StrPart::Expr(expr @ (_, span)) => {
-                                let args = [self.lower_expr(expr, env)?];
-                                let (call, _) = self
-                                    .free_function_call_builder()
-                                    .name(ir::Intrinsic::ToString)
-                                    .args(args)
-                                    .env(env)
-                                    .span(*span)
-                                    .build()?;
-                                ir::Expr::call(call, *span)
-                            }
-                            ast::StrPart::Str(str) => {
-                                ir::Expr::Const(ir::Const::Str(str.clone()), *span)
-                            }
-                        };
-                        let res = match acc {
-                            Some(lhs) => {
-                                let (call, _) = self
-                                    .free_function_call_builder()
-                                    .name(ast::BinOp::Add)
-                                    .args(
-                                        [lhs, elem].map(|e| (e, PolyType::nullary(predef::STRING))),
-                                    )
-                                    .env(env)
-                                    .span(*span)
-                                    .build()?;
-                                ir::Expr::call(call, *span)
-                            }
-                            None => elem,
-                        };
-                        Ok(Some(res))
-                    })?
-                    .unwrap_or_else(|| ir::Expr::Const(ir::Const::Str("".into()), *span));
-                (str, PolyType::nullary(predef::STRING))
+                self.lower_interpolated_string(elems, env, *span)?
             }
             ast::Expr::Assign { lhs, rhs } => {
                 let (lhs, lhs_t) = self.lower_expr(lhs, env)?;
@@ -760,152 +688,9 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 (ir::Expr::call(call, *span), typ)
             }
             ast::Expr::Member { expr, member } => self.lower_member(expr, member, env, *span)?,
-            ast::Expr::Index { expr, index } => {
-                let expr @ (_, expr_span) = &**expr;
-                let elem_t = PolyType::fresh();
-
-                let (mut expr, expr_t) = self.lower_expr(expr, env)?;
-                let id = if let Some(typ) = expr_t
-                    .upper_bound(self.symbols)
-                    .filter(|typ| typ.id().is_static_array())
-                {
-                    typ.id()
-                } else {
-                    predef::ARRAY
-                };
-
-                let array_t = Type::app(id, [elem_t.clone()]).into_poly();
-                self.coerce(&mut expr, expr_t, array_t.clone(), env, *expr_span)?;
-
-                let index @ (_, index_span) = &**index;
-                let (index, index_t) = self.lower_expr(index, env)?;
-                index_t
-                    .constrain_base(&PolyType::nullary(predef::INT32), self.symbols)
-                    .with_span(*index_span)?;
-
-                if expr.is_prvalue(self.symbols) {
-                    self.reporter.report(Error::InvalidTemporary(*expr_span));
-                }
-
-                (
-                    ir::Expr::Index {
-                        array_type: array_t.into(),
-                        array: expr.into(),
-                        index: index.into(),
-                        span: *span,
-                    },
-                    elem_t,
-                )
-            }
-            ast::Expr::DynCast { expr, typ } => {
-                let (expr, expr_t) = self.lower_expr(expr, env)?;
-                let (typ, type_span) = &**typ;
-                let Type::Data(typ) = env.types().resolve(typ, self.symbols, *type_span)? else {
-                    return Err(Error::InvalidDynCastType(*type_span));
-                };
-                let target = InferredTypeApp::from_type(&typ);
-                let expected = target.clone().into_type().into_poly();
-                let inferred = if let Some((RefType::Weak, inner)) = expr_t.strip_ref(self.symbols)
-                {
-                    expected
-                        .constrain_base(&inner, self.symbols)
-                        .map(|_| Type::app(predef::WREF, [expected.clone()]).into_poly())
-                        .map_err(|err| (err, inner))
-                } else {
-                    expected
-                        .constrain_base(&expr_t, self.symbols)
-                        .map(|_| expected.clone())
-                        .map_err(|err| (err, expr_t.clone()))
-                };
-
-                match inferred {
-                    Err((err, inner)) => {
-                        if inner.constrain_base(&expected, self.symbols).is_ok() {
-                            return Err(Error::RedundantDynCast(*span));
-                        }
-                        return Err(Error::ImpossibleDynCast(err.into(), *span));
-                    }
-                    Ok(inferred) => {
-                        let ir = ir::Expr::DynCast {
-                            expr: expr.into(),
-                            expr_type: expr_t.into(),
-                            target_type: target.into(),
-                            span: *span,
-                        };
-                        (ir, inferred)
-                    }
-                }
-            }
-            ast::Expr::New { typ, args } => {
-                let (typ, type_span) = &**typ;
-                let Type::Data(typ) = env.types().resolve(typ, self.symbols, *type_span)? else {
-                    return Err(Error::InvalidNewType(*type_span));
-                };
-                let def = &self.symbols[typ.id()];
-
-                let type_args = if typ.args().is_empty() {
-                    def.params()
-                        .iter()
-                        .map(|_| PolyType::fresh())
-                        .collect::<Rc<_>>()
-                } else if typ.args().len() != def.params().len() {
-                    let expected = def.params().len();
-                    return Err(Error::InvalidTypeArgCount(expected, *type_span));
-                } else {
-                    typ.args().iter().map(PolyType::from_type).collect()
-                };
-                let typ = TypeApp::new(typ.id(), type_args);
-                let inferred = typ.clone().into_type().into_poly();
-
-                let ir = match def.schema() {
-                    TypeSchema::Aggregate(aggregate) if aggregate.flags().is_struct() => {
-                        let field_count = aggregate.fields().len();
-
-                        if aggregate.flags().is_native() && !aggregate.flags().is_fully_defined() {
-                            if !args.is_empty() {
-                                self.reporter.report(
-                                    Error::NonFullyDefinedNativeStructConstruction(typ.id(), *span),
-                                );
-                            }
-                        } else if args.len() != field_count {
-                            self.reporter
-                                .report(Error::InvalidArgCount(field_count..=field_count, *span));
-                        }
-
-                        let type_env = typ.type_env(self.symbols);
-                        let args = args
-                            .iter()
-                            .zip(aggregate.fields().iter())
-                            .map(|(arg @ (_, arg_span), field)| {
-                                let expected =
-                                    PolyType::from_type_with_env(field.field().type_(), &type_env)
-                                        .map_err(|var| Error::UnresolvedVar(var, *arg_span))?;
-                                let (mut expr, typ) =
-                                    self.lower_expr_with(arg, Some(&expected), env)?;
-                                self.coerce(&mut expr, typ, expected, env, *arg_span)?;
-                                Ok(expr)
-                            })
-                            .collect::<Result<_, _>>()?;
-                        ir::Expr::NewStruct {
-                            struct_type: typ.into(),
-                            args,
-                            span: *span,
-                        }
-                    }
-                    TypeSchema::Aggregate(agg) if agg.flags().is_abstract() => {
-                        return Err(Error::InstantiatingAbstract(typ.id(), *type_span));
-                    }
-                    TypeSchema::Aggregate(_) if args.is_empty() => ir::Expr::NewClass {
-                        class_type: typ.into(),
-                        span: *span,
-                    },
-                    TypeSchema::Aggregate(_) => {
-                        return Err(Error::ClassConstructorHasArguments(*span));
-                    }
-                    _ => return Err(Error::InvalidNewType(*type_span)),
-                };
-                (ir, inferred)
-            }
+            ast::Expr::Index { expr, index } => self.lower_index(expr, index, env, *span)?,
+            ast::Expr::DynCast { expr, typ } => self.lower_dyn_cast(expr, typ, env, *span)?,
+            ast::Expr::New { typ, args } => self.lower_new(typ, args, env, *span)?,
             ast::Expr::Conditional { cond, then, else_ } => {
                 let cond @ (_, cond_span) = &**cond;
                 let (cond, cond_t) = self.lower_expr(cond, env)?;
@@ -1102,6 +887,255 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         Ok(res)
     }
 
+    fn lower_array_lit(
+        &mut self,
+        elems: &[Spanned<ast::SourceExpr<'ctx>>],
+        hint: Option<&PolyType<'ctx>>,
+        env: &Env<'_, 'ctx>,
+        span: Span,
+    ) -> LowerResult<'ctx, (ir::Expr<'ctx>, PolyType<'ctx>)> {
+        let elem_hint = hint.and_then(|typ| {
+            let typ = typ.upper_bound(self.symbols)?;
+            (typ.id() == predef::ARRAY)
+                .then_some(typ.args().first().cloned())
+                .flatten()
+        });
+
+        let (elems, elem_typ) =
+            elems
+                .iter()
+                .try_fold((vec![], PolyType::fresh()), |(mut acc, elem_typ), elem| {
+                    let (mut elem, typ) = self.lower_expr(elem, env)?;
+                    let typ = if let Some(hint) = &elem_hint {
+                        let span = elem.span();
+                        self.coerce(&mut elem, typ.clone(), hint.clone(), env, span)?;
+                        hint.clone()
+                    } else {
+                        typ
+                    };
+                    acc.push(elem);
+                    Ok((acc, elem_typ.lub(&typ, self.symbols).with_span(span)?))
+                })?;
+
+        let array_t = Type::app(predef::ARRAY, [elem_typ.clone()]).into_poly();
+        let local = self.locals.add_var(None, array_t.clone(), span).id;
+
+        self.push_prefix(ir::Stmt::InitArray {
+            local,
+            elements: elems.into(),
+            element_type: elem_typ.into(),
+            span,
+        });
+
+        Ok((ir::Expr::Local(local, span), array_t))
+    }
+
+    fn lower_interpolated_string(
+        &mut self,
+        elems: &[ast::SourceStrPart<'ctx>],
+        env: &Env<'_, 'ctx>,
+        span: Span,
+    ) -> LowerResult<'ctx, (ir::Expr<'ctx>, PolyType<'ctx>)> {
+        let str = elems
+            .iter()
+            .try_fold(None, |acc, elem| {
+                let elem = match elem {
+                    ast::StrPart::Expr(expr @ (_, span)) => {
+                        let args = [self.lower_expr(expr, env)?];
+                        let (call, _) = self
+                            .free_function_call_builder()
+                            .name(ir::Intrinsic::ToString)
+                            .args(args)
+                            .env(env)
+                            .span(*span)
+                            .build()?;
+                        ir::Expr::call(call, *span)
+                    }
+                    ast::StrPart::Str(str) => ir::Expr::Const(ir::Const::Str(str.clone()), span),
+                };
+                let res = match acc {
+                    Some(lhs) => {
+                        let (call, _) = self
+                            .free_function_call_builder()
+                            .name(ast::BinOp::Add)
+                            .args([lhs, elem].map(|e| (e, PolyType::nullary(predef::STRING))))
+                            .env(env)
+                            .span(span)
+                            .build()?;
+                        ir::Expr::call(call, span)
+                    }
+                    None => elem,
+                };
+                Ok(Some(res))
+            })?
+            .unwrap_or_else(|| ir::Expr::Const(ir::Const::Str("".into()), span));
+        Ok((str, PolyType::nullary(predef::STRING)))
+    }
+
+    fn lower_new(
+        &mut self,
+        (typ, type_span): &Spanned<ast::SourceType<'ctx>>,
+        args: &[Spanned<ast::SourceExpr<'ctx>>],
+        env: &Env<'_, 'ctx>,
+        span: Span,
+    ) -> LowerResult<'ctx, (ir::Expr<'ctx>, PolyType<'ctx>)> {
+        let Type::Data(typ) = env.types().resolve(typ, self.symbols, *type_span)? else {
+            return Err(Error::InvalidNewType(*type_span));
+        };
+        let def = &self.symbols[typ.id()];
+
+        let type_args = if typ.args().is_empty() {
+            def.params()
+                .iter()
+                .map(|_| PolyType::fresh())
+                .collect::<Rc<_>>()
+        } else if typ.args().len() != def.params().len() {
+            let expected = def.params().len();
+            return Err(Error::InvalidTypeArgCount(expected, *type_span));
+        } else {
+            typ.args().iter().map(PolyType::from_type).collect()
+        };
+        let typ = TypeApp::new(typ.id(), type_args);
+        let inferred = typ.clone().into_type().into_poly();
+
+        let ir = match def.schema() {
+            TypeSchema::Aggregate(aggregate) if aggregate.flags().is_struct() => {
+                let field_count = aggregate.fields().len();
+
+                if aggregate.flags().is_native() && !aggregate.flags().is_fully_defined() {
+                    if !args.is_empty() {
+                        self.reporter
+                            .report(Error::NonFullyDefinedNativeStructConstruction(
+                                typ.id(),
+                                span,
+                            ));
+                    }
+                } else if args.len() != field_count {
+                    self.reporter
+                        .report(Error::InvalidArgCount(field_count..=field_count, span));
+                }
+
+                let type_env = typ.type_env(self.symbols);
+                let args = args
+                    .iter()
+                    .zip(aggregate.fields().iter())
+                    .map(|(arg @ (_, arg_span), field)| {
+                        let expected =
+                            PolyType::from_type_with_env(field.field().type_(), &type_env)
+                                .map_err(|var| Error::UnresolvedVar(var, *arg_span))?;
+                        let (mut expr, typ) = self.lower_expr_with(arg, Some(&expected), env)?;
+                        self.coerce(&mut expr, typ, expected, env, *arg_span)?;
+                        Ok(expr)
+                    })
+                    .collect::<Result<_, _>>()?;
+                ir::Expr::NewStruct {
+                    struct_type: typ.into(),
+                    args,
+                    span,
+                }
+            }
+            TypeSchema::Aggregate(agg) if agg.flags().is_abstract() => {
+                return Err(Error::InstantiatingAbstract(typ.id(), *type_span));
+            }
+            TypeSchema::Aggregate(_) if args.is_empty() => ir::Expr::NewClass {
+                class_type: typ.into(),
+                span,
+            },
+            TypeSchema::Aggregate(_) => {
+                return Err(Error::ClassConstructorHasArguments(span));
+            }
+            _ => return Err(Error::InvalidNewType(*type_span)),
+        };
+        Ok((ir, inferred))
+    }
+
+    fn lower_index(
+        &mut self,
+        expr @ (_, expr_span): &Spanned<ast::SourceExpr<'ctx>>,
+        index @ (_, index_span): &Spanned<ast::SourceExpr<'ctx>>,
+        env: &Env<'_, 'ctx>,
+        span: Span,
+    ) -> LowerResult<'ctx, (ir::Expr<'ctx>, PolyType<'ctx>)> {
+        let elem_t = PolyType::fresh();
+
+        let (mut expr, expr_t) = self.lower_expr(expr, env)?;
+        let id = if let Some(typ) = expr_t
+            .upper_bound(self.symbols)
+            .filter(|typ| typ.id().is_static_array())
+        {
+            typ.id()
+        } else {
+            predef::ARRAY
+        };
+
+        let array_t = Type::app(id, [elem_t.clone()]).into_poly();
+        self.coerce(&mut expr, expr_t, array_t.clone(), env, *expr_span)?;
+
+        let (index, index_t) = self.lower_expr(index, env)?;
+        index_t
+            .constrain_base(&PolyType::nullary(predef::INT32), self.symbols)
+            .with_span(*index_span)?;
+
+        if expr.is_prvalue(self.symbols) {
+            self.reporter.report(Error::InvalidTemporary(*expr_span));
+        }
+
+        Ok((
+            ir::Expr::Index {
+                array_type: array_t.into(),
+                array: expr.into(),
+                index: index.into(),
+                span,
+            },
+            elem_t,
+        ))
+    }
+
+    fn lower_dyn_cast(
+        &mut self,
+        expr: &Spanned<ast::SourceExpr<'ctx>>,
+        (typ, type_span): &Spanned<ast::SourceType<'ctx>>,
+        env: &Env<'_, 'ctx>,
+        span: Span,
+    ) -> LowerResult<'ctx, (ir::Expr<'ctx>, PolyType<'ctx>)> {
+        let (expr, expr_t) = self.lower_expr(expr, env)?;
+        let Type::Data(typ) = env.types().resolve(typ, self.symbols, *type_span)? else {
+            return Err(Error::InvalidDynCastType(*type_span));
+        };
+        let target = InferredTypeApp::from_type(&typ);
+        let expected = target.clone().into_type().into_poly();
+        let inferred = if let Some((RefType::Weak, inner)) = expr_t.strip_ref(self.symbols) {
+            expected
+                .constrain_base(&inner, self.symbols)
+                .map(|_| Type::app(predef::WREF, [expected.clone()]).into_poly())
+                .map_err(|err| (err, inner))
+        } else {
+            expected
+                .constrain_base(&expr_t, self.symbols)
+                .map(|_| expected.clone())
+                .map_err(|err| (err, expr_t.clone()))
+        };
+
+        match inferred {
+            Err((err, inner)) => {
+                if inner.constrain_base(&expected, self.symbols).is_ok() {
+                    Err(Error::RedundantDynCast(span))
+                } else {
+                    Err(Error::ImpossibleDynCast(err.into(), span))
+                }
+            }
+            Ok(inferred) => {
+                let ir = ir::Expr::DynCast {
+                    expr: expr.into(),
+                    expr_type: expr_t.into(),
+                    target_type: target.into(),
+                    span,
+                };
+                Ok((ir, inferred))
+            }
+        }
+    }
+
     fn lower_call(
         &mut self,
         expr @ (_, expr_span): &Spanned<ast::SourceExpr<'ctx>>,
@@ -1145,7 +1179,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 .args(args)
                 .type_args(type_args)
                 .candidates(candidates)
-                .maybe_return_hint(hint)
+                .maybe_type_hint(hint)
                 .env(env)
                 .span(*expr_span)
                 .resolve()?
@@ -1153,125 +1187,25 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             return Ok(res);
         };
 
-        let closure = 'instance: {
-            let (ast::Expr::Member { expr, member }, _) = expr else {
-                break 'instance None;
-            };
-
-            if let (ast::Expr::Ident(ident), _) = **expr
-                && let Some(&TypeRef::Name(typ)) = env.types().get(ident)
-                && let mut candidates = self
-                    .symbols
-                    .base_iter_with_self::<AnyBaseType>(typ)
-                    .map(|(id, def)| {
-                        def.methods()
-                            .by_name(member)
-                            .map(move |entry| entry.map_key(|i| MethodId::new(id, i)))
-                            .peekable()
-                    })
-                    .find_map(|mut matches| matches.peek().is_some().then_some(matches))
-                    .into_iter()
-                    .flatten()
-                    .filter(|entry| entry.func().flags().is_static())
-                    .peekable()
-                && candidates.peek().is_some()
-            {
-                let parent_args = self.symbols[typ]
-                    .params()
-                    .iter()
-                    .map(|_| PolyType::fresh())
-                    .collect::<Rc<_>>();
-                let typ = TypeApp::new(typ, parent_args);
-
-                let res = self
-                    .overload_resolver()
-                    .name(member)
-                    .args(args)
-                    .type_args(type_args)
-                    .candidates(candidates)
-                    .receiver(typ.clone())
-                    .maybe_return_hint(hint)
-                    .env(env)
-                    .span(*expr_span)
-                    .resolve()?
-                    .into_static_call(typ.id(), typ.args().iter().cloned());
-                return Ok(res);
-            }
-
-            let (mut ir, typ) = self.lower_expr(expr, env)?;
-            let (ref_type, unref_t) = typ.strip_ref(self.symbols).unzip();
-            let upper_bound = unref_t
-                .unwrap_or(typ.clone())
-                .force_upper_bound(self.symbols)
-                .with_span(*expr_span)?
-                .ok_or(Error::InsufficientTypeInformation(*expr_span))?
-                .into_owned();
-
-            let (upper_bound, mode) = if matches!(**expr, (ast::Expr::Super, _)) {
-                (
-                    upper_bound
-                        .instantiate_base::<AnyBaseType>(self.symbols)
-                        .ok_or(Error::NonExistentSuperType(*expr_span))?,
-                    ir::CallMode::ForceStatic,
-                )
-            } else {
-                (upper_bound, ir::CallMode::Normal)
-            };
-
-            let mut candidates = self
-                .symbols
-                .query_methods_by_name(upper_bound.id(), member)
-                .filter(|entry| !entry.func().flags().is_static())
-                .peekable();
-            if candidates.peek().is_none() {
-                let (field_expr, field_t, _) = self
-                    .field_access_builder()
-                    .receiver(ir)
-                    .receiver_type(upper_bound)
-                    .maybe_ref_type(ref_type)
-                    .field(member)
-                    .span(*expr_span)
-                    .build()?;
-                break 'instance Some((field_expr, field_t));
-            }
-
-            let resolved = self
-                .overload_resolver()
-                .name(member)
-                .args(args)
+        let (closure, typ) = if let (ast::Expr::Member { expr, member }, _) = expr {
+            match self
+                .member_call_builder()
+                .receiver(expr)
+                .member(member)
                 .type_args(type_args)
-                .candidates(candidates)
-                .receiver(upper_bound.clone())
-                .maybe_return_hint(hint)
+                .args(args)
+                .maybe_type_hint(hint)
                 .env(env)
-                .span(*expr_span)
-                .resolve()?;
-
-            let id = resolved.resulution.function;
-            let method = &self.symbols[id];
-            self.check_visibility(id.parent(), method.flags().visibility(), call_span);
-
-            if let Some(aliased) = method.aliased_method()
-                && method.flags().is_static_forwarder()
+                .call_span(call_span)
+                .build()?
             {
-                let expected = &self.symbols[aliased]
-                    .type_()
-                    .param_types()
-                    .next()
-                    .expect("static alias must at least accept a receiver");
-                let span = ir.span();
-                self.coerce(&mut ir, typ, PolyType::from_type(expected), env, span)?;
-
-                return Ok(resolved
-                    .with_method(aliased)
-                    .map_args(|args| iter::once(ir).chain(args).collect())
-                    .into_static_call(upper_bound.id(), upper_bound.args().iter().cloned()));
+                (MemberCall::MethodCall(call), typ) => return Ok((call, typ)),
+                (MemberCall::FieldAccess(field), typ) => (field, typ),
             }
-
-            return Ok(resolved.into_instance_call(ir, upper_bound, ref_type, mode));
+        } else {
+            self.lower_expr(expr, env)?
         };
 
-        let (closure, typ) = closure.map_or_else(|| self.lower_expr(expr, env), Ok)?;
         let id = TypeId::fn_with_arity(args.len()).ok_or(Error::UnsupportedArity(call_span))?;
         let mut checked_args = Vec::with_capacity(args.len());
         let mut arg_types = Vec::with_capacity(args.len());
@@ -1327,7 +1261,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             .name("Cast")
             .args(args)
             .candidates(candidates)
-            .maybe_return_hint(hint)
+            .maybe_type_hint(hint)
             .env(env)
             .span(expr_span)
             .resolve()?
@@ -1625,6 +1559,132 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         Ok(())
     }
 
+    #[builder(finish_fn = build)]
+    fn member_call_builder(
+        &mut self,
+        receiver @ (_, expr_span): &Spanned<ast::SourceExpr<'ctx>>,
+        member: &'ctx str,
+        type_args: &[Spanned<ast::SourceType<'ctx>>],
+        args: &[Spanned<ast::SourceExpr<'ctx>>],
+        type_hint: Option<&PolyType<'ctx>>,
+        env: &Env<'_, 'ctx>,
+        call_span: Span,
+    ) -> LowerResult<'ctx, (MemberCall<'ctx>, PolyType<'ctx>)> {
+        if let (ast::Expr::Ident(ident), _) = receiver
+            && let Some(&TypeRef::Name(typ)) = env.types().get(ident)
+            && let mut candidates = self
+                .symbols
+                .base_iter_with_self::<AnyBaseType>(typ)
+                .map(|(id, def)| {
+                    def.methods()
+                        .by_name(member)
+                        .map(move |entry| entry.map_key(|i| MethodId::new(id, i)))
+                        .peekable()
+                })
+                .find_map(|mut matches| matches.peek().is_some().then_some(matches))
+                .into_iter()
+                .flatten()
+                .filter(|entry| entry.func().flags().is_static())
+                .peekable()
+            && candidates.peek().is_some()
+        {
+            let parent_args = self.symbols[typ]
+                .params()
+                .iter()
+                .map(|_| PolyType::fresh())
+                .collect::<Rc<_>>();
+            let typ = TypeApp::new(typ, parent_args);
+
+            let (call, call_t) = self
+                .overload_resolver()
+                .name(member)
+                .args(args)
+                .type_args(type_args)
+                .candidates(candidates)
+                .receiver(typ.clone())
+                .maybe_type_hint(type_hint)
+                .env(env)
+                .span(call_span)
+                .resolve()?
+                .into_static_call(typ.id(), typ.args().iter().cloned());
+            return Ok((MemberCall::MethodCall(call), call_t));
+        }
+
+        let (mut ir, typ) = self.lower_expr(receiver, env)?;
+        let (ref_type, unref_t) = typ.strip_ref(self.symbols).unzip();
+        let upper_bound = unref_t
+            .unwrap_or(typ.clone())
+            .force_upper_bound(self.symbols)
+            .with_span(*expr_span)?
+            .ok_or(Error::InsufficientTypeInformation(*expr_span))?
+            .into_owned();
+
+        let (upper_bound, mode) = if matches!(receiver, (ast::Expr::Super, _)) {
+            (
+                upper_bound
+                    .instantiate_base::<AnyBaseType>(self.symbols)
+                    .ok_or(Error::NonExistentSuperType(*expr_span))?,
+                ir::CallMode::ForceStatic,
+            )
+        } else {
+            (upper_bound, ir::CallMode::Normal)
+        };
+
+        let mut candidates = self
+            .symbols
+            .query_methods_by_name(upper_bound.id(), member)
+            .filter(|entry| !entry.func().flags().is_static())
+            .peekable();
+        if candidates.peek().is_none() {
+            let (field_expr, field_t, _) = self
+                .field_access_builder()
+                .receiver(ir)
+                .receiver_type(upper_bound)
+                .maybe_ref_type(ref_type)
+                .field(member)
+                .span(call_span)
+                .build()?;
+            return Ok((MemberCall::FieldAccess(field_expr), field_t));
+        }
+
+        let resolved = self
+            .overload_resolver()
+            .name(member)
+            .args(args)
+            .type_args(type_args)
+            .candidates(candidates)
+            .receiver(upper_bound.clone())
+            .maybe_type_hint(type_hint)
+            .env(env)
+            .span(call_span)
+            .resolve()?;
+
+        let id = resolved.resulution.function;
+        let method = &self.symbols[id];
+        self.check_visibility(id.parent(), method.flags().visibility(), call_span);
+
+        let (call, call_t) = if let Some(aliased) = method.aliased_method()
+            && method.flags().is_static_forwarder()
+        {
+            let expected = &self.symbols[aliased]
+                .type_()
+                .param_types()
+                .next()
+                .expect("static alias must at least accept a receiver");
+            let span = ir.span();
+            self.coerce(&mut ir, typ, PolyType::from_type(expected), env, span)?;
+
+            resolved
+                .with_method(aliased)
+                .map_args(|args| iter::once(ir).chain(args).collect())
+                .into_static_call(upper_bound.id(), upper_bound.args().iter().cloned())
+        } else {
+            resolved.into_instance_call(ir, upper_bound, ref_type, mode)
+        };
+
+        Ok((MemberCall::MethodCall(call), call_t))
+    }
+
     #[builder(finish_fn = resolve)]
     fn overload_resolver<'a, Key, Name, Func>(
         &mut self,
@@ -1635,7 +1695,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         #[builder(default)] type_args: &[Spanned<ast::SourceType<'ctx>>],
         candidates: impl IntoIterator<Item = FunctionEntry<Key, Name, Func>>,
         receiver: Option<InferredTypeApp<'ctx>>,
-        return_hint: Option<&PolyType<'ctx>>,
+        type_hint: Option<&PolyType<'ctx>>,
         env: &Env<'_, 'ctx>,
         span: Span,
     ) -> LowerResult<'ctx, FunctionResultWithArgs<'ctx, Key>>
@@ -1691,7 +1751,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             let return_t =
                 PolyType::from_type_with_env(primary.func().type_().return_type(), &type_env)
                     .map_err(|var| Error::UnresolvedVar(var, span))?;
-            if let Some(hint) = return_hint {
+            if let Some(hint) = type_hint {
                 return_t.constrain_base(hint, self.symbols).ok();
             }
 
@@ -2307,7 +2367,7 @@ impl<'ctx> Extend<Pattern<'ctx>> for Pattern<'ctx> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 enum Projection<'scope, 'ctx> {
     Field {
         receiver: &'scope Self,
@@ -2321,4 +2381,10 @@ enum Projection<'scope, 'ctx> {
         index: i32,
     },
     Scrutinee(ir::Local),
+}
+
+#[derive(Debug)]
+enum MemberCall<'ctx> {
+    MethodCall(ir::Call<'ctx>),
+    FieldAccess(ir::Expr<'ctx>),
 }

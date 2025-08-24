@@ -34,3 +34,4 @@ pub type SourceType<'src> = Type<'src, WithSpan>;
 pub type SourceTypeParam<'src> = TypeParam<'src, WithSpan>;
 pub type SourceFunctionBody<'src> = FunctionBody<'src, WithSpan>;
 pub type SourceAstNode<'a, 'src> = AstNode<'a, 'src, WithSpan>;
+pub type SourceStrPart<'src> = StrPart<'src, WithSpan>;
