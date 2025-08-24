@@ -94,10 +94,10 @@ pub enum Error<'ctx> {
     ImpossibleDynCast(Box<TypeError<'ctx>>, Span),
     #[error("this cast is redundant, you should remove it")]
     RedundantDynCast(Span),
-    #[error("this member cannot be accessed, because it is private")]
-    PrivateMemberAccess(Span),
-    #[error("this member cannot be accessed, because it is protected")]
-    ProtectedMemberAccess(Span),
+    #[error("member `{0}` of `{1}` is private")]
+    PrivateMemberAccess(&'ctx str, TypeId<'ctx>, Span),
+    #[error("member `{0}` of `{1}` is protected")]
+    ProtectedMemberAccess(&'ctx str, TypeId<'ctx>, Span),
 }
 
 impl Error<'_> {
@@ -133,8 +133,8 @@ impl Error<'_> {
             | Self::RefOnNeverRefType(span)
             | Self::ImpossibleDynCast(_, span)
             | Self::RedundantDynCast(span)
-            | Self::PrivateMemberAccess(span)
-            | Self::ProtectedMemberAccess(span) => *span,
+            | Self::PrivateMemberAccess(_, _, span)
+            | Self::ProtectedMemberAccess(_, _, span) => *span,
         }
     }
 
@@ -170,8 +170,8 @@ impl Error<'_> {
             Self::RefOnNeverRefType(_) => "REF_ON_NEVER_REF",
             Self::ImpossibleDynCast(_, _) => "IMPOSSIBLE_DYN_CAST",
             Self::RedundantDynCast(_) => "REDUNDANT_DYN_CAST",
-            Self::PrivateMemberAccess(_) => "PRIVATE_MEMBER_ACCESS",
-            Self::ProtectedMemberAccess(_) => "PROTECTED_MEMBER_ACCESS",
+            Self::PrivateMemberAccess(_, _, _) => "PRIVATE_MEMBER_ACCESS",
+            Self::ProtectedMemberAccess(_, _, _) => "PROTECTED_MEMBER_ACCESS",
         }
     }
 
@@ -180,8 +180,8 @@ impl Error<'_> {
             Self::DeprecatedNameOf(_) => DiagnosticLevel::Warning,
             Self::InvalidTemporary(_)
             | Self::NonFullyDefinedNativeStructConstruction(_, _)
-            | Self::PrivateMemberAccess(_)
-            | Self::ProtectedMemberAccess(_) => DiagnosticLevel::ErrorAllowedAtRuntime,
+            | Self::PrivateMemberAccess(_, _, _)
+            | Self::ProtectedMemberAccess(_, _, _) => DiagnosticLevel::ErrorAllowedAtRuntime,
             _ => DiagnosticLevel::Error,
         }
     }

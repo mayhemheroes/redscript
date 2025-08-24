@@ -4,10 +4,13 @@ use redscript_ast::Span;
 use thiserror::Error;
 use {redscript_ast as ast, redscript_parser as parser};
 
-use crate::lower::{LowerResult, Poly, TypeError};
 use crate::stages::FunctionAnnotation;
 use crate::utils::fmt::{DisplayFn, lowercase, sep_by, surrounded_by};
 use crate::{CoalesceError, LowerError, Param, Type, TypeId, TypeKind, Variance, cte};
+use crate::{
+    lower::{LowerResult, Poly, TypeError},
+    symbols::Visibility,
+};
 
 pub mod pass;
 
@@ -101,6 +104,8 @@ pub enum Diagnostic<'ctx> {
     AddFieldConflict(Span),
     #[error("structures cannot have variance annotations")]
     InvalidStructVariance(Span),
+    #[error("method overrides cannot be less visibile than the method they override ({0})")]
+    LessVisibleOverride(Visibility, Span),
     #[error("{0}")]
     Other(Box<dyn std::error::Error + 'ctx>, DiagnosticLevel, Span),
 }
@@ -173,6 +178,7 @@ impl<'ctx> Diagnostic<'ctx> {
             | Self::UnusedLocal(span)
             | Self::AddFieldConflict(span)
             | Self::InvalidStructVariance(span)
+            | Self::LessVisibleOverride(_, span)
             | Self::Other(_, _, span) => *span,
         }
     }
@@ -222,6 +228,7 @@ impl<'ctx> Diagnostic<'ctx> {
             Self::UnusedLocal(_) => "UNUSED_LOCAL",
             Self::AddFieldConflict(_) => "ADD_FIELD_CONFLICT",
             Self::InvalidStructVariance(_) => "INVALID_STRUCT_VARIANCE",
+            Self::LessVisibleOverride(_, _) => "LESS_VISIBLE_OVERRIDE",
             Self::Other(_, _, _) => "OTHER",
         }
     }

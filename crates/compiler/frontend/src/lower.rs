@@ -1661,7 +1661,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
 
         let id = resolved.resulution.function;
         let method = &self.symbols[id];
-        self.check_visibility(id.parent(), method.flags().visibility(), call_span);
+        self.check_visibility(member, id.parent(), method.flags().visibility(), call_span);
 
         let (call, call_t) = if let Some(aliased) = method.aliased_method()
             && method.flags().is_static_forwarder()
@@ -1939,7 +1939,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             .find_map(|(id, agg)| Some((id, agg.fields().by_name(member)?)))
             .ok_or_else(|| Error::UnresolvedMember(receiver_t.id(), member, span))?;
 
-        self.check_visibility(receiver_t.id(), field.flags().visibility(), span);
+        self.check_visibility(member, receiver_t.id(), field.flags().visibility(), span);
 
         let this_t = receiver_t
             .instantiate_as::<AnyBaseType>(target_id, self.symbols)
@@ -2011,10 +2011,17 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         Ok(())
     }
 
-    fn check_visibility(&mut self, parent: TypeId<'ctx>, visibility: Visibility, span: Span) {
+    fn check_visibility(
+        &mut self,
+        member: &'ctx str,
+        parent: TypeId<'ctx>,
+        visibility: Visibility,
+        span: Span,
+    ) {
         match visibility {
             Visibility::Private if self.context != Some(parent) => {
-                self.reporter.report(Error::PrivateMemberAccess(span));
+                self.reporter
+                    .report(Error::PrivateMemberAccess(member, parent, span));
             }
             Visibility::Protected
                 if self.context.is_none_or(|context| {
@@ -2024,7 +2031,8 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                         .any(|(id, _)| id == parent)
                 }) =>
             {
-                self.reporter.report(Error::ProtectedMemberAccess(span));
+                self.reporter
+                    .report(Error::ProtectedMemberAccess(member, parent, span));
             }
             _ => {}
         }

@@ -110,7 +110,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                 doc,
                 span: item_span,
             };
-            let public = matches!(meta.visibility, Some(ast::Visibility::Public));
+            let is_public = matches!(meta.visibility, Some(ast::Visibility::Public));
             match item {
                 ast::Item::Import(import) => {
                     imports.push(ParsedImport {
@@ -128,7 +128,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     let id = interner.intern(Cow::from(&path));
                     let res = self
                         .module_map
-                        .add_type(path, id, public)
+                        .add_type(path, id, is_public)
                         .map_err(|_| Diagnostic::NameRedefinition(name_span));
                     self.reporter.unwrap_err(res);
 
@@ -219,7 +219,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     if matches!(annotation, None | Some(FunctionAnnotation::Intrinsic(_))) {
                         let res = self
                             .module_map
-                            .add_function(path, index, public)
+                            .add_function(path, index, is_public)
                             .map_err(|_| Diagnostic::NameRedefinition(name_span));
                         self.reporter.unwrap_err(res);
                     }
@@ -237,7 +237,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     let id = interner.intern(Cow::from(&path));
                     let res = self
                         .module_map
-                        .add_type(path, id, public)
+                        .add_type(path, id, is_public)
                         .map_err(|_| Diagnostic::NameRedefinition(name_span));
                     self.reporter.unwrap_err(res);
 
@@ -501,7 +501,8 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
 
                     let flags = self
                         .process_method_flags(qs, &func, class_flags, name_span)
-                        .with_visibility(visibility);
+                        .with_visibility(visibility)
+                        .with_has_implicit_visibility(item.visibility.is_none());
 
                     let (func_t, type_scope) = self.create_function_env(&func, &types);
                     if func.body.is_none()
@@ -730,7 +731,13 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                         .report(Diagnostic::UserSymbolAnnotation(name_span));
                 }
                 let qs = meta.qualifiers;
-                let flags = self.process_method_flags(qs, &function, parent_flags, name_span);
+                let visibility = meta
+                    .visibility
+                    .map_or(Visibility::Private, convert_visibility);
+                let flags = self
+                    .process_method_flags(qs, &function, parent_flags, name_span)
+                    .with_visibility(visibility)
+                    .with_has_implicit_visibility(meta.visibility.is_none());
 
                 if function.body.is_none() && !flags.is_native() {
                     self.reporter
@@ -1222,7 +1229,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                         .iter()
                         .zip(&base_types)
                         .map(|(param, typ)| {
-                            Param::new(param.name(), *param.flags(), typ.clone(), None)
+                            Param::new(param.name(), param.flags(), typ.clone(), None)
                         })
                         .collect::<Box<_>>();
                     let return_t =
@@ -1244,12 +1251,26 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                 ));
             }
 
-            for (overloaded_id, idx) in implemented {
+            for (overriden_id, idx) in implemented {
+                let overriden_flags = self.symbols[overriden_id].flags();
                 let (_, method) = self
                     .symbols
                     .get_method_mut(MethodId::new(class_id, idx))
                     .expect("method should exist");
-                method.set_overloaded(overloaded_id);
+
+                if method.flags().has_implicit_visibility() {
+                    method
+                        .flags_mut()
+                        .set_visibility(overriden_flags.visibility());
+                } else if method.flags().visibility() < overriden_flags.visibility()
+                    && let Some(span) = method.span()
+                {
+                    self.reporter.report(Diagnostic::LessVisibleOverride(
+                        overriden_flags.visibility(),
+                        span,
+                    ));
+                }
+                method.set_overriden(overriden_id);
             }
         }
     }

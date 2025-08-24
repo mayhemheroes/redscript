@@ -6,39 +6,39 @@ input_file: crates/compiler/frontend/tests/data/visibility.reds
 [PRIVATE_MEMBER_ACCESS] At tests/data/visibility.reds:33:5
     this.PrivateMethod(); // Error: private method cannot be accessed from subclass
     ^^^^^^^^^^^^^^^^^^^^
-this member cannot be accessed, because it is private
+member `PrivateMethod` of `Class` is private
 
 [PRIVATE_MEMBER_ACCESS] At tests/data/visibility.reds:34:5
     this.Method(); // Error: method should be private by default
     ^^^^^^^^^^^^^
-this member cannot be accessed, because it is private
+member `Method` of `Class` is private
 
 [PRIVATE_MEMBER_ACCESS] At tests/data/visibility.reds:43:11
   let _ = inst.privateField; // Error: private field cannot be accessed outside the class
           ^^^^^^^^^^^^^^^^^
-this member cannot be accessed, because it is private
+member `privateField` of `Class` is private
 
 [PRIVATE_MEMBER_ACCESS] At tests/data/visibility.reds:44:11
   let _ = inst.field; // Error: field should be private by default
           ^^^^^^^^^^
-this member cannot be accessed, because it is private
+member `field` of `Class` is private
 
 [PROTECTED_MEMBER_ACCESS] At tests/data/visibility.reds:45:11
   let _ = inst.protectedField; // Error: protected field cannot be accessed outside the class
           ^^^^^^^^^^^^^^^^^^^
-this member cannot be accessed, because it is protected
+member `protectedField` of `Class` is protected
 
 [PRIVATE_MEMBER_ACCESS] At tests/data/visibility.reds:48:3
   inst.PrivateMethod(); // Error: private method cannot be accessed outside the class
   ^^^^^^^^^^^^^^^^^^^^
-this member cannot be accessed, because it is private
+member `PrivateMethod` of `Class` is private
 
 [PRIVATE_MEMBER_ACCESS] At tests/data/visibility.reds:49:3
   inst.Method(); // Error: method should be private by default
   ^^^^^^^^^^^^^
-this member cannot be accessed, because it is private
+member `Method` of `Class` is private
 
 [PROTECTED_MEMBER_ACCESS] At tests/data/visibility.reds:50:3
   inst.ProtectedMethod(); // Error: protected method cannot be accessed outside the class
   ^^^^^^^^^^^^^^^^^^^^^^
-this member cannot be accessed, because it is protected
+member `ProtectedMethod` of `Class` is protected

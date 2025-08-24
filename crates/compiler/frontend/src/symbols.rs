@@ -857,8 +857,8 @@ impl<'ctx> FreeFunction<'ctx> {
     }
 
     #[inline]
-    pub fn flags(&self) -> &FreeFunctionFlags {
-        &self.flags
+    pub fn flags(&self) -> FreeFunctionFlags {
+        self.flags
     }
 
     #[inline]
@@ -891,7 +891,7 @@ impl<'ctx> FreeFunction<'ctx> {
 pub struct Method<'ctx> {
     flags: MethodFlags,
     typ: FunctionType<'ctx>,
-    overloaded: Option<MethodId<'ctx>>,
+    overriden: Option<MethodId<'ctx>>,
     doc: Box<[&'ctx str]>,
     span: Option<Span>,
     aliased_method: Option<MethodId<'ctx>>,
@@ -908,7 +908,7 @@ impl<'ctx> Method<'ctx> {
         Self {
             flags,
             typ,
-            overloaded,
+            overriden: overloaded,
             doc: doc.into(),
             span,
             aliased_method: None,
@@ -921,8 +921,13 @@ impl<'ctx> Method<'ctx> {
     }
 
     #[inline]
-    pub fn flags(&self) -> &MethodFlags {
-        &self.flags
+    pub fn flags(&self) -> MethodFlags {
+        self.flags
+    }
+
+    #[inline]
+    pub fn flags_mut(&mut self) -> &mut MethodFlags {
+        &mut self.flags
     }
 
     #[inline]
@@ -931,12 +936,12 @@ impl<'ctx> Method<'ctx> {
     }
 
     #[inline]
-    pub fn overloaded(&self) -> Option<MethodId<'ctx>> {
-        self.overloaded
+    pub fn overriden(&self) -> Option<MethodId<'ctx>> {
+        self.overriden
     }
 
-    pub fn set_overloaded(&mut self, overloaded: MethodId<'ctx>) {
-        self.overloaded = Some(overloaded);
+    pub fn set_overriden(&mut self, overloaded: MethodId<'ctx>) {
+        self.overriden = Some(overloaded);
     }
 
     #[inline]
@@ -1079,8 +1084,8 @@ impl<'ctx, K: TypeKind> Param<'ctx, K> {
     }
 
     #[inline]
-    pub fn flags(&self) -> &ParamFlags {
-        &self.flags
+    pub fn flags(&self) -> ParamFlags {
+        self.flags
     }
 
     #[inline]
@@ -1136,8 +1141,8 @@ impl<'ctx> Field<'ctx> {
     }
 
     #[inline]
-    pub fn flags(&self) -> &FieldFlags {
-        &self.flags
+    pub fn flags(&self) -> FieldFlags {
+        self.flags
     }
 
     #[inline]
@@ -1211,6 +1216,7 @@ pub struct FreeFunctionFlags {
 pub struct MethodFlags {
     #[bits(2)]
     pub visibility: Visibility,
+    pub has_implicit_visibility: bool,
     pub is_static: bool,
     pub is_final: bool,
     pub is_native: bool,
@@ -1218,7 +1224,7 @@ pub struct MethodFlags {
     pub is_unimplemented: bool,
     pub is_static_forwarder: bool,
 
-    #[bits(8)]
+    #[bits(7)]
     __: u16,
 }
 
@@ -1320,14 +1326,14 @@ fn method_dedup<'ctx: 'a, 'a>() -> impl FnMut(
 > {
     let mut dedup = HashSet::new();
     move |entry| {
-        if let Some(overloaded) = entry.func().overloaded {
+        if let Some(overloaded) = entry.func().overriden {
             dedup.insert(overloaded);
         }
         dedup.remove(entry.key()).not().then_some(entry)
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Visibility {
     #[default]
     Private,
@@ -1338,18 +1344,28 @@ pub enum Visibility {
 impl Visibility {
     const fn into_bits(self) -> u8 {
         match self {
-            Self::Public => 0,
-            Self::Private => 1,
-            Self::Protected => 2,
+            Self::Private => 0,
+            Self::Protected => 1,
+            Self::Public => 2,
         }
     }
 
     const fn from_bits(bits: u8) -> Self {
         match bits {
-            0 => Self::Public,
-            1 => Self::Private,
-            2 => Self::Protected,
+            0 => Self::Private,
+            1 => Self::Protected,
+            2 => Self::Public,
             _ => unreachable!(),
+        }
+    }
+}
+
+impl fmt::Display for Visibility {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Private => write!(f, "private"),
+            Self::Protected => write!(f, "protected"),
+            Self::Public => write!(f, "public"),
         }
     }
 }

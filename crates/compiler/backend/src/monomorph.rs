@@ -235,7 +235,7 @@ impl<'ctx> Monomorphizer<'ctx> {
         let mut env = sig.id().receiver.type_env(symbols);
         env.extend(method.type_().type_vars().zip(sig.types().iter().cloned()));
 
-        let base = method.overloaded().map(|id| &symbols[id]);
+        let base = method.overriden().map(|id| &symbols[id]);
         let mangled = MangledMethod::new(name, &sig, method, base, &env).to_string();
         let idx = self.add_method_to_pool(mangled, method, parent, &env, symbols, bundle);
 
@@ -643,7 +643,7 @@ impl<'ctx> Monomorphizer<'ctx> {
             }
 
             let sig = Signature::new((), []);
-            let base = func.overloaded().map(|id| &symbols[id]);
+            let base = func.overriden().map(|id| &symbols[id]);
             let mangled =
                 MangledMethod::new(entry.name(), &sig, func, base, &class_env).to_string();
             let method = self.add_method_to_pool(mangled, func, idx, &class_env, symbols, bundle);
