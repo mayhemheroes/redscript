@@ -4,13 +4,11 @@ use redscript_ast::Span;
 use thiserror::Error;
 use {redscript_ast as ast, redscript_parser as parser};
 
+use crate::lower::{LowerResult, Poly, TypeError};
 use crate::stages::FunctionAnnotation;
+use crate::symbols::Visibility;
 use crate::utils::fmt::{DisplayFn, lowercase, sep_by, surrounded_by};
 use crate::{CoalesceError, LowerError, Param, Type, TypeId, TypeKind, Variance, cte};
-use crate::{
-    lower::{LowerResult, Poly, TypeError},
-    symbols::Visibility,
-};
 
 pub mod pass;
 
