@@ -1574,7 +1574,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             && let Some(&TypeRef::Name(typ)) = env.types().get(ident)
             && let mut candidates = self
                 .symbols
-                .base_iter_with_self::<AnyBaseType>(typ)
+                .base_iter_with_self(typ)
                 .map(|(id, def)| {
                     def.methods()
                         .by_name(member)
@@ -1935,7 +1935,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
     ) -> Result<(FieldId<'ctx>, PolyType<'ctx>, InferredTypeApp<'ctx>), Error<'ctx>> {
         let (target_id, (field_idx, field)) = self
             .symbols
-            .base_iter_with_self::<AnyBaseType>(receiver_t.id())
+            .base_iter_with_self(receiver_t.id())
             .find_map(|(id, agg)| Some((id, agg.fields().by_name(member)?)))
             .ok_or_else(|| Error::UnresolvedMember(receiver_t.id(), member, span))?;
 
@@ -2027,7 +2027,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 if self.context.is_none_or(|context| {
                     !self
                         .symbols
-                        .base_iter_with_self::<AnyBaseType>(context)
+                        .base_iter_with_self(context)
                         .any(|(id, _)| id == parent)
                 }) =>
             {

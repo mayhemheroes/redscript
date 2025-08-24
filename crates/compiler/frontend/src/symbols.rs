@@ -194,15 +194,14 @@ impl<'ctx> Symbols<'ctx> {
     }
 
     pub(super) fn has_base_type(&self, lhs: TypeId<'ctx>, rhs: TypeId<'ctx>) -> bool {
-        self.base_iter_with_self::<AnyBaseType>(lhs)
-            .any(|(t, _)| t == rhs)
+        self.base_iter_with_self(lhs).any(|(t, _)| t == rhs)
     }
 
     pub(super) fn is_subtype(&self, lhs: TypeId<'ctx>, rhs: TypeId<'ctx>) -> bool {
         self.supertype_iter_with_self(lhs).any(|(t, _)| t == rhs)
     }
 
-    pub fn base_iter_with_self<Mode: BaseMode>(
+    fn base_iter_with_self_with_mode<Mode: BaseMode>(
         &self,
         typ: TypeId<'ctx>,
     ) -> impl Iterator<Item = (TypeId<'ctx>, &Aggregate<'ctx>)> + use<'_, 'ctx, Mode> {
@@ -211,11 +210,19 @@ impl<'ctx> Symbols<'ctx> {
     }
 
     #[inline]
+    pub fn base_iter_with_self(
+        &self,
+        typ: TypeId<'ctx>,
+    ) -> impl Iterator<Item = (TypeId<'ctx>, &Aggregate<'ctx>)> + use<'_, 'ctx> {
+        self.base_iter_with_self_with_mode::<AnyBaseType>(typ)
+    }
+
+    #[inline]
     pub fn supertype_iter_with_self(
         &self,
         typ: TypeId<'ctx>,
     ) -> impl Iterator<Item = (TypeId<'ctx>, &Aggregate<'ctx>)> + use<'_, 'ctx> {
-        self.base_iter_with_self::<AnySupertype>(typ)
+        self.base_iter_with_self_with_mode::<AnySupertype>(typ)
     }
 
     pub fn query_methods_by_name<'a>(
@@ -223,7 +230,7 @@ impl<'ctx> Symbols<'ctx> {
         typ: TypeId<'ctx>,
         name: &'a str,
     ) -> impl Iterator<Item = MethodEntry<'a, 'ctx>> + use<'a, 'ctx> {
-        self.base_iter_with_self::<AnyBaseType>(typ)
+        self.base_iter_with_self(typ)
             .flat_map(|(id, agg)| {
                 agg.methods().by_name(name).map(move |entry| {
                     MethodEntry::new(MethodId::new(id, *entry.key()), entry.name(), entry.func())
@@ -236,7 +243,7 @@ impl<'ctx> Symbols<'ctx> {
         &'a self,
         typ: TypeId<'ctx>,
     ) -> impl Iterator<Item = MethodEntry<'a, 'ctx>> + use<'a, 'ctx> {
-        self.base_iter_with_self::<AnyBaseType>(typ)
+        self.base_iter_with_self(typ)
             .flat_map(|(id, agg)| {
                 agg.methods().iter().map(move |entry| {
                     MethodEntry::new(MethodId::new(id, *entry.key()), entry.name(), entry.func())

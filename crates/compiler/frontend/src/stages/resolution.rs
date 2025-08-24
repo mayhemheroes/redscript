@@ -1043,7 +1043,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         for class in module.classes() {
             if self
                 .symbols
-                .base_iter_with_self::<AnyBaseType>(class.id())
+                .base_iter_with_self(class.id())
                 .skip(1)
                 .any(|(id, _)| id == class.id())
             {
@@ -1115,11 +1115,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         'ctx: 'a,
     {
         let mut classes = classes.into_iter().collect::<Vec<_>>();
-        classes.sort_unstable_by_key(|class| {
-            self.symbols
-                .base_iter_with_self::<AnyBaseType>(class.id())
-                .count()
-        });
+        classes.sort_unstable_by_key(|class| self.symbols.base_iter_with_self(class.id()).count());
 
         let mut virtuals =
             HashMap::<TypeId<'ctx>, HashSet<MethodId<'ctx>>, BuildIdentityHasher<usize>>::default();
