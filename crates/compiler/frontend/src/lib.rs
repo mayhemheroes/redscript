@@ -20,7 +20,7 @@ pub use symbols::{
     Aggregate, AggregateFlags, Enum, Field, FieldFlags, FieldId, FieldIndex, FieldMap,
     FreeFunction, FreeFunctionFlags, FreeFunctionIndex, FunctionIndex, FunctionKind, FunctionMap,
     FunctionType, Method, MethodFlags, MethodId, MethodMap, Param, ParamFlags, QualifiedName,
-    Symbols, TypeDef, TypeSchema,
+    Symbols, TypeDef, TypeSchema, Visibility,
 };
 pub use types::{
     CtxVar, Immutable, Mono, MonoType, RefType, Type, TypeApp, TypeId, TypeIndex, TypeInterner,

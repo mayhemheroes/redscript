@@ -10,7 +10,7 @@ use redscript_compiler_frontend::{
     Aggregate, AggregateFlags, Enum, Field, FieldFlags, FieldMap, FreeFunction, FreeFunctionFlags,
     FreeFunctionIndex, FunctionIndex, FunctionMap, FunctionType, Immutable, Method, MethodFlags,
     MethodId, Mono, MonoType, Param, ParamFlags, RefType, Symbols, Type, TypeApp, TypeDef, TypeId,
-    TypeInterner, TypeKind, TypeSchema, predef,
+    TypeInterner, TypeKind, TypeSchema, Visibility, predef,
 };
 use redscript_io::{
     CNameIndex, ClassIndex as PoolClassIndex, EnumIndex as PoolEnumIndex, Function as PoolFunction,
@@ -117,7 +117,8 @@ impl<'ctx> CompilationInputs<'ctx> {
                             .with_is_editable(field.flags().is_editable())
                             .with_is_inline(field.flags().is_inline())
                             .with_is_const(field.flags().is_const())
-                            .with_is_persistent(field.flags().is_persistent());
+                            .with_is_persistent(field.flags().is_persistent())
+                            .with_visibility(Visibility::Public);
 
                         fields
                             .add(assert_borrowed(name), Field::new(flags, typ, [], [], None))
@@ -146,7 +147,8 @@ impl<'ctx> CompilationInputs<'ctx> {
                             .with_is_callback(method.flags().is_callback())
                             .with_is_unimplemented(
                                 method.body().is_empty() && !method.flags().is_native(),
-                            );
+                            )
+                            .with_visibility(Visibility::Public);
                         let func_t = load_function_type(method, bundle, interner, type_flags)?;
                         let base = virtuals.get(&method.name()).copied();
 
