@@ -103,14 +103,14 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                 continue;
             }
 
-            let mut meta = ParsedMeta {
+            let mut item_meta = ParsedMeta {
                 annotations,
                 visibility,
                 qualifiers,
                 doc,
                 span: item_span,
             };
-            let is_public = matches!(meta.visibility, Some(ast::Visibility::Public));
+            let is_public = matches!(item_meta.visibility, Some(ast::Visibility::Public));
             match item {
                 ast::Item::Import(import) => {
                     imports.push(ParsedImport {
@@ -125,17 +125,18 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
 
                     let (name, name_span) = aggregate.name;
                     let path = QualifiedName::from_base_and_name(path_root, name);
-                    let id = interner.intern(Cow::from(&path));
+                    let cls_id = interner.intern(Cow::from(&path));
                     let res = self
                         .module_map
-                        .add_type(path, id, is_public)
+                        .add_type(path, cls_id, is_public)
                         .map_err(|_| Diagnostic::NameRedefinition(name_span));
                     self.reporter.unwrap_err(res);
 
                     // we initialize and add a stub to enable the compiler to automatically
                     // resolve the ref type whenever the type is used
                     let mut flags = AggregateFlags::new();
-                    meta.annotations
+                    item_meta
+                        .annotations
                         .retain(|(ann, _)| match (ann.name, &ann.args[..]) {
                             (NEVER_REF_ANNOTATION, &[]) => {
                                 flags.set_is_never_ref(true);
@@ -149,21 +150,21 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                         });
                     let mut stub = Aggregate::default();
                     stub.set_flags(flags);
-                    self.symbols
-                        .add_type(id, TypeDef::new([], TypeSchema::Aggregate(stub.into()), []));
+                    let schema = TypeSchema::Aggregate(stub.into());
+                    self.symbols.add_type(cls_id, TypeDef::new([], schema, []));
 
                     match item {
                         ast::Item::Class(aggregate) => {
                             classes.push(ParsedAggregate {
-                                id,
-                                meta,
+                                id: cls_id,
+                                meta: item_meta,
                                 aggregate,
                             });
                         }
                         ast::Item::Struct(aggregate) => {
                             structs.push(ParsedAggregate {
-                                id,
-                                meta,
+                                id: cls_id,
+                                meta: item_meta,
                                 aggregate,
                             });
                         }
@@ -179,7 +180,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
 
                     let mut annotation: Option<FunctionAnnotation<'_>> = None;
 
-                    for (ann, ann_span) in &meta.annotations {
+                    for (ann, ann_span) in &item_meta.annotations {
                         match (ann.name, &ann.args[..]) {
                             (
                                 INTRINSIC_ANNOTATION
@@ -226,7 +227,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
 
                     functions.push(ParsedFunction {
                         index,
-                        meta,
+                        meta: item_meta,
                         function,
                         annotation,
                     });
@@ -241,10 +242,17 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                         .map_err(|_| Diagnostic::NameRedefinition(name_span));
                     self.reporter.unwrap_err(res);
 
-                    enums.push(ParsedEnum { id, meta, enum_ });
+                    enums.push(ParsedEnum {
+                        id,
+                        meta: item_meta,
+                        enum_,
+                    });
                 }
                 ast::Item::Let(let_) => {
-                    lets.push(ParsedLet { meta, let_ });
+                    lets.push(ParsedLet {
+                        meta: item_meta,
+                        let_,
+                    });
                 }
             }
         }
@@ -396,12 +404,12 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         is_struct: bool,
     ) -> ClassItem<'a, 'ctx> {
         let (aggregate_name, name_span) = aggregate.name;
-        let span = meta.span;
+        let cls_span = meta.span;
         let mut qs = meta.qualifiers;
 
         let is_import_only = qs.take_flag(ast::ItemQualifiers::IMPORT_ONLY);
         let is_native = is_import_only || qs.take_flag(ast::ItemQualifiers::NATIVE);
-        let class_flags = self
+        let cls_flags = self
             .symbols
             .get_type(id)
             .and_then(|def| def.schema().as_aggregate())
@@ -472,7 +480,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
 
         let (types, vars) = self.create_scope_env(types, &aggregate.type_params);
 
-        if class_flags.is_struct() && vars.iter().any(|v| v.variance() != Variance::Invariant) {
+        if cls_flags.is_struct() && vars.iter().any(|v| v.variance() != Variance::Invariant) {
             self.reporter
                 .report(Diagnostic::InvalidStructVariance(name_span));
         }
@@ -483,7 +491,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         let mut method_items = vec![];
         let mut field_items = vec![];
 
-        let default_visibility = if class_flags.is_struct() {
+        let default_visibility = if cls_flags.is_struct() {
             Visibility::Public
         } else {
             Visibility::Private
@@ -500,14 +508,14 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     let qs = item.qualifiers;
 
                     let flags = self
-                        .process_method_flags(qs, &func, class_flags, name_span)
+                        .process_method_flags(qs, &func, cls_flags, name_span)
                         .with_visibility(visibility)
                         .with_has_implicit_visibility(item.visibility.is_none());
 
                     let (func_t, type_scope) = self.create_function_env(&func, &types);
                     if func.body.is_none()
                         && !flags.is_native()
-                        && (!class_flags.is_abstract()
+                        && (!cls_flags.is_abstract()
                             || !func_t.type_params().is_empty()
                             || flags.is_final()
                             || flags.is_static())
@@ -519,17 +527,17 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     let forwarder =
                         extract_static_forwarder(&func_t, id, flags, &meta.doc, name_span);
                     let method = Method::new(flags, func_t, None, item.doc, Some(name_span));
-                    let idx = methods.add(name, method);
+                    let func_idx = methods.add(name, method);
                     let params = func.param_names().collect::<Box<[_]>>();
                     let Some(body) = func.body else {
                         continue;
                     };
                     method_items.push(FuncItem::new(
-                        idx, item_span, name_span, params, body, type_scope,
+                        func_idx, item_span, name_span, params, body, type_scope,
                     ));
 
                     if let Some(forwader) = forwarder {
-                        methods.add(name, forwader.with_aliased(MethodId::new(id, idx)));
+                        methods.add(name, forwader.with_aliased(MethodId::new(id, func_idx)));
                     }
                 }
                 ast::Item::Let(let_) => {
@@ -543,7 +551,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                         continue;
                     };
                     let flags = self
-                        .process_field_flags(item.qualifiers, class_flags, &typ, name_span)
+                        .process_field_flags(item.qualifiers, cls_flags, &typ, name_span)
                         .with_visibility(visibility);
 
                     let properties = self.extract_field_properties(&mut item.annotations);
@@ -556,12 +564,12 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     let res = fields
                         .add(name, field)
                         .map_err(|_| Diagnostic::NameRedefinition(name_span));
-                    let idx = self.reporter.unwrap_err(res);
+                    let field_idx = self.reporter.unwrap_err(res);
 
-                    if let Some(idx) = idx
+                    if let Some(field_idx) = field_idx
                         && let Some(default) = let_.default
                     {
-                        field_items.push(FieldItem::new(idx, Some(default)));
+                        field_items.push(FieldItem::new(field_idx, Some(default)));
                     }
                 }
                 _ => self.reporter.report(Diagnostic::UnexpectedItem(item_span)),
@@ -572,14 +580,13 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
             .extends
             .as_deref()
             .and_then(|(name, span)| {
-                Some((
-                    self.reporter
-                        .unwrap_err(types.resolve(name, &self.symbols, *span))?,
-                    *span,
-                ))
+                let base_t = self
+                    .reporter
+                    .unwrap_err(types.resolve(name, &self.symbols, *span))?;
+                Some((base_t, *span))
             })
-            .and_then(|(typ, span)| {
-                if let Type::Data(type_app) = typ {
+            .and_then(|(base_t, span)| {
+                if let Type::Data(type_app) = base_t {
                     Some(type_app)
                 } else {
                     self.reporter.report(Diagnostic::InvalidBaseType(span));
@@ -594,9 +601,9 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
 
         if let Some(derive_span) = derive_new {
             let method = derive_new::derive_new_method(id, &vars, fields.iter(), derive_span);
-            let id = methods.add(NEW_METHOD_IDENT, method);
+            let func_idx = methods.add(NEW_METHOD_IDENT, method);
             method_items.push(derive_new::derive_new_method_item(
-                id,
+                func_idx,
                 aggregate_name,
                 fields.iter(),
                 derive_span,
@@ -604,15 +611,14 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         }
 
         let aggregate = Aggregate::new(
-            class_flags,
+            cls_flags,
             base,
             fields,
             methods,
             implementations,
             Some(name_span),
         );
-        let schema = TypeSchema::Aggregate(aggregate.into());
-        let def = TypeDef::new(vars, schema, meta.doc);
+        let def = TypeDef::new(vars, TypeSchema::Aggregate(aggregate.into()), meta.doc);
         self.symbols.add_type(id, def);
 
         let type_scope = types
@@ -620,7 +626,14 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
             .into_iter()
             .filter_map(|(k, v)| Some((k, v.force()?)))
             .collect();
-        ClassItem::new(id, span, name_span, type_scope, method_items, field_items)
+        ClassItem::new(
+            id,
+            cls_span,
+            name_span,
+            type_scope,
+            method_items,
+            field_items,
+        )
     }
 
     fn process_enum(&mut self, entry: ParsedEnum<'ctx>) {
@@ -700,26 +713,29 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                 }
             }
             &Some(FunctionAnnotation::Add((cls_name, cls_span))) => {
-                let id = self.resolve_annotated_type(cls_name, types, cls_span)?;
+                let cls_id = self.resolve_annotated_type(cls_name, types, cls_span)?;
 
                 if !func_t.type_params().is_empty() {
                     self.reporter
                         .report(Diagnostic::GenericMethodAnnotation(name_span));
                 }
 
-                let base = self.symbols.query_methods_by_name(id, name).find(|entry| {
-                    entry.func().type_().param_types().eq(func_t.param_types())
-                        && entry.func().type_().return_type() == func_t.return_type()
-                });
+                let base = self
+                    .symbols
+                    .query_methods_by_name(cls_id, name)
+                    .find(|entry| {
+                        entry.func().type_().param_types().eq(func_t.param_types())
+                            && entry.func().type_().return_type() == func_t.return_type()
+                    });
                 let base = base.as_ref().map(FunctionEntry::key).copied();
 
-                if base.is_some_and(|base| base.parent() == id) {
+                if base.is_some_and(|base| base.parent() == cls_id) {
                     self.reporter
                         .report(Diagnostic::DuplicateMethodAnnotation(name_span));
                     return None;
                 }
 
-                let TypeSchema::Aggregate(agg) = self.symbols[id].schema() else {
+                let TypeSchema::Aggregate(agg) = self.symbols[cls_id].schema() else {
                     self.reporter
                         .report(Diagnostic::InvalidAnnotationType(cls_name, cls_span));
                     return None;
@@ -745,21 +761,22 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     return None;
                 };
 
-                let forwarder = extract_static_forwarder(&func_t, id, flags, &meta.doc, name_span);
+                let forwarder =
+                    extract_static_forwarder(&func_t, cls_id, flags, &meta.doc, name_span);
                 let member = Method::new(flags, func_t, base, meta.doc, Some(name_span));
-                let methods = self.symbols[id]
+                let methods = self.symbols[cls_id]
                     .schema_mut()
                     .as_aggregate_mut()
                     .unwrap()
                     .methods_mut();
-                let idx = methods.add(name, member);
-
+                let func_idx = methods.add(name, member);
+                let method_id = MethodId::new(cls_id, func_idx);
                 if let Some(forwader) = forwarder {
-                    methods.add(name, forwader.with_aliased(MethodId::new(id, idx)));
+                    methods.add(name, forwader.with_aliased(method_id));
                 }
 
                 let item = FuncItem::new(
-                    MethodId::new(id, idx),
+                    method_id,
                     span,
                     name_span,
                     param_names,
@@ -769,7 +786,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                 return Some(FuncItemKind::AddMethod(item));
             }
             Some(ann @ FunctionAnnotation::Wrap(class)) => {
-                if let Some(id) = self.resolve_existing_annotated_method(
+                if let Some(wrapped_id) = self.resolve_existing_annotated_method(
                     function.name,
                     *class,
                     &meta.qualifiers,
@@ -777,7 +794,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     ann,
                     types,
                 ) {
-                    wrapped = Some(id);
+                    wrapped = Some(wrapped_id);
                 }
             }
             _ => {}
@@ -1121,26 +1138,26 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
             HashMap::<TypeId<'ctx>, HashSet<MethodId<'ctx>>, BuildIdentityHasher<usize>>::default();
 
         for class in classes {
-            let class_id = class.id();
-            let class_sym = &self.symbols[class_id];
-            let aggregate = class_sym
+            let cls_id = class.id();
+            let cls_sym = &self.symbols[cls_id];
+            let aggregate = cls_sym
                 .schema()
                 .as_aggregate()
                 .expect("class should be an aggregate");
 
-            let Some(base) = class_sym.schema().base_type() else {
+            let Some(base) = cls_sym.schema().base_type() else {
                 continue;
             };
 
-            let this_args = class_sym
+            let this_args = cls_sym
                 .params()
                 .iter()
                 .map(|var| PolyType::from_type(&Type::Ctx(var.clone())))
                 .collect::<Rc<_>>();
-            let this_t = InferredTypeApp::new(class_id, this_args);
+            let this_t = InferredTypeApp::new(cls_id, this_args);
 
             let mut implemented: IndexMap<MethodId<'ctx>, FunctionIndex> = IndexMap::default();
-            let unimplemented = virtuals.entry(class_id).or_default();
+            let unimplemented = virtuals.entry(cls_id).or_default();
             let mut duplicates = IndexSet::<&'ctx str>::default();
 
             for method in aggregate.methods().iter() {
@@ -1150,12 +1167,12 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                 }
 
                 if method.func().flags().is_unimplemented() && !aggregate.flags().is_final() {
-                    unimplemented.insert(MethodId::new(class_id, *method.key()));
+                    unimplemented.insert(MethodId::new(cls_id, *method.key()));
                 }
 
                 let base = self
                     .symbols
-                    .query_methods_by_name(class_id, method.name())
+                    .query_methods_by_name(cls_id, method.name())
                     .find(|entry| {
                         if entry.key() == &MethodId::new(class.id(), *method.key())
                             || !entry.func().type_().type_params().is_empty()
@@ -1179,7 +1196,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     });
 
                 match base {
-                    Some(base) if base.key().parent() == class_id => {
+                    Some(base) if base.key().parent() == cls_id => {
                         duplicates.insert(method.name());
                     }
                     Some(base) => {
@@ -1195,7 +1212,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                 }
             }
 
-            let [to_impl, unimpl] = virtuals.get_many_mut([&base.id(), &class_id]);
+            let [to_impl, unimpl] = virtuals.get_many_mut([&base.id(), &cls_id]);
             let to_impl = to_impl.map(|set| set.iter()).unwrap_or_default();
             let unimpl = unimpl.expect("unimplemented set should exist");
             let mut missing = vec![];
@@ -1251,7 +1268,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                 let overriden_flags = self.symbols[overriden_id].flags();
                 let (_, method) = self
                     .symbols
-                    .get_method_mut(MethodId::new(class_id, idx))
+                    .get_method_mut(MethodId::new(cls_id, idx))
                     .expect("method should exist");
 
                 if method.flags().has_implicit_visibility() {
@@ -1370,13 +1387,13 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         types: &TypeEnv<'_, 'ctx>,
         cls_span: Span,
     ) -> Option<(TypeId<'ctx>, &Aggregate<'ctx>)> {
-        let id = self.resolve_annotated_type(cls_name, types, cls_span)?;
-        let TypeSchema::Aggregate(agg) = self.symbols[id].schema() else {
+        let cls_id = self.resolve_annotated_type(cls_name, types, cls_span)?;
+        let TypeSchema::Aggregate(agg) = self.symbols[cls_id].schema() else {
             self.reporter
                 .report(Diagnostic::InvalidAnnotationType(cls_name, cls_span));
             return None;
         };
-        Some((id, agg))
+        Some((cls_id, agg))
     }
 
     fn resolve_annotated_type(

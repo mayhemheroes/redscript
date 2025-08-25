@@ -65,9 +65,9 @@ impl<'ctx> CompilationInputs<'ctx> {
                         let name = bundle.get_item(typ.name()).ok_or_else(|| {
                             Error::MissingPoolItem("type name", typ.name().into())
                         })?;
-                        let id = interner.intern(name.as_ref());
+                        let type_id = interner.intern(name.as_ref());
                         let def = TypeDef::new([], TypeSchema::Primitive, []);
-                        inputs.symbols.add_type_if_none(id, def);
+                        inputs.symbols.add_type_if_none(type_id, def);
                     }
                     let LoadedType { typ, unsupported } =
                         load_type::<Mono>(typ, bundle, interner, type_flags)?;
@@ -77,10 +77,10 @@ impl<'ctx> CompilationInputs<'ctx> {
                     }
                 }
                 IndexedDefinition::Class(index, cls) => {
-                    let class_name = bundle
+                    let cls_name = bundle
                         .get_item(cls.name())
                         .ok_or_else(|| Error::MissingPoolItem("class name", cls.name().into()))?;
-                    let class_id = interner.intern(class_name.as_ref());
+                    let cls_id = interner.intern(cls_name.as_ref());
 
                     let base = cls
                         .base()
@@ -157,15 +157,15 @@ impl<'ctx> CompilationInputs<'ctx> {
                             // parameter. They're treated like instance methods.
                             if flags.is_static()
                                 && let [fst, rem @ ..] = func_t.params()
-                                && (fst.type_() == &Type::nullary(class_id)
+                                && (fst.type_() == &Type::nullary(cls_id)
                                     || fst.type_().strip_ref()
-                                        == Some((RefType::Script, &Type::nullary(class_id))))
+                                        == Some((RefType::Script, &Type::nullary(cls_id))))
                             {
                                 let func_t = func_t.clone().with_params(rem);
                                 let flags =
                                     flags.with_is_static(false).with_is_static_forwarder(true);
                                 let method = Method::new(flags, func_t, base, [], None)
-                                    .with_aliased(MethodId::new(class_id, idx));
+                                    .with_aliased(MethodId::new(cls_id, idx));
                                 script_ref_receiver_methods.push((name, method));
                             }
 
@@ -173,9 +173,9 @@ impl<'ctx> CompilationInputs<'ctx> {
                         });
                         mappings.methods.insert(idx, method_idx);
 
-                        let id = MethodId::new(class_id, idx);
+                        let method_id = MethodId::new(cls_id, idx);
                         if !method.flags().is_final() && !method.flags().is_static() {
-                            virtuals.insert(method.name(), id);
+                            virtuals.insert(method.name(), method_id);
                         }
                     }
 
@@ -187,7 +187,7 @@ impl<'ctx> CompilationInputs<'ctx> {
                         methods.add(name, method);
                     }
 
-                    let type_flags = type_flags.get(class_name.as_ref());
+                    let type_flags = type_flags.get(cls_name.as_ref());
                     let flags = AggregateFlags::new()
                         .with_is_abstract(cls.flags().is_abstract())
                         .with_is_native(cls.flags().is_native())
@@ -200,23 +200,23 @@ impl<'ctx> CompilationInputs<'ctx> {
                     let agg =
                         Aggregate::new(flags, base, fields, methods, HashMap::default(), None);
                     let def = TypeDef::new([], TypeSchema::Aggregate(agg.into()), []);
-                    inputs.symbols.add_type(class_id, def);
+                    inputs.symbols.add_type(cls_id, def);
 
                     if LOAD_MAPPING {
                         let mappings = ClassMappings::new(index, mappings.methods);
                         inputs
                             .mapping
                             .classes
-                            .insert(TypeApp::nullary(class_id), mappings);
+                            .insert(TypeApp::nullary(cls_id), mappings);
                     }
 
-                    virtual_map.insert(class_id, virtuals);
+                    virtual_map.insert(cls_id, virtuals);
                 }
                 IndexedDefinition::Enum(idx, enm) => {
                     let name = bundle
                         .get_item(enm.name())
                         .ok_or_else(|| Error::MissingPoolItem("enum name", enm.name().into()))?;
-                    let id = interner.intern(name.as_ref());
+                    let enum_id = interner.intern(name.as_ref());
 
                     let mut enum_ = Enum::default();
                     for &value in enm.values() {
@@ -228,12 +228,13 @@ impl<'ctx> CompilationInputs<'ctx> {
                         })?;
                         enum_.add_variant(assert_borrowed(name), val.value());
                     }
-                    inputs
-                        .symbols
-                        .add_type(id, TypeDef::new([], TypeSchema::Enum(enum_.into()), []));
+                    inputs.symbols.add_type(
+                        enum_id,
+                        TypeDef::new([], TypeSchema::Enum(enum_.into()), []),
+                    );
 
                     if LOAD_MAPPING {
-                        inputs.mapping.enums.insert(id, idx);
+                        inputs.mapping.enums.insert(enum_id, idx);
                     }
                 }
                 IndexedDefinition::Function(idx, func) => {
@@ -250,10 +251,13 @@ impl<'ctx> CompilationInputs<'ctx> {
                         .with_is_native(func.flags().is_native());
                     let typ = load_function_type(func, bundle, interner, type_flags)?;
                     let func = FreeFunction::new(flags, typ, [], None);
-                    let id = inputs.symbols.add_free_function(name, func);
+                    let func_idx = inputs.symbols.add_free_function(name, func);
 
                     if LOAD_MAPPING {
-                        inputs.mapping.functions.insert(Signature::new(id, []), idx);
+                        inputs
+                            .mapping
+                            .functions
+                            .insert(Signature::new(func_idx, []), idx);
                     }
                 }
                 _ => {}

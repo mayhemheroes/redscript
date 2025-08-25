@@ -367,10 +367,10 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 span,
             } => {
                 let receiver_t = self.mono_type_app(receiver_type, *span)?;
-                let id = receiver_t.id();
+                let cls_id = receiver_t.id();
                 let class = self.monomorph.class(&receiver_t, self.symbols, self.bundle);
                 let field = self.bundle[class].fields()[usize::from(field.index())];
-                match self.symbols[id].schema() {
+                match self.symbols[cls_id].schema() {
                     TypeSchema::Aggregate(agg) if agg.flags().is_struct() => {
                         self.emit(Instr::StructField(field));
                         self.assemble_expr(receiver)?;
@@ -508,12 +508,12 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                     self.monomorph
                         .mono_method(&parent_t, index, self.symbols, self.bundle)
                 } else {
-                    let id = MethodWithReceiver::new(parent_t.into_owned(), method.index());
+                    let method_id = MethodWithReceiver::new(parent_t.into_owned(), method.index());
                     let types = type_args
                         .iter()
                         .map(|typ| self.mono_type(typ, span))
                         .collect::<Result<Box<_>, AssembleError<'ctx>>>()?;
-                    let sig = Signature::new(id, types);
+                    let sig = Signature::new(method_id, types);
 
                     self.monomorph.method(sig, self.symbols, self.bundle)
                 };
@@ -549,12 +549,12 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                     self.monomorph
                         .mono_method(&parent_t, idx, self.symbols, self.bundle)
                 } else {
-                    let id = MethodWithReceiver::new(parent_t.into_owned(), method.index());
+                    let method_id = MethodWithReceiver::new(parent_t.into_owned(), method.index());
                     let types = type_args
                         .iter()
                         .map(|typ| self.mono_type(typ, span))
                         .collect::<Result<Box<_>, AssembleError<'ctx>>>()?;
-                    let sig = Signature::new(id, types);
+                    let sig = Signature::new(method_id, types);
                     self.monomorph.method(sig, self.symbols, self.bundle)
                 };
 

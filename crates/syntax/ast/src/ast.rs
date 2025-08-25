@@ -694,8 +694,8 @@ impl<'src> Stmt<'src, WithSpan> {
             Stmt::Break | Stmt::Continue => return QueryResult::Stmt(self),
             Stmt::Let { value, typ, .. } => {
                 if let Some(typ) = typ {
-                    let (typ, typ_span) = &**typ;
-                    if typ_span.contains(pos) {
+                    let (typ, type_span) = &**typ;
+                    if type_span.contains(pos) {
                         return typ.find_at(pos);
                     }
                 }
@@ -1085,18 +1085,18 @@ impl<'src> Expr<'src, WithSpan> {
             }
             Expr::DynCast { expr, typ, .. } => {
                 let (expr, span) = &**expr;
-                let (typ, typ_span) = &**typ;
+                let (typ, type_span) = &**typ;
                 if span.contains(pos) {
                     expr.find_at(pos)
-                } else if typ_span.contains(pos) {
+                } else if type_span.contains(pos) {
                     typ.find_at(pos)
                 } else {
                     QueryResult::Expr(self)
                 }
             }
             Expr::New { typ, args } => {
-                let (typ, typ_span) = &**typ;
-                if typ_span.contains(pos) {
+                let (typ, type_span) = &**typ;
+                if type_span.contains(pos) {
                     typ.find_at(pos)
                 } else {
                     args.iter()
@@ -1214,10 +1214,10 @@ impl<'src> Pattern<'src, WithSpan> {
             }
             Pattern::As(pat, typ) => {
                 let (pat, pat_span) = &**pat;
-                let (typ, typ_span) = &typ;
+                let (typ, type_span) = &typ;
                 if pat_span.contains(pos) {
                     pat.find_at(pos)
-                } else if typ_span.contains(pos) {
+                } else if type_span.contains(pos) {
                     Some(typ.find_at(pos))
                 } else {
                     None

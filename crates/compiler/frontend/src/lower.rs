@@ -1067,7 +1067,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         let elem_t = PolyType::fresh();
 
         let (mut expr, expr_t) = self.lower_expr(expr, env)?;
-        let id = if let Some(typ) = expr_t
+        let type_id = if let Some(typ) = expr_t
             .upper_bound(self.symbols)
             .filter(|typ| typ.id().is_static_array())
         {
@@ -1076,7 +1076,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             predef::ARRAY
         };
 
-        let array_t = Type::app(id, [elem_t.clone()]).into_poly();
+        let array_t = Type::app(type_id, [elem_t.clone()]).into_poly();
         self.coerce(&mut expr, expr_t, array_t.clone(), env, *expr_span)?;
 
         let (index, index_t) = self.lower_expr(index, env)?;
@@ -1214,7 +1214,8 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             self.lower_expr(expr, env)?
         };
 
-        let id = TypeId::fn_with_arity(args.len()).ok_or(Error::UnsupportedArity(call_span))?;
+        let type_id =
+            TypeId::fn_with_arity(args.len()).ok_or(Error::UnsupportedArity(call_span))?;
         let mut checked_args = Vec::with_capacity(args.len());
         let mut arg_types = Vec::with_capacity(args.len());
         for arg in args {
@@ -1228,7 +1229,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             .into_iter()
             .chain([return_t.clone()])
             .collect::<Rc<_>>();
-        let func_t = TypeApp::new(id, func_t_args);
+        let func_t = TypeApp::new(type_id, func_t_args);
 
         typ.constrain_base(&func_t.clone().into_type().into_poly(), self.symbols)
             .with_span(*expr_span)?;
@@ -1328,8 +1329,8 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         let captured = captures.iter().map(|cap| cap.captured).collect::<Box<_>>();
         self.captures.extend(captures);
 
-        let id = TypeId::fn_with_arity(params.len()).ok_or(Error::UnsupportedArity(span))?;
-        let typ = TypeApp::new(id, func_t_args);
+        let type_id = TypeId::fn_with_arity(params.len()).ok_or(Error::UnsupportedArity(span))?;
+        let typ = TypeApp::new(type_id, func_t_args);
         let closure = ir::Closure::new(typ.clone(), locals, captured, block);
         let ir = ir::Expr::NewClosure {
             closure: closure.into(),
@@ -1667,9 +1668,14 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             .span(call_span)
             .resolve()?;
 
-        let id = resolved.resulution.function;
-        let method = &self.symbols[id];
-        self.check_visibility(member, id.parent(), method.flags().visibility(), call_span);
+        let method_id = resolved.resulution.function;
+        let method = &self.symbols[method_id];
+        self.check_visibility(
+            member,
+            method_id.parent(),
+            method.flags().visibility(),
+            call_span,
+        );
 
         let (call, call_t) = if let Some(aliased) = method.aliased_method()
             && method.flags().is_static_forwarder()

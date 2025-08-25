@@ -410,10 +410,9 @@ impl<'scope, 'ctx: 'i, 'i> Decompiler<'scope, 'ctx, 'i> {
                 } else if function.flags().is_static() {
                     if let Some(class) = function.class() {
                         let class = self.bundle.try_get_item(class)?;
-                        let class_name =
-                            self.bundle.try_get_item_hint(class.name(), "class name")?;
+                        let cls_name = self.bundle.try_get_item_hint(class.name(), "class name")?;
                         ast::Expr::Member {
-                            expr: ast::Expr::Ident(class_name).into(),
+                            expr: ast::Expr::Ident(cls_name).into(),
                             member: name,
                         }
                     } else if mangled_name.starts_with("Cast;") {

@@ -40,9 +40,9 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
 
             for class in mod_.classes {
                 let types = scope.types.push_scope(class.scope);
-                let class_t = &self.symbols[class.id];
+                let cls_t = &self.symbols[class.id];
 
-                let class_type_args = class_t
+                let class_type_args = cls_t
                     .params()
                     .iter()
                     .map(|param| Type::Ctx(param.clone()))
@@ -71,9 +71,10 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                     let Some(default) = item.default else {
                         continue;
                     };
-                    let id = FieldId::new(class.id, item.id);
+                    let field_id = FieldId::new(class.id, item.id);
                     let env = Env::new(&types, &scope.funcs);
-                    if let Some(expr) = lower_constant(id, &default, &env, &self.symbols, reporter)
+                    if let Some(expr) =
+                        lower_constant(field_id, &default, &env, &self.symbols, reporter)
                     {
                         fields.insert(item.id, expr);
                     }

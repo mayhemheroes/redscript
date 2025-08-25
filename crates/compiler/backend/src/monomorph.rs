@@ -202,7 +202,7 @@ impl<'ctx> Monomorphizer<'ctx> {
             .with_return_type(return_t)
             .with_source(source);
 
-        let idx = bundle.define_and_init(def, |bundle, idx, f| {
+        let func_idx = bundle.define_and_init(def, |bundle, idx, f| {
             let params = func
                 .type_()
                 .params()
@@ -212,8 +212,8 @@ impl<'ctx> Monomorphizer<'ctx> {
             f.with_parameters(params)
         });
 
-        self.functions.insert(sig, idx);
-        idx
+        self.functions.insert(sig, func_idx);
+        func_idx
     }
 
     pub fn method(
@@ -226,7 +226,7 @@ impl<'ctx> Monomorphizer<'ctx> {
             return idx;
         }
 
-        let parent = self.class(&sig.id().receiver, symbols, bundle);
+        let parent_idx = self.class(&sig.id().receiver, symbols, bundle);
 
         let (name, method) = symbols
             .get_method(sig.id().method())
@@ -237,12 +237,12 @@ impl<'ctx> Monomorphizer<'ctx> {
 
         let base = method.overriden().map(|id| &symbols[id]);
         let mangled = MangledMethod::new(name, &sig, method, base, &env).to_string();
-        let idx = self.add_method_to_pool(mangled, method, parent, &env, symbols, bundle);
+        let func_idx = self.add_method_to_pool(mangled, method, parent_idx, &env, symbols, bundle);
 
-        self.methods.insert(sig, idx);
-        bundle[parent].add_method(idx);
+        self.methods.insert(sig, func_idx);
+        bundle[parent_idx].add_method(func_idx);
 
-        idx
+        func_idx
     }
 
     pub fn mono_method(
@@ -320,11 +320,11 @@ impl<'ctx> Monomorphizer<'ctx> {
             return self.type_(&MonoType::new(predef::REF, [typ.clone()]), symbols, bundle);
         }
 
-        if let Some(&idx) = self.types.get(typ) {
-            return idx;
+        if let Some(&type_idx) = self.types.get(typ) {
+            return type_idx;
         }
 
-        let idx = match schema {
+        let type_idx = match schema {
             TypeSchema::Primitive => match (typ.id(), typ.args()) {
                 (id, [arg]) if id == predef::REF => {
                     self.class(arg, symbols, bundle);
@@ -363,9 +363,9 @@ impl<'ctx> Monomorphizer<'ctx> {
             },
             _ => define_class(typ, bundle),
         };
-        self.types.insert(typ.clone(), idx);
+        self.types.insert(typ.clone(), type_idx);
 
-        idx
+        type_idx
     }
 
     fn function_body(
@@ -401,8 +401,8 @@ impl<'ctx> Monomorphizer<'ctx> {
             .expect("source file should exist");
         let (line, _) = file.line_and_offset(span.start);
         let line = line as u32 + 1; // lines are 1-indexed
-        let idx = if let Some(&idx) = self.files.get(&span.file) {
-            idx
+        let source_idx = if let Some(&source_idx) = self.files.get(&span.file) {
+            source_idx
         } else {
             let index = 0xCAFE_BABE + self.files.len() as u32;
             let path_hash = self.functions.map.hasher().hash_one(file.path());
@@ -411,11 +411,11 @@ impl<'ctx> Monomorphizer<'ctx> {
 
             let file =
                 SourceFile::new(index, lower_hash, upper_hash, file.path().to_string_lossy());
-            let idx = bundle.define(file);
-            self.files.insert(span.file, idx);
-            idx
+            let source_idx = bundle.define(file);
+            self.files.insert(span.file, source_idx);
+            source_idx
         };
-        SourceReference::new(idx, line)
+        SourceReference::new(source_idx, line)
     }
 
     pub(super) fn source_line(&self, span: Span) -> u16 {
@@ -437,12 +437,12 @@ impl<'ctx> Monomorphizer<'ctx> {
         for (id, expr) in &unit.added_fields {
             let (name, field) = symbols.get_field(*id).expect("field should exist");
             let class = self.classes[&MonoType::nullary(id.parent())].index();
-            let idx = self.add_field_to_pool(name, field, class, &env, symbols, bundle);
-            bundle[class].add_field(idx);
+            let field_idx = self.add_field_to_pool(name, field, class, &env, symbols, bundle);
+            bundle[class].add_field(field_idx);
 
             if let Some(default) = expr {
                 let default = MangledConstant::new(default, symbols).to_string();
-                bundle[idx].set_defaults([Property::new(id.parent().as_str(), default)]);
+                bundle[field_idx].set_defaults([Property::new(id.parent().as_str(), default)]);
             }
         }
 
@@ -459,16 +459,16 @@ impl<'ctx> Monomorphizer<'ctx> {
 
         for (id, _) in &unit.added_methods {
             let parent_t = MonoType::nullary(id.parent());
-            let class_idx = self.classes[&parent_t].index();
+            let cls_idx = self.classes[&parent_t].index();
             let (name, func) = symbols.get_method(*id).expect("added method should exist");
             let sig = Signature::new((), []);
             let mangled = MangledMethod::new(name, &sig, func, None, &env).to_string();
-            let idx = self.add_method_to_pool(mangled, func, class_idx, &env, symbols, bundle);
-            bundle[class_idx].add_method(idx);
+            let func_idx = self.add_method_to_pool(mangled, func, cls_idx, &env, symbols, bundle);
+            bundle[cls_idx].add_method(func_idx);
 
             self.classes[&parent_t]
                 .methods_mut()
-                .insert(id.index(), idx);
+                .insert(id.index(), func_idx);
         }
 
         for (id, body) in &unit.added_methods {
@@ -508,7 +508,7 @@ impl<'ctx> Monomorphizer<'ctx> {
             let parent_t = MonoType::nullary(id.parent());
             let class = &self.classes[&parent_t];
             let mut index = class.methods()[&id.index()];
-            let class_index = class.index();
+            let cls_idx = class.index();
 
             let wrapped = bundle[index].clone();
             let wrapped_name = wrapped.name();
@@ -537,7 +537,7 @@ impl<'ctx> Monomorphizer<'ctx> {
                         .collect::<Vec<_>>();
                     def.with_parameters(parameters)
                 });
-                bundle[class_index].add_method(next);
+                bundle[cls_idx].add_method(next);
 
                 self.classes[&parent_t].set_alias(id.index(), next);
                 self.function_body(index, func, &env, symbols, bundle)?;
@@ -621,18 +621,20 @@ impl<'ctx> Monomorphizer<'ctx> {
             .map_or_else(|| typ.to_string(), ToString::to_string);
         let cname = bundle.cnames_mut().add(name);
         let class = PoolClass::new(cname, Visibility::Public, flags).with_base(base);
-        let idx = bundle.define(class);
+        let cls_idx = bundle.define(class);
 
-        self.classes
-            .insert(typ.clone(), ClassMappings::new(idx, IndexMap::default()));
+        self.classes.insert(
+            typ.clone(),
+            ClassMappings::new(cls_idx, IndexMap::default()),
+        );
 
-        let class_env = typ.type_env(symbols);
+        let cls_env = typ.type_env(symbols);
 
         for entry in aggregate.fields().iter() {
             let name = entry.name();
             let field =
-                self.add_field_to_pool(name, entry.field(), idx, &class_env, symbols, bundle);
-            bundle[idx].add_field(field);
+                self.add_field_to_pool(name, entry.field(), cls_idx, &cls_env, symbols, bundle);
+            bundle[cls_idx].add_field(field);
         }
 
         let mut methods = IndexMap::default();
@@ -644,17 +646,16 @@ impl<'ctx> Monomorphizer<'ctx> {
 
             let sig = Signature::new((), []);
             let base = func.overriden().map(|id| &symbols[id]);
-            let mangled =
-                MangledMethod::new(entry.name(), &sig, func, base, &class_env).to_string();
-            let method = self.add_method_to_pool(mangled, func, idx, &class_env, symbols, bundle);
+            let mangled = MangledMethod::new(entry.name(), &sig, func, base, &cls_env).to_string();
+            let method = self.add_method_to_pool(mangled, func, cls_idx, &cls_env, symbols, bundle);
 
-            bundle[idx].add_method(method);
+            bundle[cls_idx].add_method(method);
             methods.insert(*entry.key(), method);
         }
 
         mem::swap(self.classes[&typ].methods_mut(), &mut methods);
 
-        idx
+        cls_idx
     }
 
     pub fn add_enum_to_pool(
@@ -682,7 +683,7 @@ impl<'ctx> Monomorphizer<'ctx> {
 
         let enum_ = PoolEnum::new(name, Visibility::Public, size);
 
-        let idx = bundle.define_and_init(enum_, |bundle, idx, enum_| {
+        let enum_idx = bundle.define_and_init(enum_, |bundle, idx, enum_| {
             let values = variants
                 .map(|(name, val)| {
                     let name = bundle.cnames_mut().add(name);
@@ -692,7 +693,7 @@ impl<'ctx> Monomorphizer<'ctx> {
             enum_.with_values(values)
         });
 
-        self.enums.insert(id, idx);
+        self.enums.insert(id, enum_idx);
     }
 
     fn add_method_to_pool(

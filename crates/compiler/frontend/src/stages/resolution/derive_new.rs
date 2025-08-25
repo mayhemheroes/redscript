@@ -10,7 +10,7 @@ use crate::{
 };
 
 pub fn derive_new_method<'e, 'ctx: 'e>(
-    id: TypeId<'ctx>,
+    cls_id: TypeId<'ctx>,
     vars: &[Rc<CtxVar<'ctx>>],
     fields: impl IntoIterator<Item = FieldEntry<'e, 'ctx>>,
     span: Span,
@@ -19,12 +19,11 @@ pub fn derive_new_method<'e, 'ctx: 'e>(
         .with_visibility(Visibility::Public)
         .with_is_final(true)
         .with_is_static(true);
-    let return_t = Type::app(
-        id,
-        vars.iter()
-            .map(|var| Type::Ctx(var.clone()))
-            .collect::<Rc<[_]>>(),
-    );
+    let args = vars
+        .iter()
+        .map(|var| Type::Ctx(var.clone()))
+        .collect::<Rc<[_]>>();
+    let return_t = Type::app(cls_id, args);
     let params = fields
         .into_iter()
         .map(|field| {
@@ -41,7 +40,7 @@ pub fn derive_new_method<'e, 'ctx: 'e>(
 }
 
 pub fn derive_new_method_item<'e, 'ctx: 'e>(
-    id: FunctionIndex,
+    func_idx: FunctionIndex,
     type_name: &'ctx str,
     fields: impl IntoIterator<Item = FieldEntry<'e, 'ctx>> + Clone,
     span: Span,
@@ -90,7 +89,7 @@ pub fn derive_new_method_item<'e, 'ctx: 'e>(
 
     let param_names = fields.into_iter().map(|e| e.name()).collect::<Box<[_]>>();
     FuncItem::new(
-        id,
+        func_idx,
         span,
         span,
         param_names,
