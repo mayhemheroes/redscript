@@ -102,6 +102,8 @@ pub enum Error<'ctx> {
     PrivateMemberAccess(&'ctx str, TypeId<'ctx>, Span),
     #[error("member `{0}` of `{1}` is protected")]
     ProtectedMemberAccess(&'ctx str, TypeId<'ctx>, Span),
+    #[error("attempting to mix use of a type with and without `ref`")]
+    RefMismatch(Span),
 }
 
 impl Error<'_> {
@@ -140,7 +142,8 @@ impl Error<'_> {
             | Self::ImpossibleDynCast(_, span)
             | Self::RedundantDynCast(span)
             | Self::PrivateMemberAccess(_, _, span)
-            | Self::ProtectedMemberAccess(_, _, span) => *span,
+            | Self::ProtectedMemberAccess(_, _, span)
+            | Self::RefMismatch(span) => *span,
         }
     }
 
@@ -180,6 +183,7 @@ impl Error<'_> {
             Self::RedundantDynCast(_) => "REDUNDANT_DYN_CAST",
             Self::PrivateMemberAccess(_, _, _) => "PRIVATE_MEMBER_ACCESS",
             Self::ProtectedMemberAccess(_, _, _) => "PROTECTED_MEMBER_ACCESS",
+            Self::RefMismatch(_) => "REF_MISMATCH",
         }
     }
 

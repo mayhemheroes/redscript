@@ -2059,8 +2059,10 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             Some(Coercion::FromRef(RefType::Script)) => ir::Intrinsic::Deref,
             Some(Coercion::IntoRef(RefType::Script)) => ir::Intrinsic::AsRef,
             Some(Coercion::IntoVariant) => ir::Intrinsic::ToVariant,
-            Some(Coercion::FromRef(RefType::Strong) | Coercion::IntoRef(RefType::Strong))
-            | None => return Ok(()),
+            Some(Coercion::FromRef(RefType::Strong) | Coercion::IntoRef(RefType::Strong)) => {
+                return Err(Error::RefMismatch(span));
+            }
+            None => return Ok(()),
         };
         let arg = mem::replace(expr, ir::Expr::null(span));
         let (call, _) = self

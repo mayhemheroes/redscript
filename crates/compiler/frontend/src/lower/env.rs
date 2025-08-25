@@ -121,22 +121,24 @@ impl<'scope, 'ctx> TypeEnv<'scope, 'ctx> {
     ) -> LowerResult<'ctx, Type<'ctx>> {
         match typ {
             ast::Type::Named { name, args } => match (self.0.get(name), &args[..]) {
-                (Some(&TypeRef::Id(id)), [(arg, span)]) if id == predef::REF => {
-                    let flags = symbols
-                        .get_type(id)
+                (Some(&TypeRef::Id(id)), [(arg, span)])
+                    if id == predef::REF || id == predef::WREF =>
+                {
+                    let arg = self.resolve(arg, symbols, *span)?;
+                    let flags = arg
+                        .upper_bound()
+                        .and_then(|ub| symbols.get_type(ub.id()))
                         .and_then(|def| def.schema().as_aggregate())
                         .map(Aggregate::flags)
                         .unwrap_or_default();
-                    let arg = self.resolve(arg, symbols, *span)?;
                     if flags.is_never_ref() {
                         return Err(Error::RefOnNeverRefType(*span));
                     }
-                    let result = if flags.is_mixed_ref() {
-                        Type::app(predef::REF, [arg])
+                    if flags.is_mixed_ref() || id == predef::WREF {
+                        Ok(Type::app(id, [arg]))
                     } else {
-                        arg
-                    };
-                    Ok(result)
+                        Ok(arg)
+                    }
                 }
                 (Some(&TypeRef::Id(id)), _) => {
                     let args = args

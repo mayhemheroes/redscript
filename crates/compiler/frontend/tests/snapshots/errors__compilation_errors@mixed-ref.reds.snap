@@ -7,3 +7,13 @@ input_file: crates/compiler/frontend/tests/data/mixed-ref.reds
   let _ = new NeverRef(); // Error
               ^^^^^^^^
 this type cannot be constructed with the `new` operator, use `NeverRef()` instead
+
+[REF_MISMATCH] At tests/data/mixed-ref.reds:15:32
+  let withRef: ref<MixedRef> = MixedRef(); // Error
+                               ^^^^^^^^^^
+attempting to mix use of a type with and without `ref`
+
+[REF_MISMATCH] At tests/data/mixed-ref.reds:18:30
+  let withoutRef: MixedRef = new MixedRef(); // Error
+                             ^^^^^^^^^^^^^^
+attempting to mix use of a type with and without `ref`
