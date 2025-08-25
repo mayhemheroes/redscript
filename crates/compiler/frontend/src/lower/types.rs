@@ -482,6 +482,11 @@ impl<'ctx> PolyType<'ctx> {
             }
         }
     }
+
+    #[inline]
+    pub fn is_fresh(&self) -> bool {
+        matches!(self, Self::Var(var) if var.is_fresh())
+    }
 }
 
 impl<'ctx> From<(TypeId<'ctx>, Rc<[PolyType<'ctx>]>)> for PolyType<'ctx> {
@@ -512,6 +517,11 @@ impl<'ctx> Var<'ctx> {
     #[inline]
     fn fresh() -> Self {
         Self::new(Type::Nothing, None)
+    }
+
+    fn is_fresh(&self) -> bool {
+        let state = self.0.borrow();
+        matches!(&state.lower, Type::Nothing) && state.upper.is_none() && state.repr.is_none()
     }
 
     #[inline]

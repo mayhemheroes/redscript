@@ -37,6 +37,7 @@ pub struct Lower<'scope, 'ctx> {
     symbols: &'scope Symbols<'ctx>,
     reporter: &'scope mut LowerReporter<'ctx>,
     context: Option<TypeId<'ctx>>,
+    does_return_value: bool,
 }
 
 #[bon]
@@ -56,6 +57,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             symbols,
             reporter,
             context,
+            does_return_value: false,
         }
     }
 
@@ -109,6 +111,11 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             match body {
                 ast::FunctionBody::Block(block) => {
                     let mut lower = Lower::new(locals, ret_t.clone(), context, symbols, reporter);
+                    if !lower.does_return_value && ret_t.is_fresh() {
+                        ret_t
+                            .constrain_base(&PolyType::nullary(predef::VOID), symbols)
+                            .ok();
+                    }
                     (lower.lower_block(&block.stmts, env), lower.into_output())
                 }
                 ast::FunctionBody::Inline(expr) => {
@@ -865,10 +872,11 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 ir::Stmt::Block(block, span)
             }
             ast::Stmt::Return(Some(val)) => {
+                self.does_return_value = true;
                 let val @ (_, val_span) = &**val;
-                let rt = self.return_type.clone();
-                let (mut val, val_t) = self.lower_expr_with(val, Some(&rt), env)?;
-                self.coerce(&mut val, val_t, rt, env, *val_span)?;
+                let return_t = self.return_type.clone();
+                let (mut val, val_t) = self.lower_expr_with(val, Some(&return_t), env)?;
+                self.coerce(&mut val, val_t, return_t, env, *val_span)?;
                 ir::Stmt::Return(Some(val.into()), span)
             }
             ast::Stmt::Return(None) => {
