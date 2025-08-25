@@ -286,7 +286,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                         .extend(overloads.iter().copied());
                 }
                 &Export::Type { id, .. } => {
-                    scope.types.add(name, TypeRef::Name(id));
+                    scope.types.add(name, TypeRef::Id(id));
                 }
             }
         }
@@ -307,7 +307,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                         .map(|p| (p.aggregate.name, p.id))
                         .chain(module.enums.iter().map(|p| (p.enum_.name, p.id)))
                     {
-                        type_scope.add(name, TypeRef::Name(id));
+                        type_scope.add(name, TypeRef::Id(id));
                     }
 
                     for entry in &module.functions {
@@ -328,7 +328,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                 for entry in &module.imports {
                     self.module_map.visit_import(
                         &entry.import,
-                        |name, typ| type_scope.add(name, TypeRef::Name(typ)),
+                        |name, typ| type_scope.add(name, TypeRef::Id(typ)),
                         |name, func| func_scope.top_mut().entry(name).or_default().push(func),
                         |error| {
                             let error = match error {
@@ -1406,7 +1406,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
             .get(cls_name)
             .ok_or(LowerError::UnresolvedType(cls_name, cls_span));
         let typ = self.reporter.unwrap_err(target)?;
-        let &TypeRef::Name(id) = typ else {
+        let &TypeRef::Id(id) = typ else {
             self.reporter
                 .report(Diagnostic::InvalidAnnotationType(cls_name, cls_span));
             return None;
@@ -1688,7 +1688,7 @@ impl<'scope, 'ctx> Scope<'scope, 'ctx> {
     pub fn new(symbols: &Symbols<'ctx>) -> Self {
         let mut types = TypeEnv::with_default_types();
         for (id, _) in symbols.types() {
-            types.add(id.as_str(), TypeRef::Name(id));
+            types.add(id.as_str(), TypeRef::Id(id));
         }
 
         let mut funcs = IndexMap::<&str, FreeFunctionIndexes>::default();

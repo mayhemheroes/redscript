@@ -330,12 +330,12 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
             ir::Expr::Const(const_, _) => self.assemble_const(const_)?,
             ir::Expr::Null { is_weak: false, .. } => self.emit(Instr::Null),
             ir::Expr::Null { is_weak: true, .. } => self.emit(Instr::WeakRefNull),
-            ir::Expr::NewClass { class_type, span } => {
+            ir::Expr::NewInstance { class_type, span } => {
                 let class_t = self.mono_type_app(class_type, *span)?;
                 let class_t = self.monomorph.class(&class_t, self.symbols, self.bundle);
                 self.emit(Instr::New(class_t));
             }
-            ir::Expr::NewStruct {
+            ir::Expr::Construct {
                 args: values,
                 struct_type,
                 span,

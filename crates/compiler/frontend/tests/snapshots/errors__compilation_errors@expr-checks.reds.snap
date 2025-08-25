@@ -9,8 +9,8 @@ input_file: crates/compiler/frontend/tests/data/expr-checks.reds
 this expression is not a place that can be written to
 
 [INVALID_TEMP] At tests/data/expr-checks.reds:13:4
-  (new Struct(2)).x;
-   ^^^^^^^^^^^^^
+  (Struct(2)).x;
+   ^^^^^^
 the highlighted temporary value cannot be used in this expression, consider extracting it to a local
 
 [INVALID_TEMP] At tests/data/expr-checks.reds:15:13

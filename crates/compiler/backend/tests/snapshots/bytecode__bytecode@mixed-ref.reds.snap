@@ -1,0 +1,15 @@
+---
+source: crates/compiler/backend/tests/bytecode.rs
+expression: "BytecodePrinter::new(&bundle, bundle_len)"
+input_file: crates/compiler/backend/tests/data/mixed-ref.reds
+---
+// Test; (f0)
+assign
+local 0
+struct.new 0 0
+assign
+local 1
+struct.new 0 1
+assign
+local 2
+object.new 1

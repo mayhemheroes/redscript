@@ -75,10 +75,10 @@ pub struct TypeEnv<'scope, 'ctx>(ScopedMap<'scope, &'ctx str, TypeRef<'scope, 'c
 impl<'scope, 'ctx> TypeEnv<'scope, 'ctx> {
     pub fn with_default_types() -> Self {
         let mut map = IndexMap::default();
-        map.insert("array", TypeRef::Name(predef::ARRAY));
-        map.insert("ref", TypeRef::Name(predef::REF));
-        map.insert("wref", TypeRef::Name(predef::WREF));
-        map.insert("script_ref", TypeRef::Name(predef::SCRIPT_REF));
+        map.insert("array", TypeRef::Id(predef::ARRAY));
+        map.insert("ref", TypeRef::Id(predef::REF));
+        map.insert("wref", TypeRef::Id(predef::WREF));
+        map.insert("script_ref", TypeRef::Id(predef::SCRIPT_REF));
 
         Self(ScopedMap::from(map))
     }
@@ -121,7 +121,7 @@ impl<'scope, 'ctx> TypeEnv<'scope, 'ctx> {
     ) -> LowerResult<'ctx, Type<'ctx>> {
         match typ {
             ast::Type::Named { name, args } => match (self.0.get(name), &args[..]) {
-                (Some(&TypeRef::Name(id)), [(arg, span)]) if id == predef::REF => {
+                (Some(&TypeRef::Id(id)), [(arg, span)]) if id == predef::REF => {
                     let flags = symbols
                         .get_type(id)
                         .and_then(|def| def.schema().as_aggregate())
@@ -138,7 +138,7 @@ impl<'scope, 'ctx> TypeEnv<'scope, 'ctx> {
                     };
                     Ok(result)
                 }
-                (Some(&TypeRef::Name(id)), _) => {
+                (Some(&TypeRef::Id(id)), _) => {
                     let args = args
                         .iter()
                         .map(|(typ, span)| self.resolve(typ, symbols, *span))
@@ -279,7 +279,7 @@ impl Capture {
 
 #[derive(Debug, Clone)]
 pub enum TypeRef<'scope, 'ctx> {
-    Name(TypeId<'ctx>),
+    Id(TypeId<'ctx>),
     Var(Rc<CtxVar<'ctx>>),
     #[allow(clippy::type_complexity)]
     LazyVar(
@@ -300,7 +300,7 @@ pub enum TypeRef<'scope, 'ctx> {
 impl<'ctx> TypeRef<'_, 'ctx> {
     pub fn force(self) -> Option<TypeRef<'static, 'ctx>> {
         match self {
-            Self::Name(id) => Some(TypeRef::Name(id)),
+            Self::Id(id) => Some(TypeRef::Id(id)),
             Self::Var(typ) => Some(TypeRef::Var(typ)),
             Self::LazyVar(lazy) => Some(TypeRef::Var(lazy.try_get()?.ok()?)),
         }
@@ -308,7 +308,7 @@ impl<'ctx> TypeRef<'_, 'ctx> {
 
     pub fn id(&self) -> Option<TypeId<'ctx>> {
         match self {
-            &Self::Name(id) => Some(id),
+            &Self::Id(id) => Some(id),
             _ => None,
         }
     }

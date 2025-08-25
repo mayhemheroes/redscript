@@ -5,5 +5,5 @@ struct Struct {
 }
 
 func Test() {
-  let a = new Struct(10, "");
+  let a = Struct(10, "");
 }

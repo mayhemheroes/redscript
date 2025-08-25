@@ -35,15 +35,19 @@ pub enum Error<'ctx> {
          type annotations"
     )]
     InsufficientTypeInformation(Span),
-    #[error("this type cannot be constructed with the `new` operator")]
+    #[error("this type does not support the `new` operator")]
     InvalidNewType(Span),
+    #[error("this type cannot be directly constructed")]
+    InvalidConstructType(Span),
+    #[error("this type cannot be constructed with the `new` operator, use `{0}()` instead")]
+    NewWithConstructible(TypeId<'ctx>, Span),
     #[error("this type cannot be casted with the `as` operator")]
     InvalidDynCastType(Span),
     #[error("the target type of this cast is not known, consider specifying it")]
     UnknownStaticCastType(Span),
     #[error("invalid number of type arguments, expected {0}")]
     InvalidTypeArgCount(usize, Span),
-    #[error("class constructors do not accept arguments")]
+    #[error("class constructors do not accept positional arguments")]
     ClassConstructorHasArguments(Span),
     #[error(
         "unsupported arity, functions can only have up to {} parameters",
@@ -112,6 +116,8 @@ impl Error<'_> {
             | Self::InvalidArgCount(_, span)
             | Self::InsufficientTypeInformation(span)
             | Self::InvalidNewType(span)
+            | Self::InvalidConstructType(span)
+            | Self::NewWithConstructible(_, span)
             | Self::InvalidDynCastType(span)
             | Self::UnknownStaticCastType(span)
             | Self::InvalidTypeArgCount(_, span)
@@ -150,7 +156,9 @@ impl Error<'_> {
             Self::InsufficientTypeInformation(_) => "CANNOT_LOOKUP_MEMBER",
             Self::InvalidNewType(_)
             | Self::ClassConstructorHasArguments(_)
-            | Self::InstantiatingAbstract(_, _) => "INVALID_NEW_USE",
+            | Self::InstantiatingAbstract(_, _)
+            | Self::NewWithConstructible(_, _) => "INVALID_NEW_USE",
+            Self::InvalidConstructType(_) => "INVALID_CONSTRUCT",
             Self::InvalidDynCastType(_) => "INVALID_DYN_CAST",
             Self::UnknownStaticCastType(_) => "INVALID_STATIC_CAST",
             Self::InvalidTypeArgCount(_, _) => "INVALID_TYPE_ARG_COUNT",

@@ -10,7 +10,7 @@ struct Struct {
 func Test() {
   ReturnsInt() = 2;
 
-  (new Struct(2)).x;
+  (Struct(2)).x;
 
   ArraySize(ReturnsArray());
   ReturnsArray()[0] = 2;

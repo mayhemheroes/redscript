@@ -176,8 +176,8 @@ pub trait Visitor<'ctx> {
 
     fn visit_expr(&mut self, expr: &ir::Expr<'ctx>) {
         match expr {
-            ir::Expr::NewClass { class_type, span } => self.visit_new_class(class_type, *span),
-            ir::Expr::NewStruct {
+            ir::Expr::NewInstance { class_type, span } => self.visit_new_class(class_type, *span),
+            ir::Expr::Construct {
                 struct_type,
                 args,
                 span,

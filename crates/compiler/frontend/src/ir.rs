@@ -198,11 +198,11 @@ impl<'ctx> Case<'ctx> {
 
 #[derive(Debug)]
 pub enum Expr<'ctx> {
-    NewClass {
+    NewInstance {
         class_type: TypeApp<'ctx>,
         span: Span,
     },
-    NewStruct {
+    Construct {
         struct_type: TypeApp<'ctx>,
         args: Box<[Self]>,
         span: Span,
@@ -271,8 +271,8 @@ impl<'ctx> Expr<'ctx> {
 
     pub fn span(&self) -> Span {
         match self {
-            Self::NewClass { span, .. }
-            | Self::NewStruct { span, .. }
+            Self::NewInstance { span, .. }
+            | Self::Construct { span, .. }
             | Self::NewClosure { span, .. }
             | Self::Call { span, .. }
             | Self::Assign { span, .. }
@@ -315,7 +315,7 @@ impl<'ctx> Expr<'ctx> {
 
     pub fn find_at(&self, pos: u32) -> &Expr<'ctx> {
         match self {
-            Expr::NewStruct { args: values, .. } => values
+            Expr::Construct { args: values, .. } => values
                 .binary_search_by(|v| v.span().cmp_pos(pos))
                 .ok()
                 .map(|i| values[i].find_at(pos))

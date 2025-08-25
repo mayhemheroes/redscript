@@ -387,7 +387,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 })
             }
             ast::Pattern::Aggregate((name, span), fields) => {
-                let Some(TypeRef::Name(type_id)) = env.types().get(name) else {
+                let Some(TypeRef::Id(type_id)) = env.types().get(name) else {
                     return Err(Error::UnresolvedType(name, *span));
                 };
 
@@ -690,10 +690,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 expr,
                 type_args,
                 args,
-            } => {
-                let (call, typ) = self.lower_call(expr, type_args, args, hint, env, *span)?;
-                (ir::Expr::call(call, *span), typ)
-            }
+            } => self.lower_call(expr, type_args, args, hint, env, *span)?,
             ast::Expr::Member { expr, member } => self.lower_member(expr, member, env, *span)?,
             ast::Expr::Index { expr, index } => self.lower_index(expr, index, env, *span)?,
             ast::Expr::DynCast { expr, typ } => self.lower_dyn_cast(expr, typ, env, *span)?,
@@ -992,69 +989,113 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         };
         let def = &self.symbols[typ.id()];
 
-        let type_args = if typ.args().is_empty() {
+        match def.schema() {
+            TypeSchema::Aggregate(agg) if agg.flags().is_abstract() => {
+                Err(Error::InstantiatingAbstract(typ.id(), *type_span))
+            }
+            TypeSchema::Aggregate(agg) if agg.flags().is_struct() || agg.flags().is_never_ref() => {
+                Err(Error::NewWithConstructible(typ.id(), *type_span))
+            }
+            TypeSchema::Aggregate(_) if !args.is_empty() => {
+                Err(Error::ClassConstructorHasArguments(span))
+            }
+            TypeSchema::Aggregate(agg) => {
+                let type_args = if typ.args().is_empty() {
+                    def.params()
+                        .iter()
+                        .map(|_| PolyType::fresh())
+                        .collect::<Rc<_>>()
+                } else if typ.args().len() != def.params().len() {
+                    let expected = def.params().len();
+                    return Err(Error::InvalidTypeArgCount(expected, *type_span));
+                } else {
+                    typ.args().iter().map(PolyType::from_type).collect()
+                };
+                let typ = TypeApp::new(typ.id(), type_args);
+
+                let ir = ir::Expr::NewInstance {
+                    class_type: typ.clone().into(),
+                    span,
+                };
+                let typ = typ.into_type().into_poly();
+                let typ = if agg.flags().is_mixed_ref() {
+                    Type::app(predef::REF, [typ]).into_poly()
+                } else {
+                    typ
+                };
+                Ok((ir, typ))
+            }
+            _ => Err(Error::InvalidNewType(*type_span)),
+        }
+    }
+
+    fn lower_construct(
+        &mut self,
+        id: TypeId<'ctx>,
+        args: &[Spanned<ast::SourceExpr<'ctx>>],
+        type_args: &[Spanned<ast::SourceType<'ctx>>],
+        env: &Env<'_, 'ctx>,
+        span: Span,
+    ) -> LowerResult<'ctx, (ir::Expr<'ctx>, PolyType<'ctx>)> {
+        let def = &self.symbols[id];
+
+        let type_args = if type_args.is_empty() {
             def.params()
                 .iter()
                 .map(|_| PolyType::fresh())
                 .collect::<Rc<_>>()
-        } else if typ.args().len() != def.params().len() {
+        } else if type_args.len() != def.params().len() {
             let expected = def.params().len();
-            return Err(Error::InvalidTypeArgCount(expected, *type_span));
+            return Err(Error::InvalidTypeArgCount(expected, span));
         } else {
-            typ.args().iter().map(PolyType::from_type).collect()
+            type_args
+                .iter()
+                .map(|(typ, span)| self.resolve_type(typ, env, *span))
+                .collect::<Result<Rc<_>, _>>()?
         };
-        let typ = TypeApp::new(typ.id(), type_args);
-        let inferred = typ.clone().into_type().into_poly();
+        let typ = TypeApp::new(id, type_args);
 
-        let ir = match def.schema() {
-            TypeSchema::Aggregate(aggregate) if aggregate.flags().is_struct() => {
-                let field_count = aggregate.fields().len();
-
-                if aggregate.flags().is_native() && !aggregate.flags().is_fully_defined() {
-                    if !args.is_empty() {
-                        self.reporter
-                            .report(Error::NonFullyDefinedNativeStructConstruction(
-                                typ.id(),
-                                span,
-                            ));
-                    }
-                } else if args.len() != field_count {
-                    self.reporter
-                        .report(Error::InvalidArgCount(field_count..=field_count, span));
-                }
-
-                let type_env = typ.type_env(self.symbols);
-                let args = args
-                    .iter()
-                    .zip(aggregate.fields().iter())
-                    .map(|(arg @ (_, arg_span), field)| {
-                        let expected =
-                            PolyType::from_type_with_env(field.field().type_(), &type_env)
-                                .map_err(|var| Error::UnresolvedVar(var, *arg_span))?;
-                        let (mut expr, typ) = self.lower_expr_with(arg, Some(&expected), env)?;
-                        self.coerce(&mut expr, typ, expected, env, *arg_span)?;
-                        Ok(expr)
-                    })
-                    .collect::<Result<_, _>>()?;
-                ir::Expr::NewStruct {
-                    struct_type: typ.into(),
-                    args,
-                    span,
-                }
-            }
-            TypeSchema::Aggregate(agg) if agg.flags().is_abstract() => {
-                return Err(Error::InstantiatingAbstract(typ.id(), *type_span));
-            }
-            TypeSchema::Aggregate(_) if args.is_empty() => ir::Expr::NewClass {
-                class_type: typ.into(),
-                span,
-            },
-            TypeSchema::Aggregate(_) => {
-                return Err(Error::ClassConstructorHasArguments(span));
-            }
-            _ => return Err(Error::InvalidNewType(*type_span)),
+        let TypeSchema::Aggregate(aggregate) = def.schema() else {
+            return Err(Error::InvalidConstructType(span));
         };
-        Ok((ir, inferred))
+
+        if !aggregate.flags().is_struct()
+            && !aggregate.flags().is_mixed_ref()
+            && !aggregate.flags().is_never_ref()
+        {
+            return Err(Error::InvalidConstructType(span));
+        }
+
+        let field_count = aggregate.fields().len();
+
+        if aggregate.flags().is_native() && !aggregate.flags().is_fully_defined() {
+            if !args.is_empty() {
+                self.reporter
+                    .report(Error::NonFullyDefinedNativeStructConstruction(id, span));
+            }
+        } else if args.len() != field_count {
+            self.reporter
+                .report(Error::InvalidArgCount(field_count..=field_count, span));
+        }
+
+        let type_env = typ.type_env(self.symbols);
+        let args = args
+            .iter()
+            .zip(aggregate.fields().iter())
+            .map(|(arg @ (_, arg_span), field)| {
+                let expected = PolyType::from_type_with_env(field.field().type_(), &type_env)
+                    .map_err(|var| Error::UnresolvedVar(var, *arg_span))?;
+                let (mut expr, typ) = self.lower_expr_with(arg, Some(&expected), env)?;
+                self.coerce(&mut expr, typ, expected, env, *arg_span)?;
+                Ok(expr)
+            })
+            .collect::<Result<_, _>>()?;
+        let ir = ir::Expr::Construct {
+            struct_type: typ.clone().into(),
+            args,
+            span,
+        };
+        Ok((ir, typ.into_type().into_poly()))
     }
 
     fn lower_index(
@@ -1152,7 +1193,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         hint: Option<&PolyType<'ctx>>,
         env: &Env<'_, 'ctx>,
         call_span: Span,
-    ) -> LowerResult<'ctx, (ir::Call<'ctx>, PolyType<'ctx>)> {
+    ) -> LowerResult<'ctx, (ir::Expr<'ctx>, PolyType<'ctx>)> {
         if let &(ast::Expr::Ident("Cast"), _) = expr
             && let [] | [_] = type_args
             && args.len() == 1
@@ -1178,10 +1219,16 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         }
 
         if let &(ast::Expr::Ident(name), _) = expr
+            && let Some(&TypeRef::Id(id)) = env.types().get(name)
+        {
+            return self.lower_construct(id, args, type_args, env, *expr_span);
+        }
+
+        if let &(ast::Expr::Ident(name), _) = expr
             && let mut candidates = env.query_free_functions(name, self.symbols).peekable()
             && candidates.peek().is_some()
         {
-            let res = self
+            let (call, typ) = self
                 .overload_resolver()
                 .name(name)
                 .args(args)
@@ -1192,7 +1239,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 .span(*expr_span)
                 .resolve()?
                 .into_call();
-            return Ok(res);
+            return Ok((ir::Expr::call(call, call_span), typ));
         };
 
         let (closure, typ) = if let (ast::Expr::Member { expr, member }, _) = expr {
@@ -1207,7 +1254,9 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 .call_span(call_span)
                 .build()?
             {
-                (MemberCall::MethodCall(call), typ) => return Ok((call, typ)),
+                (MemberCall::MethodCall(call), typ) => {
+                    return Ok((ir::Expr::call(call, call_span), typ));
+                }
                 (MemberCall::FieldAccess(field), typ) => (field, typ),
             }
         } else {
@@ -1239,7 +1288,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             args: checked_args.into(),
             closure_type: func_t.into(),
         };
-        Ok((call, return_t.clone()))
+        Ok((ir::Expr::call(call, call_span), return_t.clone()))
     }
 
     fn lower_static_cast(
@@ -1248,13 +1297,13 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         type_args: &[Spanned<ast::SourceType<'ctx>>],
         hint: Option<&PolyType<'ctx>>,
         env: &Env<'_, 'ctx>,
-        expr_span: Span,
-    ) -> LowerResult<'ctx, (ir::Call<'ctx>, PolyType<'ctx>)> {
+        span: Span,
+    ) -> LowerResult<'ctx, (ir::Expr<'ctx>, PolyType<'ctx>)> {
         let target_t = match (type_args, hint) {
             ([(target, target_span)], _) => self.resolve_type(target, env, *target_span)?,
             ([], Some(hint)) => hint.clone(),
-            ([], None) => return Err(Error::UnknownStaticCastType(expr_span)),
-            _ => return Err(Error::InvalidTypeArgCount(1, expr_span)),
+            ([], None) => return Err(Error::UnknownStaticCastType(span)),
+            _ => return Err(Error::InvalidTypeArgCount(1, span)),
         };
         let candidates = env
             .query_free_functions("Cast", self.symbols)
@@ -1265,17 +1314,17 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                     self.symbols,
                 )
             });
-        let res = self
+        let (call, typ) = self
             .overload_resolver()
             .name("Cast")
             .args(args)
             .candidates(candidates)
             .maybe_type_hint(hint)
             .env(env)
-            .span(expr_span)
+            .span(span)
             .resolve()?
             .into_call();
-        Ok(res)
+        Ok((ir::Expr::call(call, span), typ))
     }
 
     fn lower_closure(
@@ -1347,7 +1396,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         span: Span,
     ) -> LowerResult<'ctx, (ir::Expr<'ctx>, PolyType<'ctx>)> {
         if let (ast::Expr::Ident(ident), _) = receiver
-            && let Some(&TypeRef::Name(type_id)) = env.types().get(ident)
+            && let Some(&TypeRef::Id(type_id)) = env.types().get(ident)
             && let TypeSchema::Enum(enum_) = self.symbols[type_id].schema()
         {
             let (field_idx, _) = enum_
@@ -1580,7 +1629,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         call_span: Span,
     ) -> LowerResult<'ctx, (MemberCall<'ctx>, PolyType<'ctx>)> {
         if let (ast::Expr::Ident(ident), _) = receiver
-            && let Some(&TypeRef::Name(typ)) = env.types().get(ident)
+            && let Some(&TypeRef::Id(typ)) = env.types().get(ident)
             && let mut candidates = self
                 .symbols
                 .base_iter_with_self(typ)

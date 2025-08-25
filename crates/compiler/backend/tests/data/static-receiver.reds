@@ -1,6 +1,6 @@
 
 func Test() {
-   let self = new Dummy();
+   let self = Dummy();
    self.TakesSelf();
    self.TakesScriptRef();
 }

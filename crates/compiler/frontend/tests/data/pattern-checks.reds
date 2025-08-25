@@ -1,6 +1,6 @@
 
 func Test() {
-  if let Struct { field } = new Struct(1) {
+  if let Struct { field } = Struct(1) {
   }
 
   switch [] {
