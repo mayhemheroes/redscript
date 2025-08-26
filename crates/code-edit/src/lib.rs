@@ -1,10 +1,8 @@
 use std::borrow::Cow;
 
 use anyhow::Context;
-use redscript_compiler_api::{
-    Diagnostic, FieldId, LowerError, MethodId, Symbols, TypeId,
-    ast::{FileId, SourceMap, Span},
-};
+use redscript_compiler_api::ast::{FileId, SourceMap, Span};
+use redscript_compiler_api::{Diagnostic, FieldId, LowerError, MethodId, Symbols, TypeId};
 
 #[derive(Debug, Clone)]
 pub enum CodeEdit<'ctx> {

@@ -1,8 +1,9 @@
 use std::{env, fs};
 
 use redscript_code_edit::{CodeEdit, TextEdit};
+use redscript_compiler_api::ast::SourceMap;
 use redscript_compiler_api::{
-    CompileErrorReporter, SourceMapExt, Symbols, TypeInterner, ast::SourceMap, infer_from_sources,
+    CompileErrorReporter, SourceMapExt, Symbols, TypeInterner, infer_from_sources,
 };
 
 #[test]
