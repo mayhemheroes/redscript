@@ -3,42 +3,52 @@ source: crates/compiler/frontend/tests/errors.rs
 expression: "DisplayDiagnostics(reporter.into_reported(), &sources)"
 input_file: crates/compiler/frontend/tests/data/visibility.reds
 ---
-[PRIVATE_MEMBER_ACCESS] At tests/data/visibility.reds:33:5
+[INACCESSIBLE_FIELD] At tests/data/visibility.reds:28:13
+    let _ = this.privateField; // Error: private field cannot be accessed from subclass
+            ^^^^^^^^^^^^^^^^^
+private member `privateField` of `Class` is not accessible here
+
+[INACCESSIBLE_FIELD] At tests/data/visibility.reds:29:13
+    let _ = this.field; // Error: field should be private by default
+            ^^^^^^^^^^
+private member `field` of `Class` is not accessible here
+
+[INACCESSIBLE_METHOD] At tests/data/visibility.reds:33:5
     this.PrivateMethod(); // Error: private method cannot be accessed from subclass
     ^^^^^^^^^^^^^^^^^^^^
-member `PrivateMethod` of `Class` is private
+private member `PrivateMethod` of `Class` is not accessible here
 
-[PRIVATE_MEMBER_ACCESS] At tests/data/visibility.reds:34:5
+[INACCESSIBLE_METHOD] At tests/data/visibility.reds:34:5
     this.Method(); // Error: method should be private by default
     ^^^^^^^^^^^^^
-member `Method` of `Class` is private
+private member `Method` of `Class` is not accessible here
 
-[PRIVATE_MEMBER_ACCESS] At tests/data/visibility.reds:43:11
+[INACCESSIBLE_FIELD] At tests/data/visibility.reds:43:11
   let _ = inst.privateField; // Error: private field cannot be accessed outside the class
           ^^^^^^^^^^^^^^^^^
-member `privateField` of `Class` is private
+private member `privateField` of `Class` is not accessible here
 
-[PRIVATE_MEMBER_ACCESS] At tests/data/visibility.reds:44:11
+[INACCESSIBLE_FIELD] At tests/data/visibility.reds:44:11
   let _ = inst.field; // Error: field should be private by default
           ^^^^^^^^^^
-member `field` of `Class` is private
+private member `field` of `Class` is not accessible here
 
-[PROTECTED_MEMBER_ACCESS] At tests/data/visibility.reds:45:11
+[INACCESSIBLE_FIELD] At tests/data/visibility.reds:45:11
   let _ = inst.protectedField; // Error: protected field cannot be accessed outside the class
           ^^^^^^^^^^^^^^^^^^^
-member `protectedField` of `Class` is protected
+protected member `protectedField` of `Class` is not accessible here
 
-[PRIVATE_MEMBER_ACCESS] At tests/data/visibility.reds:48:3
+[INACCESSIBLE_METHOD] At tests/data/visibility.reds:48:3
   inst.PrivateMethod(); // Error: private method cannot be accessed outside the class
   ^^^^^^^^^^^^^^^^^^^^
-member `PrivateMethod` of `Class` is private
+private member `PrivateMethod` of `Class` is not accessible here
 
-[PRIVATE_MEMBER_ACCESS] At tests/data/visibility.reds:49:3
+[INACCESSIBLE_METHOD] At tests/data/visibility.reds:49:3
   inst.Method(); // Error: method should be private by default
   ^^^^^^^^^^^^^
-member `Method` of `Class` is private
+private member `Method` of `Class` is not accessible here
 
-[PROTECTED_MEMBER_ACCESS] At tests/data/visibility.reds:50:3
+[INACCESSIBLE_METHOD] At tests/data/visibility.reds:50:3
   inst.ProtectedMethod(); // Error: protected method cannot be accessed outside the class
   ^^^^^^^^^^^^^^^^^^^^^^
-member `ProtectedMethod` of `Class` is protected
+protected member `ProtectedMethod` of `Class` is not accessible here

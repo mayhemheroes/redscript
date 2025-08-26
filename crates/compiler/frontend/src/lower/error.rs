@@ -5,11 +5,11 @@ use std::rc::Rc;
 use redscript_ast::Span;
 use thiserror::Error;
 
-use crate::Immutable;
 use crate::diagnostic::{DiagnosticLevel, MethodSignature};
 use crate::lower::types::{InferredType, InferredTypeApp};
 use crate::types::{MAX_FN_ARITY, MAX_STATIC_ARRAY_SIZE, TypeId, predef};
 use crate::utils::fmt::sep_by;
+use crate::{FieldId, Immutable, MethodId, Visibility};
 
 pub type InferResult<'ctx, A> = Result<A, TypeError<'ctx>>;
 pub type LowerResult<'id, A, E = Error<'id>> = Result<A, E>;
@@ -39,7 +39,7 @@ pub enum Error<'ctx> {
     InvalidNewType(Span),
     #[error("this type cannot be directly constructed")]
     InvalidConstructType(Span),
-    #[error("this type cannot be constructed with the `new` operator, use `{0}()` instead")]
+    #[error("`{0}` cannot be constructed with the `new` operator, use `{0}()` instead")]
     NewWithConstructible(TypeId<'ctx>, Span),
     #[error("this type cannot be casted with the `as` operator")]
     InvalidDynCastType(Span),
@@ -98,10 +98,10 @@ pub enum Error<'ctx> {
     ImpossibleDynCast(Box<TypeError<'ctx>>, Span),
     #[error("this cast is redundant, you should remove it")]
     RedundantDynCast(Span),
-    #[error("member `{0}` of `{1}` is private")]
-    PrivateMemberAccess(&'ctx str, TypeId<'ctx>, Span),
-    #[error("member `{0}` of `{1}` is protected")]
-    ProtectedMemberAccess(&'ctx str, TypeId<'ctx>, Span),
+    #[error("{0}")]
+    InaccessibleMethod(Box<InaccessibleMember<'ctx, MethodId<'ctx>>>, Span),
+    #[error("{0}")]
+    InaccessibleField(Box<InaccessibleMember<'ctx, FieldId<'ctx>>>, Span),
     #[error("attempting to mix use of a type with and without `ref`")]
     RefMismatch(Span),
 }
@@ -141,8 +141,8 @@ impl Error<'_> {
             | Self::RefOnNeverRefType(span)
             | Self::ImpossibleDynCast(_, span)
             | Self::RedundantDynCast(span)
-            | Self::PrivateMemberAccess(_, _, span)
-            | Self::ProtectedMemberAccess(_, _, span)
+            | Self::InaccessibleMethod(_, span)
+            | Self::InaccessibleField(_, span)
             | Self::RefMismatch(span) => *span,
         }
     }
@@ -181,8 +181,8 @@ impl Error<'_> {
             Self::RefOnNeverRefType(_) => "REF_ON_NEVER_REF",
             Self::ImpossibleDynCast(_, _) => "IMPOSSIBLE_DYN_CAST",
             Self::RedundantDynCast(_) => "REDUNDANT_DYN_CAST",
-            Self::PrivateMemberAccess(_, _, _) => "PRIVATE_MEMBER_ACCESS",
-            Self::ProtectedMemberAccess(_, _, _) => "PROTECTED_MEMBER_ACCESS",
+            Self::InaccessibleMethod { .. } => "INACCESSIBLE_METHOD",
+            Self::InaccessibleField { .. } => "INACCESSIBLE_FIELD",
             Self::RefMismatch(_) => "REF_MISMATCH",
         }
     }
@@ -192,8 +192,8 @@ impl Error<'_> {
             Self::DeprecatedNameOf(_) => DiagnosticLevel::Warning,
             Self::InvalidTemporary(_)
             | Self::NonFullyDefinedNativeStructConstruction(_, _)
-            | Self::PrivateMemberAccess(_, _, _)
-            | Self::ProtectedMemberAccess(_, _, _) => DiagnosticLevel::ErrorAllowedAtRuntime,
+            | Self::InaccessibleMethod(_, _)
+            | Self::InaccessibleField(_, _) => DiagnosticLevel::ErrorAllowedAtRuntime,
             _ => DiagnosticLevel::Error,
         }
     }
@@ -248,6 +248,28 @@ pub enum TypeError<'ctx> {
     CannotUnify(InferredType<'ctx>, InferredType<'ctx>),
     #[error("{0}\n  when comparing `{1}` and `{2}`")]
     Nested(Box<Self>, InferredType<'ctx>, InferredType<'ctx>),
+}
+
+#[derive(Debug, Clone, Error)]
+#[error("{visibility} member `{name}` of `{}` is not accessible here", .id.as_ref().as_str())]
+pub struct InaccessibleMember<'ctx, K: AsRef<TypeId<'ctx>>> {
+    id: K,
+    visibility: Visibility,
+    name: &'ctx str,
+}
+
+impl<'ctx, K: AsRef<TypeId<'ctx>>> InaccessibleMember<'ctx, K> {
+    pub fn new(id: K, name: &'ctx str, visibility: Visibility) -> Self {
+        Self {
+            id,
+            visibility,
+            name,
+        }
+    }
+
+    pub fn id(&self) -> &K {
+        &self.id
+    }
 }
 
 #[derive(Debug)]

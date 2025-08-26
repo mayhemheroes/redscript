@@ -10,10 +10,10 @@ pub use redscript_compiler_backend::{CompilationInputs, TypeFlagRegistry, TypeFl
 use redscript_compiler_frontend::UnknownSource;
 use redscript_compiler_frontend::pass::{DiagnosticPass, UnusedLocals};
 pub use redscript_compiler_frontend::{
-    Aggregate, CompileErrorReporter, Diagnostic, DiagnosticLevel, Enum, Evaluator, Field,
-    FunctionType, LoweredCompilationUnit, LoweredFunction, PolyType, Symbols, TypeId, TypeIndex,
-    TypeInterner, TypeSchema, TypeScope, infer_from_sources, ir, parse_file, parse_files, pass,
-    process_sources, types,
+    Aggregate, CompileErrorReporter, Diagnostic, DiagnosticLevel, Enum, Evaluator, Field, FieldId,
+    FunctionType, LowerError, LoweredCompilationUnit, LoweredFunction, MethodId, PolyType, Symbols,
+    TypeId, TypeIndex, TypeInterner, TypeSchema, TypeScope, infer_from_sources, ir, parse_file,
+    parse_files, pass, process_sources, types,
 };
 use redscript_io::byte;
 pub use redscript_io::{SaveError, ScriptBundle};

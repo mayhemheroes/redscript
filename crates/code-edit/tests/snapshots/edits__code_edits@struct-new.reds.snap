@@ -1,0 +1,22 @@
+---
+source: crates/code-edit/tests/edits.rs
+expression: body
+input_file: crates/code-edit/tests/data/struct-new.reds
+---
+struct Dummy {
+  let a: Int32;
+  let b: String;
+}
+
+struct Tuple<A, B> {
+  let first: A;
+  let second: B;
+}
+
+func Test() {
+  let a = Dummy(1, "a");
+  let b = Dummy(2, "b");
+
+  let c = Tuple<Int32, String>(3, "c");
+  let d = Tuple(4, "d");
+}

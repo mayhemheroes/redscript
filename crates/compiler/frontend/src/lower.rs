@@ -15,6 +15,7 @@ use types::Coercion;
 pub use types::{InferredTypeApp, Poly, PolyType};
 
 use crate::diagnostic::{ErrorWithSpan, MethodSignature};
+use crate::lower::error::InaccessibleMember;
 use crate::symbols::{
     AnyBaseType, FieldId, FreeFunctionIndex, FunctionEntry, FunctionKey, FunctionKind,
     FunctionType, Symbols, TypeSchema, Visibility,
@@ -991,10 +992,10 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
 
         match def.schema() {
             TypeSchema::Aggregate(agg) if agg.flags().is_abstract() => {
-                Err(Error::InstantiatingAbstract(typ.id(), *type_span))
+                Err(Error::InstantiatingAbstract(typ.id(), span))
             }
             TypeSchema::Aggregate(agg) if agg.flags().is_struct() || agg.flags().is_never_ref() => {
-                Err(Error::NewWithConstructible(typ.id(), *type_span))
+                Err(Error::NewWithConstructible(typ.id(), span))
             }
             TypeSchema::Aggregate(_) if !args.is_empty() => {
                 Err(Error::ClassConstructorHasArguments(span))
@@ -1719,12 +1720,12 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
 
         let method_id = resolved.resulution.function;
         let method = &self.symbols[method_id];
-        self.check_visibility(
-            member,
-            method_id.parent(),
-            method.flags().visibility(),
-            call_span,
-        );
+        if !self.check_visibility(method_id.parent(), method.flags().visibility()) {
+            self.reporter.report(Error::InaccessibleMethod(
+                InaccessibleMember::new(method_id, member, method.flags().visibility()).into(),
+                call_span,
+            ));
+        }
 
         let (call, call_t) = if let Some(aliased) = method.aliased_method()
             && method.flags().is_static_forwarder()
@@ -2001,8 +2002,14 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             .base_iter_with_self(receiver_t.id())
             .find_map(|(id, agg)| Some((id, agg.fields().by_name(member)?)))
             .ok_or_else(|| Error::UnresolvedMember(receiver_t.id(), member, span))?;
+        let field_id = FieldId::new(target_id, field_idx);
 
-        self.check_visibility(member, receiver_t.id(), field.flags().visibility(), span);
+        if !self.check_visibility(target_id, field.flags().visibility()) {
+            self.reporter.report(Error::InaccessibleField(
+                InaccessibleMember::new(field_id, member, field.flags().visibility()).into(),
+                span,
+            ));
+        }
 
         let this_t = receiver_t
             .instantiate_as::<AnyBaseType>(target_id, self.symbols)
@@ -2010,7 +2017,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         let env = this_t.type_env(self.symbols);
         let typ = PolyType::from_type_with_env(field.type_(), &env)
             .map_err(|var| Error::UnresolvedVar(var, span))?;
-        Ok((FieldId::new(target_id, field_idx), typ, this_t))
+        Ok((field_id, typ, this_t))
     }
 
     fn resolve_local(
@@ -2076,30 +2083,15 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         Ok(())
     }
 
-    fn check_visibility(
-        &mut self,
-        member: &'ctx str,
-        parent: TypeId<'ctx>,
-        visibility: Visibility,
-        span: Span,
-    ) {
+    fn check_visibility(&mut self, parent: TypeId<'ctx>, visibility: Visibility) -> bool {
         match visibility {
-            Visibility::Private if self.context != Some(parent) => {
-                self.reporter
-                    .report(Error::PrivateMemberAccess(member, parent, span));
-            }
-            Visibility::Protected
-                if self.context.is_none_or(|context| {
-                    !self
-                        .symbols
-                        .base_iter_with_self(context)
-                        .any(|(id, _)| id == parent)
-                }) =>
-            {
-                self.reporter
-                    .report(Error::ProtectedMemberAccess(member, parent, span));
-            }
-            _ => {}
+            Visibility::Private => self.context == Some(parent),
+            Visibility::Protected => self.context.is_some_and(|context| {
+                self.symbols
+                    .base_iter_with_self(context)
+                    .any(|(id, _)| id == parent)
+            }),
+            _ => true,
         }
     }
 

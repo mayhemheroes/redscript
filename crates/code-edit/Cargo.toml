@@ -1,0 +1,17 @@
+[package]
+name = "redscript-code-edit"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[dependencies]
+redscript-compiler-api.workspace = true
+
+anyhow.workspace = true
+mimalloc.workspace = true
+
+[dev-dependencies]
+insta.workspace = true
+
+[lints]
+workspace = true

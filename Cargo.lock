@@ -1309,6 +1309,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "redscript-code-edit"
+version = "1.0.0-preview.17"
+dependencies = [
+ "anyhow",
+ "insta",
+ "mimalloc",
+ "redscript-compiler-api",
+]
+
+[[package]]
 name = "redscript-compiler-api"
 version = "1.0.0-preview.17"
 dependencies = [

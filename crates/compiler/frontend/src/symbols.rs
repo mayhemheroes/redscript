@@ -668,6 +668,13 @@ impl<'id> MethodId<'id> {
     }
 }
 
+impl<'ctx> AsRef<TypeId<'ctx>> for MethodId<'ctx> {
+    #[inline]
+    fn as_ref(&self) -> &TypeId<'ctx> {
+        &self.parent
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct FieldId<'id> {
     parent: TypeId<'id>,
@@ -688,6 +695,13 @@ impl<'id> FieldId<'id> {
     #[inline]
     pub fn index(&self) -> FieldIndex {
         self.index
+    }
+}
+
+impl<'ctx> AsRef<TypeId<'ctx>> for FieldId<'ctx> {
+    #[inline]
+    fn as_ref(&self) -> &TypeId<'ctx> {
+        &self.parent
     }
 }
 

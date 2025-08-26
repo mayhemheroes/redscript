@@ -18,12 +18,12 @@ method overrides cannot be less visibile than the method they override (protecte
                  ^^^^^^
 method overrides cannot be less visibile than the method they override (public)
 
-[PROTECTED_MEMBER_ACCESS] At tests/data/implicit-visibility.reds:36:3
+[INACCESSIBLE_METHOD] At tests/data/implicit-visibility.reds:36:3
   class.Protected(); // Error
   ^^^^^^^^^^^^^^^^^
-member `Protected` of `ChildWithImplicit` is protected
+protected member `Protected` of `ChildWithImplicit` is not accessible here
 
-[PRIVATE_MEMBER_ACCESS] At tests/data/implicit-visibility.reds:37:3
+[INACCESSIBLE_METHOD] At tests/data/implicit-visibility.reds:37:3
   class.Private(); // Error
   ^^^^^^^^^^^^^^^
-member `Private` of `ChildWithImplicit` is private
+private member `Private` of `ChildWithImplicit` is not accessible here

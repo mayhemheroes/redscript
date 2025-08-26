@@ -3,10 +3,10 @@ source: crates/compiler/frontend/tests/errors.rs
 expression: "DisplayDiagnostics(reporter.into_reported(), &sources)"
 input_file: crates/compiler/frontend/tests/data/mixed-ref.reds
 ---
-[INVALID_NEW_USE] At tests/data/mixed-ref.reds:10:15
+[INVALID_NEW_USE] At tests/data/mixed-ref.reds:10:11
   let _ = new NeverRef(); // Error
-              ^^^^^^^^
-this type cannot be constructed with the `new` operator, use `NeverRef()` instead
+          ^^^^^^^^^^^^^^
+`NeverRef` cannot be constructed with the `new` operator, use `NeverRef()` instead
 
 [REF_MISMATCH] At tests/data/mixed-ref.reds:15:32
   let withRef: ref<MixedRef> = MixedRef(); // Error

@@ -1,0 +1,30 @@
+---
+source: crates/code-edit/tests/edits.rs
+expression: body
+input_file: crates/code-edit/tests/data/visibility.reds
+---
+class Class {
+  public let privateField: Int32;
+  public let field: Int32;
+  protected let protectedField: Int32;
+  public let publicField: Int32;
+
+  public func PrivateMethod() {}
+  public func Method() {}
+  protected func ProtectedMethod() {}
+  public func PublicMethod() {}
+}
+
+class Subclass extends Class {
+  func Testing() {
+    let _ = this.privateField; // Error: private field cannot be accessed from subclass
+    let _ = this.field; // Error: field should be private by default
+    let _ = this.protectedField; // OK: protected field can be accessed from subclass
+    let _ = this.publicField; // OK: public field can be accessed from subclass
+
+    this.PrivateMethod(); // Error: private method cannot be accessed from subclass
+    this.Method(); // Error: method should be private by default
+    this.ProtectedMethod(); // OK, protected method can be accessed from subclass
+    this.PublicMethod(); // OK, public method can be accessed from subclass
+  }
+}

@@ -17,7 +17,7 @@ pub enum Diagnostic<'ctx> {
     #[error("{0}")]
     SyntaxError(#[from] parser::Error),
     #[error("{0}")]
-    TypeError(LowerError<'ctx>),
+    LoweringError(LowerError<'ctx>),
     #[error("{0}")]
     CoalesceError(Box<CoalesceError<'ctx>>, Span),
     #[error("duplicate variant name")]
@@ -111,7 +111,7 @@ pub enum Diagnostic<'ctx> {
 impl<'ctx> Diagnostic<'ctx> {
     pub fn level(&self) -> DiagnosticLevel {
         match self {
-            Self::TypeError(err) => err.level(),
+            Self::LoweringError(err) => err.level(),
             Self::DuplicateVariantValue(_) | Self::FinalMethodOverride(_, _) => {
                 DiagnosticLevel::Pedantic
             }
@@ -135,7 +135,7 @@ impl<'ctx> Diagnostic<'ctx> {
     pub fn span(&self) -> Span {
         match self {
             Self::SyntaxError(err) => err.span(),
-            Self::TypeError(err) => err.span(),
+            Self::LoweringError(err) => err.span(),
             Self::Cte(err) => err.span(),
             Self::CoalesceError(_, span)
             | Self::DuplicateVariantName(span)
@@ -185,7 +185,7 @@ impl<'ctx> Diagnostic<'ctx> {
     pub fn code(&self) -> &'static str {
         match self {
             Self::SyntaxError(_) => "SYNTAX_ERR",
-            Self::TypeError(err) => err.code(),
+            Self::LoweringError(err) => err.code(),
             Self::CoalesceError(_, _) => "COALESCE_ERR",
             Self::DuplicateVariantName(_) => "DUP_VARIANT_NAME",
             Self::DuplicateVariantValue(_) => "DUP_VARIANT_VAL",
@@ -276,7 +276,7 @@ pub enum DiagnosticLevel {
 
 impl<'ctx> From<LowerError<'ctx>> for Diagnostic<'ctx> {
     fn from(err: LowerError<'ctx>) -> Self {
-        Self::TypeError(err)
+        Self::LoweringError(err)
     }
 }
 
