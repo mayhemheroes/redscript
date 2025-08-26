@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::ptr;
 
 use mimalloc::MiMalloc;
-use scc_shared::{SccOutput, SccSettings, SourceRef, SourceRefType};
+use scc_core::{SccOutput, SccSettings, SourceRef, SourceRefType};
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -85,7 +85,7 @@ pub unsafe extern "C" fn scc_settings_register_mixed_ref_type(
 
 #[unsafe(no_mangle)]
 pub extern "C" fn scc_compile(settings: Box<SccSettings>) -> Box<SccResult> {
-    let res = match scc_shared::compile(&settings) {
+    let res = match scc_core::compile(&settings) {
         Ok(output) => SccResult::Success(Box::new(output)),
         Err(err) => SccResult::Error(err),
     };

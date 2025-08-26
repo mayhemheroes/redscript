@@ -10,7 +10,7 @@ members = [
     "crates/compiler/api",
     "crates/decompiler",
     "crates/cli",
-    "crates/scc/shared",
+    "crates/scc/core",
     "crates/scc/capi",
     "crates/scc/cli",
     "crates/dotfile",
@@ -31,7 +31,7 @@ redscript-compiler-frontend.path = "crates/compiler/frontend"
 redscript-compiler-backend.path = "crates/compiler/backend"
 redscript-compiler-api.path = "crates/compiler/api"
 redscript-decompiler.path = "crates/decompiler"
-scc-shared.path = "crates/scc/shared"
+scc-core.path = "crates/scc/core"
 redscript-dotfile.path = "crates/dotfile"
 
 log = "0.4"

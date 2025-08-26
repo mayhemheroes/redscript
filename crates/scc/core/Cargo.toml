@@ -1,5 +1,5 @@
 [package]
-name = "scc-shared"
+name = "scc-core"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true

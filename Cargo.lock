@@ -1529,16 +1529,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "scc-lib"
-version = "1.0.0-preview.17"
-dependencies = [
- "anyhow",
- "mimalloc",
- "scc-shared",
-]
-
-[[package]]
-name = "scc-shared"
+name = "scc-core"
 version = "1.0.0-preview.17"
 dependencies = [
  "anyhow",
@@ -1554,6 +1545,15 @@ dependencies = [
  "thiserror 2.0.16",
  "toml 0.9.5",
  "vmap",
+]
+
+[[package]]
+name = "scc-lib"
+version = "1.0.0-preview.17"
+dependencies = [
+ "anyhow",
+ "mimalloc",
+ "scc-core",
 ]
 
 [[package]]

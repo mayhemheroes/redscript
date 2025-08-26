@@ -8,7 +8,7 @@ edition.workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
-scc-shared.workspace = true
+scc-core.workspace = true
 anyhow.workspace = true
 
 mimalloc.workspace = true
