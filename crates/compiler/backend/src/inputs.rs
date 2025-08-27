@@ -393,10 +393,21 @@ fn load_type<'ctx, K: TypeKind>(
             return Ok(LoadedType { typ, unsupported });
         }
         PoolTypeKind::Ref(inner) => {
-            let inner = bundle
+            let arg = bundle
                 .get_item(inner)
                 .ok_or_else(|| Error::MissingPoolItem("referenced type", inner.into()))?;
-            return load_type::<K>(inner, bundle, interner, flags);
+            let LoadedType { typ, unsupported } = load_type::<K>(arg, bundle, interner, flags)?;
+
+            let name = bundle
+                .get_item(arg.name())
+                .ok_or_else(|| Error::MissingPoolItem("type name", arg.name().into()))?;
+            if !flags.get(name.as_ref()).is_mixed_ref() {
+                return Ok(LoadedType { typ, unsupported });
+            }
+            return Ok(LoadedType {
+                typ: K::Type::from((predef::REF, Rc::new([typ]))),
+                unsupported,
+            });
         }
         PoolTypeKind::WeakRef(inner) => (predef::WREF, inner),
         PoolTypeKind::Array(inner) => (predef::ARRAY, inner),
