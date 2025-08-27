@@ -66,7 +66,7 @@ pretty_dtoa = "0.3"
 leon = "3"
 minidl = "0.1"
 bindgen = "0.72"
-mimalloc = "0.1"
+mimalloc = { version = "0.1", features = ["v3"] }
 
 similar-asserts = "1"
 insta = { version = "1", features = ["glob"] }
