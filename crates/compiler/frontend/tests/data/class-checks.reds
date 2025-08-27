@@ -6,6 +6,8 @@ class ClassExtendingStruct extends Struct {}
 abstract class AbstractClass<A> {
   func UnimplementedMethod(a: A)
   final func FinalMethod(a: A) {}
+
+  static func StaticMethod(a: A) {}
 }
 
 class IncompleteClass extends AbstractClass<Int32> {}
@@ -86,3 +88,7 @@ struct ClashingIntStruct {}
 @nameImplementation(NonClashingStringStruct as GenericStruct<String>)
 @nameImplementation(DuplicateStringStruct as GenericStruct<String>)
 struct GenericStruct<A> {}
+
+func Test() {
+  CompleteClass.StaticMethod(42);
+}

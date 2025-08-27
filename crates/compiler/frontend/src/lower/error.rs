@@ -39,8 +39,8 @@ pub enum Error<'ctx> {
     InvalidNewType(Span),
     #[error("this type cannot be directly constructed")]
     InvalidConstructType(Span),
-    #[error("`{0}` cannot be constructed with the `new` operator, use `{0}()` instead")]
-    NewWithConstructible(TypeId<'ctx>, Span),
+    #[error("`{0}` cannot be constructed with the `new` operator, use `{}()` instead", .type_id.simple_name())]
+    NewWithConstructible { type_id: TypeId<'ctx>, span: Span },
     #[error("this type cannot be casted with the `as` operator")]
     InvalidDynCastType(Span),
     #[error("the target type of this cast is not known, consider specifying it")]
@@ -85,11 +85,11 @@ pub enum Error<'ctx> {
     #[error("the `NameOf(Type)` syntax is deprecated, use `NameOf<Type>()` instead")]
     DeprecatedNameOf(Span),
     #[error(
-        "`{0}` is a native struct with an incomplete script definition, passing arguments to its \
+        "`{type_id}` is a native struct with an incomplete script definition, passing arguments to its \
         constructor might result in undefined behavior, it can however still be safely \
-        constructed without arguments: `new {0}()`"
-    )]
-    NonFullyDefinedNativeStructConstruction(TypeId<'ctx>, Span),
+        constructed without arguments: `new {}()`"
+    , .type_id.simple_name())]
+    NonFullyDefinedNativeStructConstruction { type_id: TypeId<'ctx>, span: Span },
     #[error("`case let` block must end with a `break` or `return` statement")]
     MissingBreakInCaseLet(Span),
     #[error("this type cannot be wrapped with a ref")]
@@ -104,6 +104,12 @@ pub enum Error<'ctx> {
     InaccessibleField(Box<InaccessibleMember<'ctx, FieldId<'ctx>>>, Span),
     #[error("attempting to mix use of a type with and without `ref`")]
     RefMismatch(Span),
+    #[error("calling a static method of `{type_id}` from its subclass, use `{}.{name}` instead", .type_id.simple_name())]
+    CallingBaseStaticMethod {
+        type_id: TypeId<'ctx>,
+        name: &'ctx str,
+        span: Span,
+    },
 }
 
 impl Error<'_> {
@@ -119,7 +125,7 @@ impl Error<'_> {
             | Self::InsufficientTypeInformation(span)
             | Self::InvalidNewType(span)
             | Self::InvalidConstructType(span)
-            | Self::NewWithConstructible(_, span)
+            | Self::NewWithConstructible { span, .. }
             | Self::InvalidDynCastType(span)
             | Self::UnknownStaticCastType(span)
             | Self::InvalidTypeArgCount(_, span)
@@ -136,14 +142,15 @@ impl Error<'_> {
             | Self::InvalidTemporary(span)
             | Self::UnexpectedNonConstant(span)
             | Self::DeprecatedNameOf(span)
-            | Self::NonFullyDefinedNativeStructConstruction(_, span)
+            | Self::NonFullyDefinedNativeStructConstruction { span, .. }
             | Self::MissingBreakInCaseLet(span)
             | Self::RefOnNeverRefType(span)
             | Self::ImpossibleDynCast(_, span)
             | Self::RedundantDynCast(span)
             | Self::InaccessibleMethod(_, span)
             | Self::InaccessibleField(_, span)
-            | Self::RefMismatch(span) => *span,
+            | Self::RefMismatch(span)
+            | Self::CallingBaseStaticMethod { span, .. } => *span,
         }
     }
 
@@ -160,7 +167,7 @@ impl Error<'_> {
             Self::InvalidNewType(_)
             | Self::ClassConstructorHasArguments(_)
             | Self::InstantiatingAbstract(_, _)
-            | Self::NewWithConstructible(_, _) => "INVALID_NEW_USE",
+            | Self::NewWithConstructible { .. } => "INVALID_NEW_USE",
             Self::InvalidConstructType(_) => "INVALID_CONSTRUCT",
             Self::InvalidDynCastType(_) => "INVALID_DYN_CAST",
             Self::UnknownStaticCastType(_) => "INVALID_STATIC_CAST",
@@ -176,7 +183,7 @@ impl Error<'_> {
             Self::InvalidTemporary(_) => "INVALID_TEMP",
             Self::UnexpectedNonConstant(_) => "INVALID_CONSTANT",
             Self::DeprecatedNameOf(_) => "DEPRECATED_SYNTAX",
-            Self::NonFullyDefinedNativeStructConstruction(_, _) => "NON_FULLY_DEFINED_CTR",
+            Self::NonFullyDefinedNativeStructConstruction { .. } => "NON_FULLY_DEFINED_CTR",
             Self::MissingBreakInCaseLet(_) => "MISSING_BREAK",
             Self::RefOnNeverRefType(_) => "REF_ON_NEVER_REF",
             Self::ImpossibleDynCast(_, _) => "IMPOSSIBLE_DYN_CAST",
@@ -184,14 +191,17 @@ impl Error<'_> {
             Self::InaccessibleMethod { .. } => "INACCESSIBLE_METHOD",
             Self::InaccessibleField { .. } => "INACCESSIBLE_FIELD",
             Self::RefMismatch(_) => "REF_MISMATCH",
+            Self::CallingBaseStaticMethod { .. } => "CALLING_BASE_STATIC_METHOD",
         }
     }
 
     pub fn level(&self) -> DiagnosticLevel {
         match self {
-            Self::DeprecatedNameOf(_) => DiagnosticLevel::Warning,
+            Self::DeprecatedNameOf(_) | Self::CallingBaseStaticMethod { .. } => {
+                DiagnosticLevel::Warning
+            }
             Self::InvalidTemporary(_)
-            | Self::NonFullyDefinedNativeStructConstruction(_, _)
+            | Self::NonFullyDefinedNativeStructConstruction { .. }
             | Self::InaccessibleMethod(_, _)
             | Self::InaccessibleField(_, _) => DiagnosticLevel::ErrorAllowedAtRuntime,
             _ => DiagnosticLevel::Error,

@@ -59,20 +59,14 @@ fn generate_edits<'ctx>(
     let enum_map = symbols
         .types()
         .filter(|(_, def)| def.schema().as_enum().and_then(Enum::span).is_some())
-        .map(|(id, _)| {
-            let name = id
-                .as_str()
-                .rsplit_once('.')
-                .map_or(id.as_str(), |(_, name)| name);
-            (name, id)
-        })
+        .map(|(id, _)| (id.simple_name(), id))
         .collect::<HashMap<_, _>>();
 
     diagnostics
         .iter()
         .filter_map(|diagnostic| match diagnostic {
             Diagnostic::LoweringError(error) => match error {
-                &LowerError::NewWithConstructible(type_id, span) => {
+                &LowerError::NewWithConstructible { type_id, span } => {
                     Some(CodeEdit::FixStructNewConstructor(type_id, span))
                 }
                 LowerError::UnresolvedVar(name, _) | LowerError::UnresolvedType(name, _) => {

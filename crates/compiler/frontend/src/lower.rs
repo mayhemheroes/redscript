@@ -999,8 +999,10 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 .report(Error::InstantiatingAbstract(typ.id(), span));
         }
         if agg.flags().is_struct() || agg.flags().is_never_ref() {
-            self.reporter
-                .report(Error::NewWithConstructible(typ.id(), span));
+            self.reporter.report(Error::NewWithConstructible {
+                type_id: typ.id(),
+                span,
+            });
         }
         if !args.is_empty() {
             self.reporter
@@ -1075,7 +1077,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         if aggregate.flags().is_native() && !aggregate.flags().is_fully_defined() {
             if !args.is_empty() {
                 self.reporter
-                    .report(Error::NonFullyDefinedNativeStructConstruction(id, span));
+                    .report(Error::NonFullyDefinedNativeStructConstruction { type_id: id, span });
             }
         } else if args.len() != field_count {
             self.reporter
@@ -1633,10 +1635,10 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         call_span: Span,
     ) -> LowerResult<'ctx, (MemberCall<'ctx>, PolyType<'ctx>)> {
         if let (ast::Expr::Ident(ident), _) = receiver
-            && let Some(&TypeRef::Id(typ)) = env.types().get(ident)
+            && let Some(&TypeRef::Id(id)) = env.types().get(ident)
             && let mut candidates = self
                 .symbols
-                .base_iter_with_self(typ)
+                .base_iter_with_self(id)
                 .map(|(id, def)| {
                     def.methods()
                         .by_name(member)
@@ -1650,14 +1652,14 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 .peekable()
             && candidates.peek().is_some()
         {
-            let parent_args = self.symbols[typ]
+            let parent_args = self.symbols[id]
                 .params()
                 .iter()
                 .map(|_| PolyType::fresh())
                 .collect::<Rc<_>>();
-            let typ = TypeApp::new(typ, parent_args);
+            let typ = TypeApp::new(id, parent_args);
 
-            let (call, call_t) = self
+            let resolved = self
                 .overload_resolver()
                 .name(member)
                 .args(args)
@@ -1667,8 +1669,16 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 .maybe_type_hint(type_hint)
                 .env(env)
                 .span(call_span)
-                .resolve()?
-                .into_static_call(typ.id(), typ.args().iter().cloned());
+                .resolve()?;
+            let parent = resolved.resulution.function.parent();
+            if parent != id {
+                self.reporter.report(Error::CallingBaseStaticMethod {
+                    type_id: parent,
+                    name: member,
+                    span: call_span,
+                });
+            }
+            let (call, call_t) = resolved.into_static_call(typ.id(), typ.args().iter().cloned());
             return Ok((MemberCall::MethodCall(call), call_t));
         }
 

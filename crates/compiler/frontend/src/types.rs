@@ -519,6 +519,10 @@ impl<'id> TypeId<'id> {
     pub fn as_str(&self) -> &'id str {
         self.0
     }
+
+    pub fn simple_name(&self) -> &'id str {
+        self.0.rsplit_once('.').map_or(self.0, |(_, name)| name)
+    }
 }
 
 impl PartialEq for TypeId<'_> {

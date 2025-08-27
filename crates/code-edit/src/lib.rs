@@ -16,7 +16,7 @@ impl<'ctx> CodeEdit<'ctx> {
     pub fn from_diagnostic(diagnostic: &Diagnostic<'ctx>) -> Option<Self> {
         match diagnostic {
             Diagnostic::LoweringError(error) => match error {
-                &LowerError::NewWithConstructible(type_id, span) => {
+                &LowerError::NewWithConstructible { type_id, span } => {
                     Some(Self::FixStructNewConstructor(type_id, span))
                 }
                 LowerError::InaccessibleMethod(inaccessible_member, _) => {
@@ -88,20 +88,10 @@ impl<'ctx> TextEdit<'ctx> {
             CodeEdit::MakeTypePublic(id) => {
                 let def = symbols.get_type(*id).context("type not found")?;
                 let span = def.span().context("type has no source location")?;
-                let name = id
-                    .as_str()
-                    .rsplit_once(".")
-                    .map_or(id.as_str(), |(_, name)| name);
-                make_item_public(name, span, sources)
+                make_item_public(id.simple_name(), span, sources)
             }
         }
     }
-}
-
-#[derive(Debug, Clone)]
-pub struct LineCol {
-    pub line: usize,
-    pub col: usize,
 }
 
 fn fix_struct_new_constructor<'ctx>(
@@ -109,10 +99,7 @@ fn fix_struct_new_constructor<'ctx>(
     span: Span,
     sources: &'ctx SourceMap,
 ) -> anyhow::Result<TextEdit<'ctx>> {
-    let name = type_id
-        .as_str()
-        .rsplit_once(".")
-        .map_or(type_id.as_str(), |(_, name)| name);
+    let name = type_id.simple_name();
 
     let file = sources.get(span.file).context("file not found for span")?;
     let source = file.source();
