@@ -11,7 +11,7 @@ mod visitor;
 
 pub use cte::Evaluator;
 pub use diagnostic::{Diagnostic, DiagnosticLevel, Reporter, UnknownSource, pass};
-pub use lower::{CoalesceError, Error as LowerError, PolyType, TypeRef};
+pub use lower::{CoalesceError, Error as LowerError, PolyType, TypeError, TypeRef};
 pub use redscript_ast as ast;
 use redscript_parser as parser;
 pub use stages::{LoweredClass, LoweredCompilationUnit, LoweredFunction};

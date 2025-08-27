@@ -119,7 +119,9 @@ impl<'ctx> Diagnostic<'ctx> {
             | Self::DuplicateVariantName(_)
             | Self::UnusedLocal(_)
             | Self::AddFieldConflict(_) => DiagnosticLevel::Warning,
-            Self::LessVisibleOverride(_, _) => DiagnosticLevel::ErrorAllowedAtRuntime,
+            Self::ImportIsPrivate(_, _) | Self::LessVisibleOverride(_, _) => {
+                DiagnosticLevel::ErrorAllowedAtRuntime
+            }
             Self::Other(_, level, _) => *level,
             _ => DiagnosticLevel::Error,
         }

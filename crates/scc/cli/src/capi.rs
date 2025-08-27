@@ -12,7 +12,7 @@ pub(super) fn load() -> anyhow::Result<raw::SccApi> {
     } else {
         lib_path.with_file_name("libscc_lib.so")
     };
-    let lib = Library::load(lib_path).context("Could not load the scc shared library")?;
+    let lib = Library::load(lib_path).context("could not load the scc shared library")?;
 
     Ok(unsafe {
         raw::SccApi {

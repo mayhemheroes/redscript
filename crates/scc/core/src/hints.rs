@@ -51,14 +51,14 @@ impl UserHints {
             return Ok(Self { hints });
         }
 
-        let dir = fs::read_dir(path).context("Failed to read the hints directory")?;
+        let dir = fs::read_dir(path).context("failed to read the hints directory")?;
         for entry in dir {
-            let entry = entry.context("Failed to read a hint directory entry")?;
+            let entry = entry.context("failed to read a hint directory entry")?;
             if entry.path().extension() == Some(OsStr::new("toml")) {
                 let contents =
-                    fs::read_to_string(entry.path()).context("Failed to read a hint file")?;
+                    fs::read_to_string(entry.path()).context("failed to read a hint file")?;
                 let contents: HashMap<String, Vec<UserHint>> =
-                    toml::from_str(&contents).context("Failed to parse a hint file")?;
+                    toml::from_str(&contents).context("failed to parse a hint file")?;
                 for (key, val) in contents {
                     hints.entry(key).or_default().extend(val);
                 }

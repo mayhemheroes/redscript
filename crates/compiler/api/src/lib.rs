@@ -12,8 +12,8 @@ use redscript_compiler_frontend::pass::{DiagnosticPass, UnusedLocals};
 pub use redscript_compiler_frontend::{
     Aggregate, CompileErrorReporter, Diagnostic, DiagnosticLevel, Enum, Evaluator, Field, FieldId,
     FunctionType, LowerError, LoweredCompilationUnit, LoweredFunction, MethodId, PolyType, Symbols,
-    TypeId, TypeIndex, TypeInterner, TypeSchema, TypeScope, infer_from_sources, ir, parse_file,
-    parse_files, pass, process_sources, types,
+    TypeError, TypeId, TypeIndex, TypeInterner, TypeSchema, TypeScope, infer_from_sources, ir,
+    parse_file, parse_files, pass, process_sources, types,
 };
 use redscript_io::byte;
 pub use redscript_io::{SaveError, ScriptBundle};
@@ -72,7 +72,7 @@ impl<'ctx> Compilation<'ctx> {
             .diagnostics
             .has_fatal_errors(self.fatal_diagnostic_level)
         {
-            return Err(FlushError::CompilationErrors(self.diagnostics));
+            return Err(FlushError::FatalErrors(self.diagnostics, self.symbols));
         }
 
         let mut monomorph = self.mappings.into_monomorphizer(self.sources);
@@ -84,7 +84,7 @@ impl<'ctx> Compilation<'ctx> {
                 DiagnosticLevel::Error,
                 span,
             ));
-            return Err(FlushError::CompilationErrors(self.diagnostics));
+            return Err(FlushError::FatalErrors(self.diagnostics, self.symbols));
         }
 
         self.bundle.into_writeable().save(path)?;
@@ -177,6 +177,12 @@ impl fmt::Display for Diagnostics<'_> {
     }
 }
 
+impl<'ctx> AsRef<[Diagnostic<'ctx>]> for Diagnostics<'ctx> {
+    fn as_ref(&self) -> &[Diagnostic<'ctx>] {
+        &self.0
+    }
+}
+
 pub enum DiagnosticFilter {
     Minimum(DiagnosticLevel),
     Predicate(Box<dyn for<'a, 'b> Fn(&'a Diagnostic<'b>) -> bool>),
@@ -213,8 +219,8 @@ pub enum Error {
 
 #[derive(Debug, Error)]
 pub enum FlushError<'ctx> {
-    #[error("fatal diagnostis found")]
-    CompilationErrors(Diagnostics<'ctx>),
+    #[error("fatal errors found")]
+    FatalErrors(Diagnostics<'ctx>, Symbols<'ctx>),
     #[error("code generation error: {0}")]
     Assemble(AssembleError<'ctx>),
     #[error("write error: {0}")]

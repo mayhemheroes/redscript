@@ -990,44 +990,47 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         };
         let def = &self.symbols[typ.id()];
 
-        match def.schema() {
-            TypeSchema::Aggregate(agg) if agg.flags().is_abstract() => {
-                Err(Error::InstantiatingAbstract(typ.id(), span))
-            }
-            TypeSchema::Aggregate(agg) if agg.flags().is_struct() || agg.flags().is_never_ref() => {
-                Err(Error::NewWithConstructible(typ.id(), span))
-            }
-            TypeSchema::Aggregate(_) if !args.is_empty() => {
-                Err(Error::ClassConstructorHasArguments(span))
-            }
-            TypeSchema::Aggregate(agg) => {
-                let type_args = if typ.args().is_empty() {
-                    def.params()
-                        .iter()
-                        .map(|_| PolyType::fresh())
-                        .collect::<Rc<_>>()
-                } else if typ.args().len() != def.params().len() {
-                    let expected = def.params().len();
-                    return Err(Error::InvalidTypeArgCount(expected, *type_span));
-                } else {
-                    typ.args().iter().map(PolyType::from_type).collect()
-                };
-                let typ = TypeApp::new(typ.id(), type_args);
+        let TypeSchema::Aggregate(agg) = def.schema() else {
+            return Err(Error::InvalidNewType(*type_span));
+        };
 
-                let ir = ir::Expr::NewInstance {
-                    class_type: typ.clone().into(),
-                    span,
-                };
-                let typ = typ.into_type().into_poly();
-                let typ = if agg.flags().is_mixed_ref() {
-                    Type::app(predef::REF, [typ]).into_poly()
-                } else {
-                    typ
-                };
-                Ok((ir, typ))
-            }
-            _ => Err(Error::InvalidNewType(*type_span)),
+        if agg.flags().is_abstract() {
+            self.reporter
+                .report(Error::InstantiatingAbstract(typ.id(), span));
         }
+        if agg.flags().is_struct() || agg.flags().is_never_ref() {
+            self.reporter
+                .report(Error::NewWithConstructible(typ.id(), span));
+        }
+        if !args.is_empty() {
+            self.reporter
+                .report(Error::ClassConstructorHasArguments(span));
+        }
+
+        let type_args = if typ.args().is_empty() {
+            def.params()
+                .iter()
+                .map(|_| PolyType::fresh())
+                .collect::<Rc<_>>()
+        } else if typ.args().len() != def.params().len() {
+            let expected = def.params().len();
+            return Err(Error::InvalidTypeArgCount(expected, *type_span));
+        } else {
+            typ.args().iter().map(PolyType::from_type).collect()
+        };
+        let typ = TypeApp::new(typ.id(), type_args);
+
+        let ir = ir::Expr::NewInstance {
+            class_type: typ.clone().into(),
+            span,
+        };
+        let typ = typ.into_type().into_poly();
+        let typ = if agg.flags().is_mixed_ref() {
+            Type::app(predef::REF, [typ]).into_poly()
+        } else {
+            typ
+        };
+        Ok((ir, typ))
     }
 
     fn lower_construct(

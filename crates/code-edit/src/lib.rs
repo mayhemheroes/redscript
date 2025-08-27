@@ -4,12 +4,12 @@ use anyhow::Context;
 use redscript_compiler_api::ast::{FileId, SourceMap, Span};
 use redscript_compiler_api::{Diagnostic, FieldId, LowerError, MethodId, Symbols, TypeId};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CodeEdit<'ctx> {
     FixStructNewConstructor(TypeId<'ctx>, Span),
     MakeMethodPublic(MethodId<'ctx>),
     MakeFieldPublic(FieldId<'ctx>),
-    MakeEnumPublic(TypeId<'ctx>),
+    MakeTypePublic(TypeId<'ctx>),
 }
 
 impl<'ctx> CodeEdit<'ctx> {
@@ -85,13 +85,13 @@ impl<'ctx> TextEdit<'ctx> {
                 let span = field.span().context("field has no source location")?;
                 make_item_public(name, span, sources)
             }
-            CodeEdit::MakeEnumPublic(enum_id) => {
-                let def = symbols.get_type(*enum_id).context("enum not found")?;
-                let span = def.span().context("enum has no source location")?;
-                let name = enum_id
+            CodeEdit::MakeTypePublic(id) => {
+                let def = symbols.get_type(*id).context("type not found")?;
+                let span = def.span().context("type has no source location")?;
+                let name = id
                     .as_str()
                     .rsplit_once(".")
-                    .map_or(enum_id.as_str(), |(_, name)| name);
+                    .map_or(id.as_str(), |(_, name)| name);
                 make_item_public(name, span, sources)
             }
         }
@@ -152,7 +152,7 @@ fn make_item_public<'ctx>(
         .context("span out of bounds")?;
     let mut rem = slice.strip_suffix(name).context("missing item name")?;
     loop {
-        let trimmed_ws = rem.trim_end();
+        let trimmed_ws = rem.trim_end_matches(|c: char| c.is_whitespace() && c != '\n');
         let trimmed_ident = trimmed_ws.trim_end_matches(char::is_alphabetic);
         if trimmed_ident.len() == trimmed_ws.len() {
             break;
@@ -168,6 +168,8 @@ fn make_item_public<'ctx>(
         "private".len() + 1
     } else if suffix.starts_with("protected") {
         "protected".len() + 1
+    } else if suffix.starts_with("public") {
+        "public".len() + 1
     } else {
         0
     };

@@ -354,6 +354,7 @@ impl<'ctx> TypeDef<'ctx> {
     pub fn span(&self) -> Option<Span> {
         match &self.schema {
             TypeSchema::Aggregate(aggregate) => aggregate.span(),
+            TypeSchema::Enum(enm) => enm.span(),
             _ => None,
         }
     }
@@ -400,12 +401,14 @@ impl<'ctx> TypeSchema<'ctx> {
 #[derive(Debug, Default, Clone)]
 pub struct Enum<'ctx> {
     variants: IndexMap<&'ctx str, i64>,
+    span: Option<Span>,
 }
 
 impl<'ctx> Enum<'ctx> {
-    pub fn new(variants: impl Into<IndexMap<&'ctx str, i64>>) -> Self {
+    pub fn new(variants: impl Into<IndexMap<&'ctx str, i64>>, span: Option<Span>) -> Self {
         Self {
             variants: variants.into(),
+            span,
         }
     }
 
@@ -421,6 +424,11 @@ impl<'ctx> Enum<'ctx> {
 
     pub fn variants(&self) -> impl ExactSizeIterator<Item = (&'ctx str, i64)> + use<'_, 'ctx> {
         self.variants.iter().map(|(&name, &value)| (name, value))
+    }
+
+    #[inline]
+    pub fn span(&self) -> Option<Span> {
+        self.span
     }
 }
 

@@ -672,7 +672,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
             }
         }
 
-        let schema = TypeSchema::Enum(Enum::new(by_name).into());
+        let schema = TypeSchema::Enum(Enum::new(by_name, Some(name_span)).into());
         self.symbols
             .add_type(entry.id, TypeDef::new([], schema, entry.meta.doc));
     }

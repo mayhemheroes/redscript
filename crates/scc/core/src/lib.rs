@@ -7,8 +7,8 @@ use output::extract_refs;
 pub use output::{SccOutput, SourceRef, SourceRefType};
 use redscript_compiler_api::ast::SourceMap;
 use redscript_compiler_api::{
-    Compilation, Diagnostic, DiagnosticFilter, DiagnosticLevel, FlushError, SaveError,
-    SourceMapExt, TypeInterner,
+    Compilation, Diagnostic, DiagnosticFilter, DiagnosticLevel, Diagnostics, FlushError, SaveError,
+    SourceMapExt, Symbols, TypeInterner,
 };
 use report::{CompilationFailure, ErrorReport};
 pub use settings::SccSettings;
@@ -21,6 +21,7 @@ use crate::lock::FileLock;
 mod hints;
 mod lock;
 mod logger;
+mod migration;
 mod output;
 mod report;
 mod settings;
@@ -30,26 +31,66 @@ const FATAL_DIAGNOSTIC_LEVEL: DiagnosticLevel = DiagnosticLevel::Error;
 
 pub fn compile(settings: &SccSettings) -> anyhow::Result<SccOutput> {
     logger::setup(settings.root_dir());
+    log::info!("Running REDscript {}", env!("CARGO_PKG_VERSION"));
+    compile_impl(settings)
+}
 
-    match compile_inner(settings) {
-        Ok(output) => {
-            log::info!("Compilation successful");
-            Ok(output)
-        }
-        Err(err) => {
-            log::error!("Compilation failed: {err}");
-            if settings.should_show_error_report() {
-                let report = ErrorReport::new(&err).to_string();
-                msgbox::create("REDscript error", &report, msgbox::IconType::Error).ok();
+fn compile_impl(settings: &SccSettings) -> Result<SccOutput, anyhow::Error> {
+    #[derive(Debug, PartialEq, Eq)]
+    enum State {
+        Uninitialized,
+        Retry,
+        Retrying,
+    }
+
+    let mut state = State::Uninitialized;
+
+    loop {
+        match lock_and_compile(settings, |diagnostics, symbols, sources| {
+            if state == State::Uninitialized
+                && migration::migrate_if_needed(diagnostics.as_ref(), &symbols, sources)?
+            {
+                state = State::Retry;
+            } else {
+                diagnostics.dump(
+                    sources,
+                    DiagnosticFilter::Predicate(Box::new(diagnostic_filter)),
+                )?;
             }
-            Err(err)
+            Ok(())
+        }) {
+            Ok(output) => {
+                log::info!("Compilation successful");
+                return Ok(output);
+            }
+            Err(err) => {
+                if state == State::Retry {
+                    log::info!("Retrying compilation after a migration");
+                    state = State::Retrying;
+                    continue;
+                }
+
+                log::error!("Compilation failed: {err}");
+                if settings.should_show_error_report() {
+                    let report = ErrorReport::new(&err).to_string();
+                    tfd::MessageBox::new("REDscript error", &report)
+                        .with_icon(tfd::MessageBoxIcon::Error)
+                        .run_modal();
+                }
+                return Err(err);
+            }
         }
     }
 }
 
-fn compile_inner(settings: &SccSettings) -> anyhow::Result<SccOutput> {
-    log::info!("Running REDscript {}", env!("CARGO_PKG_VERSION"));
-
+fn lock_and_compile(
+    settings: &SccSettings,
+    mut on_error: impl for<'ctx> FnMut(
+        &Diagnostics<'ctx>,
+        Symbols<'ctx>,
+        &'ctx SourceMap,
+    ) -> anyhow::Result<()>,
+) -> anyhow::Result<SccOutput> {
     let cache_file = settings.cache_file_path();
 
     let ts_path = cache_file.with_extension(TIMESTAMP_FILE_EXT);
@@ -78,39 +119,37 @@ fn compile_inner(settings: &SccSettings) -> anyhow::Result<SccOutput> {
     let interner = TypeInterner::default();
     let (mmap, _f) = Map::with_options().open(&input_file)?;
 
-    let refs = {
-        let diagnostic_filter = DiagnosticFilter::Predicate(Box::new(diagnostic_filter));
-
-        match Compilation::builder()
-            .bundle(&mmap)
-            .sources(&sources)
-            .type_interner(&interner)
-            .diagnostics(&[])
-            .type_flags(Cow::Borrowed(settings.type_flags()))
-            .fatal_diagnostic_level(FATAL_DIAGNOSTIC_LEVEL)
-            .compile()?
-            .flush(&output_file)
+    let refs = match Compilation::builder()
+        .bundle(&mmap)
+        .sources(&sources)
+        .type_interner(&interner)
+        .diagnostics(&[])
+        .type_flags(Cow::Borrowed(settings.type_flags()))
+        .fatal_diagnostic_level(FATAL_DIAGNOSTIC_LEVEL)
+        .compile()?
+        .flush(&output_file)
+    {
+        Err(FlushError::Write(SaveError::Mmap(err)))
+            if err.kind() == io::ErrorKind::PermissionDenied =>
         {
-            Err(FlushError::Write(SaveError::Mmap(err)))
-                if err.kind() == io::ErrorKind::PermissionDenied =>
-            {
-                anyhow::bail!(
-                    "could not write to '{}', make sure the file is not read-only",
-                    output_file.display()
-                );
-            }
-            Err(FlushError::CompilationErrors(diagnostics)) => {
-                diagnostics.dump(&sources, diagnostic_filter)?;
+            anyhow::bail!(
+                "could not write to '{}', make sure the file is not read-only",
+                output_file.display()
+            );
+        }
+        Err(FlushError::FatalErrors(diagnostics, symbols)) => {
+            on_error(&diagnostics, symbols, &sources)?;
+            return Err(CompilationFailure::new(diagnostics, &sources, settings)?.into());
+        }
+        Err(err) => anyhow::bail!("{err}"),
+        Ok((syms, diagnostics)) => {
+            diagnostics.dump(
+                &sources,
+                DiagnosticFilter::Predicate(Box::new(diagnostic_filter)),
+            )?;
 
-                return Err(CompilationFailure::new(diagnostics, &sources, settings)?.into());
-            }
-            Err(err) => anyhow::bail!("{err}"),
-            Ok((syms, diagnostics)) => {
-                diagnostics.dump(&sources, diagnostic_filter)?;
-
-                log::info!("Succesfully written '{}'", output_file.display());
-                extract_refs(&syms, &interner)
-            }
+            log::info!("Succesfully written '{}'", output_file.display());
+            extract_refs(&syms, &interner)
         }
     };
 

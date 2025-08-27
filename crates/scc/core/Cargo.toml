@@ -6,6 +6,7 @@ edition.workspace = true
 
 [dependencies]
 redscript-compiler-api = { workspace = true, features = ["ignore"] }
+redscript-code-edit.workspace = true
 
 log.workspace = true
 thiserror.workspace = true
@@ -17,7 +18,7 @@ toml = { workspace = true, features = ["parse"] }
 flexi_logger.workspace = true
 vmap.workspace = true
 file-id.workspace = true
-msgbox.workspace = true
+tfd.workspace = true
 
 [dev-dependencies]
 similar-asserts.workspace = true

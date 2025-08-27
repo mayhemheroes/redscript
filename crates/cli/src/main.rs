@@ -241,7 +241,7 @@ fn compile(opts: CompileOpts) -> anyhow::Result<ExitCode> {
             log::info!("Compilation successful");
             Ok(ExitCode::SUCCESS)
         }
-        Err(FlushError::CompilationErrors(diagnostics)) => {
+        Err(FlushError::FatalErrors(diagnostics, _)) => {
             diagnostics.dump(&sources, DiagnosticLevel::from(opts.warn_level))?;
             log::info!("Compilation failed");
             Ok(ExitCode::FAILURE)
