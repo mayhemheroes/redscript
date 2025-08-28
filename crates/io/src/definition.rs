@@ -6,8 +6,8 @@ use byte::ctx::Endianess;
 use byte::{BytesExt, Measure, TryRead, TryWrite};
 
 use crate::index::{
-    self, CNameIndex, ClassIndex, EnumIndex, EnumValueIndex, FieldIndex, FunctionIndex, LocalIndex,
-    NzPoolIndex, ParameterIndex, SourceFileIndex, TypeIndex,
+    CNameIndex, ClassIndex, EnumIndex, EnumValueIndex, FieldIndex, FunctionIndex, LocalIndex,
+    NzPoolIndex, ParameterIndex, PoolIndex, SourceFileIndex, TypeIndex,
 };
 use crate::instr::Instr;
 use crate::util::{self, FlagDependent, OptionalIndex, Prefixed};
@@ -1455,42 +1455,60 @@ pub enum Visibility {
     Private,
 }
 
+pub trait IndexType: Copy {
+    fn from_u32(value: u32) -> Option<Self>;
+}
+
+impl<A> IndexType for PoolIndex<A> {
+    #[inline]
+    fn from_u32(value: u32) -> Option<Self> {
+        Some(PoolIndex::new(value))
+    }
+}
+
+impl<A> IndexType for NzPoolIndex<A> {
+    #[inline]
+    fn from_u32(value: u32) -> Option<Self> {
+        NzPoolIndex::new(value)
+    }
+}
+
 pub trait DefinitionIndex<'i>: Into<Definition<'i>> {
-    type Index;
+    type Index: IndexType;
 }
 
 impl DefinitionIndex<'_> for Type {
-    type Index = index::types::Type;
+    type Index = TypeIndex;
 }
 
 impl DefinitionIndex<'_> for Class {
-    type Index = index::types::Class;
+    type Index = ClassIndex;
 }
 
 impl DefinitionIndex<'_> for EnumMember {
-    type Index = index::types::EnumValue;
+    type Index = EnumValueIndex;
 }
 
 impl DefinitionIndex<'_> for Enum {
-    type Index = index::types::Enum;
+    type Index = EnumIndex;
 }
 
 impl<'i> DefinitionIndex<'i> for Function<'i> {
-    type Index = index::types::Function;
+    type Index = FunctionIndex;
 }
 
 impl DefinitionIndex<'_> for Parameter {
-    type Index = index::types::Parameter;
+    type Index = ParameterIndex;
 }
 
 impl DefinitionIndex<'_> for Local {
-    type Index = index::types::Local;
+    type Index = LocalIndex;
 }
 
 impl<'i> DefinitionIndex<'i> for Field<'i> {
-    type Index = index::types::Field;
+    type Index = FieldIndex;
 }
 
 impl<'i> DefinitionIndex<'i> for SourceFile<'i> {
-    type Index = index::types::SourceFile;
+    type Index = SourceFileIndex;
 }

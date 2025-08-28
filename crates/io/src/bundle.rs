@@ -9,12 +9,12 @@ use indexmap::{IndexMap, IndexSet};
 
 use crate::definition::{
     Class, Definition, DefinitionHeader, DefinitionIndex, Enum, EnumMember, Field, Function,
-    IndexedDefinition, Local, Parameter, SourceFile, Type,
+    IndexType, IndexedDefinition, Local, Parameter, SourceFile, Type,
 };
 use crate::index::{
     self, CNameIndex, ClassIndex, EnumIndex, EnumValueIndex, FieldIndex, FunctionIndex, LocalIndex,
-    NzPoolIndex, ParameterIndex, PoolIndex, ResourceIndex, SourceFileIndex, StringIndex,
-    TweakDbIndex, TypeIndex,
+    ParameterIndex, PoolIndex, ResourceIndex, SourceFileIndex, StringIndex, TweakDbIndex,
+    TypeIndex,
 };
 use crate::{ENDIANESS, Str, util};
 
@@ -217,9 +217,7 @@ impl<'i> ScriptBundle<'i> {
             .enumerate()
             .skip(1)
             .map(|(index, def)| match def {
-                Definition::Type(val) => {
-                    IndexedDefinition::Type(TypeIndex::new(index as _).unwrap(), val)
-                }
+                Definition::Type(val) => IndexedDefinition::Type(TypeIndex::new(index as _), val),
                 Definition::Class(val) => {
                     IndexedDefinition::Class(ClassIndex::new(index as _).unwrap(), val)
                 }
@@ -249,7 +247,7 @@ impl<'i> ScriptBundle<'i> {
     }
 
     #[inline]
-    pub fn define<A>(&mut self, def: A) -> NzPoolIndex<A::Index>
+    pub fn define<A>(&mut self, def: A) -> A::Index
     where
         A: DefinitionIndex<'i>,
     {
@@ -260,8 +258,8 @@ impl<'i> ScriptBundle<'i> {
     pub fn define_and_init<A>(
         &mut self,
         def: A,
-        init: impl FnOnce(&mut Self, NzPoolIndex<A::Index>, A) -> A,
-    ) -> NzPoolIndex<A::Index>
+        init: impl FnOnce(&mut Self, A::Index, A) -> A,
+    ) -> A::Index
     where
         A: DefinitionIndex<'i>,
     {
@@ -277,14 +275,14 @@ impl<'i> ScriptBundle<'i> {
     pub fn define_and_try_init<A, E>(
         &mut self,
         def: A,
-        init: impl FnOnce(&mut Self, NzPoolIndex<A::Index>, A) -> Result<A, E>,
-    ) -> Result<NzPoolIndex<A::Index>, E>
+        init: impl FnOnce(&mut Self, A::Index, A) -> Result<A, E>,
+    ) -> Result<A::Index, E>
     where
         A: DefinitionIndex<'i>,
     {
         let pos = self.definitions.len();
         let index = u32::try_from(pos).expect("index overflow");
-        let index = NzPoolIndex::new(index).expect("definition index set to zero");
+        let index = A::Index::from_u32(index).expect("definition index set to zero");
         self.definitions.push(Definition::UNDEFINED);
         self.definitions[pos] = init(self, index, def)?.into();
         Ok(index)

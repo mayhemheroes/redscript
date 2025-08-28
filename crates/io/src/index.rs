@@ -10,8 +10,8 @@ pub type CNameIndex = PoolIndex<types::CName>;
 pub type TweakDbIndex = PoolIndex<types::TweakDbId>;
 pub type ResourceIndex = PoolIndex<types::Resource>;
 pub type StringIndex = PoolIndex<types::String>;
+pub type TypeIndex = PoolIndex<types::Type>;
 
-pub type TypeIndex = NzPoolIndex<types::Type>;
 pub type ClassIndex = NzPoolIndex<types::Class>;
 pub type EnumValueIndex = NzPoolIndex<types::EnumValue>;
 pub type EnumIndex = NzPoolIndex<types::Enum>;
