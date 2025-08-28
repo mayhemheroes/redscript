@@ -7,11 +7,27 @@ REDscript is a statically-typed, object-oriented programming language designed f
 
 ## Installation
 
-To compile your scripts automatically on game startup, follow these steps:
+To compile your scripts automatically on game startup, follow the instructions for your platform below.
 
-- Download the `redscript-mod-{version}.zip` archive from the [latest release](https://github.com/jac3km4/redscript/releases/latest).
+### Windows
+- Download the `redscript-v{version}-windows.zip` archive from the [latest release](https://github.com/jac3km4/redscript/releases/latest).
 - Extract it into the main `Cyberpunk 2077` directory.
 - When you start the game, successful setup can be confirmed with logs appearing in `Cyberpunk 2077/r6/logs/redscript_rCURRENT.log`.
+
+### MacOS (non-Wine)
+- Download the `redscript-v{version}-macos.zip` archive from the [latest release](https://github.com/jac3km4/redscript/releases/latest).
+- Extract it into the main `Cyberpunk 2077` directory:
+  ```bash
+  unzip ~/Downloads/redscript-v*-macos.zip -d "/Applications/Cyberpunk 2077"
+  ```
+- MacOS automatically quarantines binaries downloaded from the internet so you need to remove them from the quarantine manually:
+  ```bash
+  xattr -r -d com.apple.quarantine "/Applications/Cyberpunk 2077/engine/tools"
+  ```
+- The game currently does not compile scripts on startup, so in order to actually compile the scripts you can use the bundled script to start the game:
+  ```bash
+  "/Applications/Cyberpunk 2077/launch_modded.sh"
+  ```
 
 ## Editor Support
 
