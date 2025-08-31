@@ -510,6 +510,17 @@ dependencies = [
  "allocator-api2",
  "equivalent",
  "foldhash 0.1.5",
+]
+
+[[package]]
+name = "hashbrown"
+version = "0.16.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5419bdc4f6a9207fbeba6d11b604d481addf78ecd10c11ad51e76c2f6482748d"
+dependencies = [
+ "allocator-api2",
+ "equivalent",
+ "foldhash 0.2.0",
  "serde",
 ]
 
@@ -860,7 +871,7 @@ dependencies = [
  "anyhow",
  "argh",
  "fern",
- "hashbrown 0.15.5",
+ "hashbrown 0.16.0",
  "log",
  "mimalloc",
  "redscript-compiler-api",
@@ -900,7 +911,7 @@ version = "1.0.0-preview.19"
 dependencies = [
  "bitfield-struct",
  "bon",
- "hashbrown 0.15.5",
+ "hashbrown 0.16.0",
  "identity-hash",
  "indexmap",
  "insta",
@@ -921,7 +932,7 @@ dependencies = [
  "bon",
  "derive-where",
  "elsa",
- "hashbrown 0.15.5",
+ "hashbrown 0.16.0",
  "identity-hash",
  "indexmap",
  "insta",
@@ -939,7 +950,7 @@ dependencies = [
 name = "redscript-decompiler"
 version = "1.0.0-preview.19"
 dependencies = [
- "hashbrown 0.15.5",
+ "hashbrown 0.16.0",
  "redscript-ast",
  "redscript-formatter",
  "redscript-io",
@@ -951,7 +962,7 @@ name = "redscript-dotfile"
 version = "1.0.0-preview.19"
 dependencies = [
  "anyhow",
- "hashbrown 0.15.5",
+ "hashbrown 0.16.0",
  "leon",
  "serde",
  "toml",
@@ -961,7 +972,7 @@ dependencies = [
 name = "redscript-formatter"
 version = "1.0.0-preview.19"
 dependencies = [
- "hashbrown 0.15.5",
+ "hashbrown 0.16.0",
  "insta",
  "pretty_dtoa",
  "redscript-ast",
@@ -1089,7 +1100,7 @@ dependencies = [
  "chrono",
  "file-id",
  "flexi_logger",
- "hashbrown 0.15.5",
+ "hashbrown 0.16.0",
  "log",
  "redscript-code-edit",
  "redscript-compiler-api",

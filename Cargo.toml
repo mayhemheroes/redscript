@@ -48,7 +48,7 @@ identity-hash = "0.1"
 foldhash = "0.2"
 slab = "0.4"
 smallvec = { version = "1", features = ["union", "const_generics"] }
-hashbrown = "0.15"
+hashbrown = "0.16"
 indexmap = "2"
 elsa = { version = "1", features = ["indexmap"] }
 serde = "1"
