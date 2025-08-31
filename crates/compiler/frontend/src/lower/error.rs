@@ -6,7 +6,7 @@ use std::rc::Rc;
 use redscript_ast::Span;
 use thiserror::Error;
 
-use crate::diagnostic::{DiagnosticLevel, MethodSignature};
+use crate::diagnostic::{DiagnosticLevel, FunctionSignature};
 use crate::lower::types::{InferredType, InferredTypeApp};
 use crate::types::{MAX_FN_ARITY, MAX_STATIC_ARRAY_SIZE, TypeId, predef};
 use crate::utils::fmt::sep_by;
@@ -26,7 +26,7 @@ pub enum Error<'ctx> {
     #[error("`{0}` has no member named `{1}`")]
     UnresolvedMember(TypeId<'ctx>, &'ctx str, Span),
     #[error("multiple overloads match the types of the provided arguments:\n{}", sep_by(.0.iter(), "\n"))]
-    MultipleMatchingOverloads(Rc<[MethodSignature<'ctx, Immutable>]>, Span),
+    MultipleMatchingOverloads(Rc<[FunctionSignature<'ctx, Immutable>]>, Span),
     #[error("there's no matching `{0}` function")]
     UnresolvedFunction(&'ctx str, Span),
     #[error("invalid number of arguments, expected {}", DisplayRangeInclusive(.0))]

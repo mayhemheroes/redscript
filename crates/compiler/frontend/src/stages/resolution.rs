@@ -12,7 +12,7 @@ use redscript_ast::{self as ast, BinOp, Span, Spanned, UnOp};
 use super::TypeInference;
 use super::infer::{ClassItem, FieldItem, FuncItem, FuncItemKind, InferStageModule};
 use crate::cte::{self, Evaluator};
-use crate::diagnostic::MethodSignature;
+use crate::diagnostic::FunctionSignature;
 use crate::lower::{InferredTypeApp, TypeEnv};
 use crate::modules::{Export, ImportError, ModuleMap};
 use crate::symbols::{AnyBaseType, FreeFunctionIndexes, FunctionEntry, Visibility};
@@ -1246,7 +1246,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     let return_t =
                         PolyType::from_type_with_env(base_method.type_().return_type(), &env)
                             .unwrap();
-                    missing.push(MethodSignature::new(name, params, return_t));
+                    missing.push(FunctionSignature::new(name, params, return_t));
                 }
             }
 

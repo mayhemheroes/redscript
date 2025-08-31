@@ -53,7 +53,7 @@ pub enum Diagnostic<'ctx> {
     #[error("the annotations on this function are incompatible with each other")]
     IncompatibleAnnotations(Span),
     #[error("this class is missing some required method implementation(s):\n{}", sep_by(.0, "\n"))]
-    MissingMethodImpls(Box<[MethodSignature<'ctx, Poly>]>, Span),
+    MissingMethodImpls(Box<[FunctionSignature<'ctx, Poly>]>, Span),
     #[error("this class contains a duplicated implementation of the `{0}` method")]
     DuplicateMethod(&'ctx str, Span),
     #[error("this class overrides a final method `{0}`")]
@@ -327,13 +327,13 @@ impl<E> Default for Reporter<E> {
 }
 
 #[derive(Debug)]
-pub struct MethodSignature<'ctx, K: TypeKind> {
+pub struct FunctionSignature<'ctx, K: TypeKind> {
     name: &'ctx str,
     params: Box<[Param<'ctx, K>]>,
     return_type: K::Type<'ctx>,
 }
 
-impl<'ctx, K: TypeKind> MethodSignature<'ctx, K> {
+impl<'ctx, K: TypeKind> FunctionSignature<'ctx, K> {
     pub fn new(
         name: &'ctx str,
         params: impl Into<Box<[Param<'ctx, K>]>>,
@@ -347,7 +347,7 @@ impl<'ctx, K: TypeKind> MethodSignature<'ctx, K> {
     }
 }
 
-impl<K: TypeKind> fmt::Display for MethodSignature<'_, K> {
+impl<K: TypeKind> fmt::Display for FunctionSignature<'_, K> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,

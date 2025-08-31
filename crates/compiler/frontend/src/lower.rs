@@ -14,7 +14,7 @@ use redscript_ast::{Span, Spanned};
 use types::Coercion;
 pub use types::{InferredTypeApp, Poly, PolyType};
 
-use crate::diagnostic::{ErrorWithSpan, MethodSignature};
+use crate::diagnostic::{ErrorWithSpan, FunctionSignature};
 use crate::lower::error::InaccessibleMember;
 use crate::symbols::{
     AnyBaseType, FieldId, FreeFunctionIndex, FunctionEntry, FunctionKey, FunctionKind,
@@ -683,9 +683,9 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                             ast::BinOp::Ne => ir::Intrinsic::NotEquals,
                             _ => unreachable!(),
                         };
-                        let candidates = env.query_free_functions(intrinsic, self.symbols);
+                        let candidates = env.query_free_functions(intrinsic.name(), self.symbols);
                         self.typed_overload_resolver()
-                            .name(op.name())
+                            .name(intrinsic.name())
                             .args(&mut args)
                             .arg_types(&arg_types)
                             .candidates(candidates)
@@ -2016,7 +2016,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                     .chain(matches)
                     .map(|entry| {
                         let func_t = entry.func().type_();
-                        MethodSignature::new(name, func_t.params(), func_t.return_type().clone())
+                        FunctionSignature::new(name, func_t.params(), func_t.return_type().clone())
                     })
                     .collect();
                 return Err(Error::MultipleMatchingOverloads(matches, span));
