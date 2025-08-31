@@ -10,6 +10,9 @@ class Class {
   protected func ProtectedMethod() {}
   public func PublicMethod() {}
 
+  private static func PrivateStaticMethod() {}
+  public static func PublicStaticMethod() {}
+
   func Testing() {
     let _ = this.privateField; // OK, private field can be accessed within the class
     let _ = this.field; // OK, field should be private by default
@@ -20,6 +23,9 @@ class Class {
     this.Method(); // OK, method should be private by default
     this.ProtectedMethod(); // OK, protected method can be accessed within the class
     this.PublicMethod(); // OK, public method can be accessed within the class
+
+    Class.PrivateStaticMethod(); // OK, private static method can be accessed within the class
+    Class.PublicStaticMethod(); // OK, public static method can be accessed within the class
   }
 }
 
@@ -34,6 +40,9 @@ class Subclass extends Class {
     this.Method(); // Error: method should be private by default
     this.ProtectedMethod(); // OK, protected method can be accessed from subclass
     this.PublicMethod(); // OK, public method can be accessed from subclass
+
+    Class.PrivateStaticMethod(); // Error: private static method cannot be accessed from subclass
+    Class.PublicStaticMethod(); // OK: public static method can be accessed from subclass
   }
 }
 
@@ -49,4 +58,7 @@ func Testing() {
   inst.Method(); // Error: method should be private by default
   inst.ProtectedMethod(); // Error: protected method cannot be accessed outside the class
   inst.PublicMethod(); // OK: public method can be accessed outside the class
+
+  Class.PrivateStaticMethod(); // Error: private static method cannot be accessed outside the class
+  Class.PublicStaticMethod(); // OK: public static method can be accessed outside the class
 }

@@ -7,7 +7,7 @@ abstract class AbstractClass<A> {
   func UnimplementedMethod(a: A)
   final func FinalMethod(a: A) {}
 
-  static func StaticMethod(a: A) {}
+  public static func StaticMethod(a: A) {}
 }
 
 class IncompleteClass extends AbstractClass<Int32> {}

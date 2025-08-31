@@ -1676,6 +1676,16 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 .env(env)
                 .span(call_span)
                 .resolve()?;
+
+            let method_id = resolved.resulution.function;
+            let method = &self.symbols[method_id];
+            if !self.check_visibility(method_id.parent(), method.flags().visibility()) {
+                self.reporter.report(Error::InaccessibleMethod(
+                    InaccessibleMember::new(method_id, member, method.flags().visibility()).into(),
+                    call_span,
+                ));
+            }
+
             let parent = resolved.resulution.function.parent();
             if parent != id {
                 self.reporter.report(Error::CallingBaseStaticMethod {

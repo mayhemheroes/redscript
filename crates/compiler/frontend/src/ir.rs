@@ -315,10 +315,10 @@ impl<'ctx> Expr<'ctx> {
 
     pub fn find_at(&self, pos: u32) -> &Expr<'ctx> {
         match self {
-            Expr::Construct { args: values, .. } => values
-                .binary_search_by(|v| v.span().cmp_pos(pos))
+            Expr::Construct { args, .. } => args
+                .binary_search_by(|arg| arg.span().cmp_pos(pos))
                 .ok()
-                .map(|i| values[i].find_at(pos))
+                .map(|i| args[i].find_at(pos))
                 .unwrap_or(self),
             Expr::NewClosure { closure, .. } => closure.block.find_at(pos).unwrap_or(self),
             Expr::Call { call, .. } => {
