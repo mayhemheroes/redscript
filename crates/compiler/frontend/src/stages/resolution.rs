@@ -1501,13 +1501,11 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
 
         match (typ.upper_bound(), upper.upper_bound()) {
             (Some(x), Some(y)) if self.symbols.is_subtype(x.id(), y.id()) => Ok(()),
-            (_, _) => {
-                return Err(Diagnostic::UnsastisfiedBound(
-                    typ.clone().into(),
-                    upper.clone().into(),
-                    span,
-                ));
-            }
+            (_, _) => Err(Diagnostic::UnsastisfiedBound(
+                typ.clone().into(),
+                upper.clone().into(),
+                span,
+            )),
         }
     }
 
