@@ -121,7 +121,7 @@ impl<K: TypeKind> PartialEq for Type<'_, K> {
         match (self, other) {
             (Self::Nothing, Self::Nothing) => true,
             (Self::Data(a), Self::Data(b)) => a == b,
-            (Self::Ctx(a), Self::Ctx(b)) => Rc::ptr_eq(a, b),
+            (Self::Ctx(a), Self::Ctx(b)) => a.name == b.name,
             _ => false,
         }
     }
