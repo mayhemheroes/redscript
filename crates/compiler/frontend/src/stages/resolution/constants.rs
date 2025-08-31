@@ -9,6 +9,7 @@ pub mod annotation {
     pub const NAME_IMPLEMENTATION: &str = "nameImplementation";
     pub const RUNTIME_PROPERTY: &str = "runtimeProperty";
     pub const DERIVE_NEW: &str = "deriveNew";
+    pub const PRIVATE_CONSTRUCTOR: &str = "privateConstructor";
 }
 
 pub mod ident {

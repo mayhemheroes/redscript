@@ -1008,6 +1008,12 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             self.reporter
                 .report(Error::ClassConstructorHasArguments(span));
         }
+        if let Some(hint) = agg.constructor_hint()
+            && self.context != Some(typ.id())
+        {
+            self.reporter
+                .report(Error::PrivateConstructor(hint.clone(), span));
+        }
 
         let type_args = if typ.args().is_empty() {
             def.params()

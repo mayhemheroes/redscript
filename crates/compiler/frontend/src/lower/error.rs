@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt;
 use std::ops::RangeInclusive;
 use std::rc::Rc;
@@ -110,6 +111,8 @@ pub enum Error<'ctx> {
         name: &'ctx str,
         span: Span,
     },
+    #[error("{0}")]
+    PrivateConstructor(Cow<'ctx, str>, Span),
 }
 
 impl Error<'_> {
@@ -150,7 +153,8 @@ impl Error<'_> {
             | Self::InaccessibleMethod(_, span)
             | Self::InaccessibleField(_, span)
             | Self::RefMismatch(span)
-            | Self::CallingBaseStaticMethod { span, .. } => *span,
+            | Self::CallingBaseStaticMethod { span, .. }
+            | Self::PrivateConstructor(_, span) => *span,
         }
     }
 
@@ -192,6 +196,7 @@ impl Error<'_> {
             Self::InaccessibleField { .. } => "INACCESSIBLE_FIELD",
             Self::RefMismatch(_) => "REF_MISMATCH",
             Self::CallingBaseStaticMethod { .. } => "CALLING_BASE_STATIC_METHOD",
+            Self::PrivateConstructor(_, _) => "PRIVATE_CONSTRUCTOR",
         }
     }
 

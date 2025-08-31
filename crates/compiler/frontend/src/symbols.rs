@@ -439,6 +439,7 @@ pub struct Aggregate<'ctx> {
     fields: FieldMap<'ctx>,
     methods: MethodMap<'ctx>,
     implementations: HashMap<MonoType<'ctx>, QualifiedName<'ctx>>,
+    constructor_hint: Option<Cow<'ctx, str>>,
     span: Option<Span>,
 }
 
@@ -457,6 +458,7 @@ impl<'ctx> Aggregate<'ctx> {
             fields,
             methods,
             implementations,
+            constructor_hint: None,
             span,
         }
     }
@@ -508,6 +510,16 @@ impl<'ctx> Aggregate<'ctx> {
     #[inline]
     pub fn named_implementation(&self, typ: &MonoType<'ctx>) -> Option<&QualifiedName<'ctx>> {
         self.implementations.get(typ)
+    }
+
+    #[inline]
+    pub fn constructor_hint(&self) -> Option<&Cow<'ctx, str>> {
+        self.constructor_hint.as_ref()
+    }
+
+    #[inline]
+    pub fn set_constructor_hint(&mut self, hint: impl Into<Cow<'ctx, str>>) {
+        self.constructor_hint = Some(hint.into());
     }
 
     #[inline]

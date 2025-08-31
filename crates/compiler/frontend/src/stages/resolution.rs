@@ -415,9 +415,10 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
 
         let mut implementations = HashMap::default();
         let mut derive_new = None;
+        let mut private_constructor_hint = None;
 
-        for (ann, ann_span) in &meta.annotations {
-            match (ann.name, &ann.args[..]) {
+        for (mut ann, ann_span) in meta.annotations {
+            match (ann.name, &mut ann.args[..]) {
                 (
                     annotation::NAME_IMPLEMENTATION,
                     [(ast::Expr::DynCast { expr, typ }, expr_span)],
@@ -457,10 +458,16 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                         self.reporter.report(Diagnostic::DuplicateImpl(*type_span));
                     }
                 }
-                (annotation::DERIVE_NEW, []) => derive_new = Some(*ann_span),
+                (annotation::DERIVE_NEW, []) => derive_new = Some(ann_span),
+                (
+                    annotation::PRIVATE_CONSTRUCTOR,
+                    [(ast::Expr::Constant(ast::Constant::String(msg)), _)],
+                ) => {
+                    private_constructor_hint = Some(mem::take(msg));
+                }
                 _ => {
                     self.reporter
-                        .report(Diagnostic::UnknownAnnotation(ann.name, *ann_span));
+                        .report(Diagnostic::UnknownAnnotation(ann.name, ann_span));
                 }
             }
         }
@@ -597,7 +604,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
             ));
         }
 
-        let aggregate = Aggregate::new(
+        let mut aggregate = Aggregate::new(
             cls_flags,
             base,
             fields,
@@ -605,6 +612,10 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
             implementations,
             Some(name_span),
         );
+        if let Some(hint) = private_constructor_hint {
+            aggregate.set_constructor_hint(hint);
+        }
+
         let def = TypeDef::new(vars, TypeSchema::Aggregate(aggregate.into()), meta.doc);
         self.symbols.add_type(id, def);
 
