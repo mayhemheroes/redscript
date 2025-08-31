@@ -7,7 +7,8 @@ use identity_hash::BuildIdentityHasher;
 use redscript_ast::{self as ast, FileId, Span, Spanned};
 use smallvec::smallvec;
 
-use super::resolution::{Scope, THIS_IDENT, WRAPPED_METHOD_IDENT};
+use super::resolution::Scope;
+use super::resolution::constants::ident;
 use crate::diagnostic::pass::DiagnosticPass;
 use crate::lower::{Env, Lower};
 use crate::symbols::FreeFunctionIndexes;
@@ -156,9 +157,9 @@ impl<'scope, 'ctx> TypeInference<'scope, 'ctx> {
                             FreeFunction::new_alias(typ.clone(), func.id, Some(func.name_span));
                         let free_func = self
                             .symbols
-                            .add_free_function(WRAPPED_METHOD_IDENT, free_func);
+                            .add_free_function(ident::WRAPPED_METHOD, free_func);
                         let mut funcs = scope.funcs.introduce_scope();
-                        funcs.insert(WRAPPED_METHOD_IDENT, smallvec![free_func]);
+                        funcs.insert(ident::WRAPPED_METHOD, smallvec![free_func]);
 
                         let sym = &self.symbols[func.id];
                         let this_t = sym
@@ -227,7 +228,7 @@ fn function_builder<'ctx>(
 ) -> LoweredFunction<'ctx> {
     let this = this_type.map(|lt| ir::LocalInfo::new(ir::Local::This, None, lt, None));
     if let Some(this) = &this {
-        env.define_local(THIS_IDENT, this.clone());
+        env.define_local(ident::THIS, this.clone());
     }
 
     let params = type_

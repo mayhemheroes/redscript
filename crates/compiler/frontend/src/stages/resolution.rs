@@ -4,6 +4,7 @@ use std::ops::{BitAndAssign, Not};
 use std::rc::Rc;
 use std::{fmt, mem};
 
+use constants::{annotation, ident};
 use hashbrown::{HashMap, HashSet};
 use identity_hash::BuildIdentityHasher;
 use redscript_ast::{self as ast, BinOp, Span, Spanned, UnOp};
@@ -24,22 +25,8 @@ use crate::{
     TypeInterner, TypeRef, TypeSchema, TypeScope, Variance, ir, predef,
 };
 
+pub(super) mod constants;
 mod derive_new;
-
-pub(super) const WRAP_METHOD_ANNOTATION: &str = "wrapMethod";
-pub(super) const REPLACE_METHOD_ANNOTATION: &str = "replaceMethod";
-pub(super) const ADD_METHOD_ANNOTATION: &str = "addMethod";
-pub(super) const ADD_FIELD_ANNOTATION: &str = "addField";
-pub(super) const INTRINSIC_ANNOTATION: &str = "intrinsic";
-pub(super) const NEVER_REF_ANNOTATION: &str = "neverRef";
-pub(super) const MIXED_REF_ANNOTATION: &str = "mixedRef";
-pub(super) const NAME_IMPLEMENTATION_ANNOTATION: &str = "nameImplementation";
-pub(super) const RUNTIME_PROPERTY_ANNOTATION: &str = "runtimeProperty";
-pub(super) const DERIVE_NEW_ANNOTATION: &str = "deriveNew";
-
-pub(super) const THIS_IDENT: &str = "this";
-pub(super) const WRAPPED_METHOD_IDENT: &str = "wrappedMethod";
-pub(super) const NEW_METHOD_IDENT: &str = "New";
 
 #[derive(Debug)]
 pub struct NameResolution<'scope, 'ctx> {
@@ -138,11 +125,11 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     item_meta
                         .annotations
                         .retain(|(ann, _)| match (ann.name, &ann.args[..]) {
-                            (NEVER_REF_ANNOTATION, &[]) => {
+                            (annotation::NEVER_REF, &[]) => {
                                 flags.set_is_never_ref(true);
                                 false
                             }
-                            (MIXED_REF_ANNOTATION, &[]) => {
+                            (annotation::MIXED_REF, &[]) => {
                                 flags.set_is_mixed_ref(true);
                                 false
                             }
@@ -183,16 +170,16 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                     for (ann, ann_span) in &item_meta.annotations {
                         match (ann.name, &ann.args[..]) {
                             (
-                                INTRINSIC_ANNOTATION
-                                | WRAP_METHOD_ANNOTATION
-                                | REPLACE_METHOD_ANNOTATION
-                                | ADD_METHOD_ANNOTATION,
+                                annotation::INTRINSIC
+                                | annotation::WRAP_METHOD
+                                | annotation::REPLACE_METHOD
+                                | annotation::ADD_METHOD,
                                 _,
                             ) if annotation.is_some() => {
                                 self.reporter
                                     .report(Diagnostic::IncompatibleAnnotations(*ann_span));
                             }
-                            (INTRINSIC_ANNOTATION, &[(ast::Expr::Ident(name), span)]) => {
+                            (annotation::INTRINSIC, &[(ast::Expr::Ident(name), span)]) => {
                                 let intrinsic = ir::Intrinsic::try_from(name).map_err(|name| {
                                     Diagnostic::UnknownIntrinsic(name.into(), span)
                                 });
@@ -201,13 +188,13 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                                     .unwrap_err(intrinsic)
                                     .map(FunctionAnnotation::Intrinsic);
                             }
-                            (REPLACE_METHOD_ANNOTATION, &[(ast::Expr::Ident(name), span)]) => {
+                            (annotation::REPLACE_METHOD, &[(ast::Expr::Ident(name), span)]) => {
                                 annotation = Some(FunctionAnnotation::Replace((name, span)));
                             }
-                            (ADD_METHOD_ANNOTATION, &[(ast::Expr::Ident(name), span)]) => {
+                            (annotation::ADD_METHOD, &[(ast::Expr::Ident(name), span)]) => {
                                 annotation = Some(FunctionAnnotation::Add((name, span)));
                             }
-                            (WRAP_METHOD_ANNOTATION, &[(ast::Expr::Ident(name), span)]) => {
+                            (annotation::WRAP_METHOD, &[(ast::Expr::Ident(name), span)]) => {
                                 annotation = Some(FunctionAnnotation::Wrap((name, span)));
                             }
                             _ => {
@@ -432,7 +419,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         for (ann, ann_span) in &meta.annotations {
             match (ann.name, &ann.args[..]) {
                 (
-                    NAME_IMPLEMENTATION_ANNOTATION,
+                    annotation::NAME_IMPLEMENTATION,
                     [(ast::Expr::DynCast { expr, typ }, expr_span)],
                 ) => {
                     let (typ, type_span) = typ.as_ref();
@@ -470,7 +457,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
                         self.reporter.report(Diagnostic::DuplicateImpl(*type_span));
                     }
                 }
-                (DERIVE_NEW_ANNOTATION, []) => derive_new = Some(*ann_span),
+                (annotation::DERIVE_NEW, []) => derive_new = Some(*ann_span),
                 _ => {
                     self.reporter
                         .report(Diagnostic::UnknownAnnotation(ann.name, *ann_span));
@@ -601,7 +588,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
 
         if let Some(derive_span) = derive_new {
             let method = derive_new::derive_new_method(id, &vars, fields.iter(), derive_span);
-            let func_idx = methods.add(NEW_METHOD_IDENT, method);
+            let func_idx = methods.add(ident::NEW_METHOD, method);
             method_items.push(derive_new::derive_new_method_item(
                 func_idx,
                 aggregate_name,
@@ -874,7 +861,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
 
         for (ann, ann_span) in &annotations {
             match (ann.name, &ann.args[..]) {
-                (ADD_FIELD_ANNOTATION, &[(ast::Expr::Ident(type_name), span)]) => {
+                (annotation::ADD_FIELD, &[(ast::Expr::Ident(type_name), span)]) => {
                     let (parent_t, agg) =
                         self.resolve_annotated_aggregate(type_name, types, span)?;
                     let flags = agg.flags();
@@ -1020,7 +1007,7 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         let mut results = vec![];
         anns.retain(|(ann, _)| match (ann.name, &*ann.args) {
             (
-                RUNTIME_PROPERTY_ANNOTATION,
+                annotation::RUNTIME_PROPERTY,
                 [
                     (ast::Expr::Constant(ast::Constant::String(key)), _),
                     (ast::Expr::Constant(ast::Constant::String(val)), _),
@@ -1665,15 +1652,16 @@ pub enum FunctionAnnotation<'ctx> {
 
 impl fmt::Display for FunctionAnnotation<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use annotation::*;
         match self {
             FunctionAnnotation::Intrinsic(i) => {
-                write!(f, "@{INTRINSIC_ANNOTATION}({})", <&str>::from(*i))
+                write!(f, "@{INTRINSIC}({})", <&str>::from(*i))
             }
             FunctionAnnotation::Replace((name, _)) => {
-                write!(f, "@{REPLACE_METHOD_ANNOTATION}({name})")
+                write!(f, "@{REPLACE_METHOD}({name})")
             }
-            FunctionAnnotation::Add((name, _)) => write!(f, "@{ADD_METHOD_ANNOTATION}({name})"),
-            FunctionAnnotation::Wrap((name, _)) => write!(f, "@{WRAP_METHOD_ANNOTATION}({name})"),
+            FunctionAnnotation::Add((name, _)) => write!(f, "@{ADD_METHOD}({name})"),
+            FunctionAnnotation::Wrap((name, _)) => write!(f, "@{WRAP_METHOD}({name})"),
         }
     }
 }
