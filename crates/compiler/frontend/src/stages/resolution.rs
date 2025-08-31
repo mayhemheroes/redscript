@@ -1495,20 +1495,20 @@ impl<'scope, 'ctx> NameResolution<'scope, 'ctx> {
         typ: &Type<'ctx>,
         span: Span,
     ) -> Result<(), Diagnostic<'ctx>> {
-        match (typ, var.upper()) {
-            (x, Some(y)) if x == y => {}
-            (Type::Data(x), Some(Type::Data(y))) if self.symbols.is_subtype(x.id(), y.id()) => {}
-            (x, Some(y)) => {
+        let Some(upper) = var.upper() else {
+            return Ok(());
+        };
+
+        match (typ.upper_bound(), upper.upper_bound()) {
+            (Some(x), Some(y)) if self.symbols.is_subtype(x.id(), y.id()) => Ok(()),
+            (_, _) => {
                 return Err(Diagnostic::UnsastisfiedBound(
-                    x.clone().into(),
-                    y.clone().into(),
+                    typ.clone().into(),
+                    upper.clone().into(),
                     span,
                 ));
             }
-            _ => {}
         }
-
-        Ok(())
     }
 
     fn check_type_app(
