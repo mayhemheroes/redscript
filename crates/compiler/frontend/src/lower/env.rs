@@ -47,10 +47,11 @@ impl<'scope, 'ctx> Env<'scope, 'ctx> {
 
     pub fn query_free_functions<'a>(
         &self,
-        name: &'a str,
+        name: impl Into<&'a str>,
         symbols: &'scope Symbols<'ctx>,
     ) -> impl Iterator<Item = FunctionEntry<FreeFunctionIndex, &'a str, &'scope FreeFunction<'ctx>>>
     {
+        let name = name.into();
         self.funcs
             .scope_iter()
             .filter_map(|map| map.get(name))

@@ -656,6 +656,49 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 };
                 (ir, PolyType::nullary(predef::VOID))
             }
+            ast::Expr::BinOp {
+                lhs,
+                op: op @ (ast::BinOp::Eq | ast::BinOp::Ne),
+                rhs,
+            } => {
+                let (lhs, lhs_t) = self.lower_expr(lhs, env)?;
+                let (rhs, rhs_t) = self.lower_expr(rhs, env)?;
+                let mut args = [lhs, rhs];
+                let arg_types = [lhs_t, rhs_t];
+                let candidates = env.query_free_functions(op.name(), self.symbols);
+                let (call, typ) = match self
+                    .typed_overload_resolver()
+                    .name(op.name())
+                    .args(&mut args)
+                    .arg_types(&arg_types)
+                    .candidates(candidates)
+                    .env(env)
+                    .span(*span)
+                    .resolve()
+                {
+                    Ok(res) => res.with_args(args).into_call(),
+                    Err(Error::UnresolvedFunction(_, _)) => {
+                        let intrinsic = match op {
+                            ast::BinOp::Eq => ir::Intrinsic::Equals,
+                            ast::BinOp::Ne => ir::Intrinsic::NotEquals,
+                            _ => unreachable!(),
+                        };
+                        let candidates = env.query_free_functions(intrinsic, self.symbols);
+                        self.typed_overload_resolver()
+                            .name(op.name())
+                            .args(&mut args)
+                            .arg_types(&arg_types)
+                            .candidates(candidates)
+                            .env(env)
+                            .span(*span)
+                            .resolve()?
+                            .with_args(args)
+                            .into_call()
+                    }
+                    Err(err) => return Err(err),
+                };
+                (ir::Expr::call(call, *span), typ)
+            }
             ast::Expr::BinOp { lhs, op, rhs } => {
                 let lhs = self.lower_expr(lhs, env)?;
                 let rhs = self.lower_expr(rhs, env)?;
@@ -1884,7 +1927,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                 .typed_overload_resolver()
                 .name(name)
                 .args(&mut checked_args)
-                .arg_types(arg_types)
+                .arg_types(&arg_types)
                 .type_args(&type_args)
                 .candidates(iter::once(primary.clone()).chain(filtered))
                 .maybe_fallback(Some(primary))
@@ -1902,7 +1945,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         &mut self,
         name: &'ctx str,
         args: &mut [ir::Expr<'ctx>],
-        arg_types: Vec<PolyType<'ctx>>,
+        arg_types: &[PolyType<'ctx>],
         #[builder(default)] type_args: &[PolyType<'ctx>],
         candidates: impl IntoIterator<Item = FunctionEntry<Key, Name, Func>>,
         fallback: Option<FunctionEntry<Key, Name, Func>>,
@@ -1949,7 +1992,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             })
         }
 
-        let mut matches = match_by_subtype(candidates, &arg_types, self.symbols).peekable();
+        let mut matches = match_by_subtype(candidates, arg_types, self.symbols).peekable();
         let selected = matches
             .next()
             .or(fallback)
@@ -1959,11 +2002,11 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             selected
         } else {
             // retry with upper bounds lifted to resolve ambiguity
-            for arg in &arg_types {
+            for arg in arg_types {
                 arg.force_upper_bound(self.symbols).with_span(span)?;
             }
             let candidates = iter::once(selected).chain(matches);
-            let mut matches = match_by_subtype(candidates, &arg_types, self.symbols).peekable();
+            let mut matches = match_by_subtype(candidates, arg_types, self.symbols).peekable();
 
             let primary = matches
                 .next()
@@ -1996,7 +2039,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         );
         for ((arg, typ), param) in args
             .iter_mut()
-            .zip(&arg_types)
+            .zip(arg_types)
             .zip(selected.func().type_().params())
         {
             let span = arg.span();
@@ -2140,7 +2183,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             .typed_overload_resolver()
             .name(name)
             .args(&mut args)
-            .arg_types(arg_types)
+            .arg_types(&arg_types)
             .type_args(type_args)
             .candidates(candidates)
             .env(env)
@@ -2217,7 +2260,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             .typed_overload_resolver()
             .name("IsA")
             .args(&mut args)
-            .arg_types(vec![name_t])
+            .arg_types(&[name_t])
             .candidates(candidates)
             .receiver(upper_bound.clone())
             .env(env)
