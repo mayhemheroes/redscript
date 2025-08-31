@@ -1233,7 +1233,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
         if let &(ast::Expr::Ident(name), _) = expr
             && let Some(&TypeRef::Id(id)) = env.types().get(name)
         {
-            return self.lower_construct(id, args, type_args, env, *expr_span);
+            return self.lower_construct(id, args, type_args, env, call_span);
         }
 
         if let &(ast::Expr::Ident(name), _) = expr

@@ -336,19 +336,19 @@ impl<'scope, 'ctx> Assembler<'scope, 'ctx> {
                 self.emit(Instr::New(class_t));
             }
             ir::Expr::Construct {
-                args: values,
+                args,
                 struct_type,
                 span,
             } => {
                 let struct_t = self.mono_type_app(struct_type, *span)?;
                 let struct_t = self.monomorph.class(&struct_t, self.symbols, self.bundle);
                 self.emit(Instr::Construct {
-                    arg_count: u8::try_from(values.len())
+                    arg_count: u8::try_from(args.len())
                         .map_err(|_| AssembleError::TooManyArguments(*span))?,
                     class: struct_t,
                 });
-                for value in values {
-                    self.assemble_expr(value)?;
+                for arg in args {
+                    self.assemble_expr(arg)?;
                 }
             }
             ir::Expr::NewClosure { closure, span } => {
