@@ -2145,10 +2145,10 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             Some(Coercion::IntoRef(RefType::Script)) => ir::Intrinsic::AsRef,
             Some(Coercion::IntoVariant) => ir::Intrinsic::ToVariant,
             Some(Coercion::FromRef(RefType::Strong)) => {
-                if !rhs
+                if rhs
                     .upper_bound(self.symbols)
                     .and_then(|t| self.symbols[t.id()].schema().as_aggregate())
-                    .is_some_and(|agg| !agg.flags().is_mixed_ref())
+                    .is_none_or(|agg| agg.flags().is_mixed_ref())
                 {
                     self.reporter.report(Error::UnexpectedRef(span));
                 }
