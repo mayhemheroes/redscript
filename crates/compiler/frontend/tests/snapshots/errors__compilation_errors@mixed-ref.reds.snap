@@ -8,12 +8,17 @@ input_file: crates/compiler/frontend/tests/data/mixed-ref.reds
           ^^^^^^^^^^^^^^
 `NeverRef` cannot be constructed with the `new` operator, use `NeverRef()` instead
 
-[REF_MISMATCH] At tests/data/mixed-ref.reds:15:32
+[UNEXPECTED_NON_REF] At tests/data/mixed-ref.reds:15:32
   let withRef: ref<MixedRef> = MixedRef(); // Error
                                ^^^^^^^^^^
-attempting to mix use of a type with and without `ref`
+attempting to use a type with no `ref` where one is expected
 
-[REF_MISMATCH] At tests/data/mixed-ref.reds:18:30
+[UNEXPECTED_REF] At tests/data/mixed-ref.reds:18:30
   let withoutRef: MixedRef = new MixedRef(); // Error
                              ^^^^^^^^^^^^^^
-attempting to mix use of a type with and without `ref`
+attempting to use a type with `ref` where none is expected
+
+[UNEXPECTED_REF] At tests/data/mixed-ref.reds:22:21
+  let _: MixedRef = val as MixedRef; // Error
+                    ^^^^^^^^^^^^^^^
+attempting to use a type with `ref` where none is expected

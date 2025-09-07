@@ -2150,12 +2150,12 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
                     .and_then(|t| self.symbols[t.id()].schema().as_aggregate())
                     .is_some_and(|agg| !agg.flags().is_mixed_ref())
                 {
-                    self.reporter.report(Error::RefMismatch(span));
+                    self.reporter.report(Error::UnexpectedRef(span));
                 }
                 return Ok(());
             }
             Some(Coercion::IntoRef(RefType::Strong)) => {
-                self.reporter.report(Error::RefMismatch(span));
+                self.reporter.report(Error::UnexpectedNonRef(span));
                 return Ok(());
             }
             None => return Ok(()),

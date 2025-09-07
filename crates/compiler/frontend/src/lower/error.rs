@@ -103,8 +103,10 @@ pub enum Error<'ctx> {
     InaccessibleMethod(Box<InaccessibleMember<'ctx, MethodId<'ctx>>>, Span),
     #[error("{0}")]
     InaccessibleField(Box<InaccessibleMember<'ctx, FieldId<'ctx>>>, Span),
-    #[error("attempting to mix use of a type with and without `ref`")]
-    RefMismatch(Span),
+    #[error("attempting to use a type with `ref` where none is expected")]
+    UnexpectedRef(Span),
+    #[error("attempting to use a type with no `ref` where one is expected")]
+    UnexpectedNonRef(Span),
     #[error("calling a static method of `{type_id}` from its subclass, use `{}.{name}` instead", .type_id.simple_name())]
     CallingBaseStaticMethod {
         type_id: TypeId<'ctx>,
@@ -152,7 +154,8 @@ impl Error<'_> {
             | Self::RedundantDynCast(span)
             | Self::InaccessibleMethod(_, span)
             | Self::InaccessibleField(_, span)
-            | Self::RefMismatch(span)
+            | Self::UnexpectedRef(span)
+            | Self::UnexpectedNonRef(span)
             | Self::CallingBaseStaticMethod { span, .. }
             | Self::PrivateConstructor(_, span) => *span,
         }
@@ -194,7 +197,8 @@ impl Error<'_> {
             Self::RedundantDynCast(_) => "REDUNDANT_DYN_CAST",
             Self::InaccessibleMethod { .. } => "INACCESSIBLE_METHOD",
             Self::InaccessibleField { .. } => "INACCESSIBLE_FIELD",
-            Self::RefMismatch(_) => "REF_MISMATCH",
+            Self::UnexpectedRef(_) => "UNEXPECTED_REF",
+            Self::UnexpectedNonRef(_) => "UNEXPECTED_NON_REF",
             Self::CallingBaseStaticMethod { .. } => "CALLING_BASE_STATIC_METHOD",
             Self::PrivateConstructor(_, _) => "PRIVATE_CONSTRUCTOR",
         }
