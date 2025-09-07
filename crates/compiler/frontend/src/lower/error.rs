@@ -42,7 +42,7 @@ pub enum Error<'ctx> {
     InvalidConstructType(Span),
     #[error("`{0}` cannot be constructed with the `new` operator, use `{}()` instead", .type_id.simple_name())]
     NewWithConstructible { type_id: TypeId<'ctx>, span: Span },
-    #[error("this type cannot be casted with the `as` operator")]
+    #[error("this type cannot be usedd with the `as` operator, the target type must be a class")]
     InvalidDynCastType(Span),
     #[error("the target type of this cast is not known, consider specifying it")]
     UnknownStaticCastType(Span),

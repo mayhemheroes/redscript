@@ -1207,18 +1207,24 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             return Err(Error::InvalidDynCastType(*type_span));
         };
         let target = InferredTypeApp::from_type(&typ);
-        let expected = target.clone().into_type().into_poly();
-        let inferred = if let Some((RefType::Weak, inner)) = expr_t.strip_ref(self.symbols) {
-            expected
-                .constrain_base(&inner, self.symbols)
-                .map(|_| Type::app(predef::WREF, [expected.clone()]).into_poly())
-                .map_err(|err| (err, inner))
-        } else {
-            expected
-                .constrain_base(&expr_t, self.symbols)
-                .map(|_| expected.clone())
-                .map_err(|err| (err, expr_t.clone()))
+        let Some(agg) = self.symbols[target.id()].schema().as_aggregate() else {
+            return Err(Error::InvalidDynCastType(*type_span));
         };
+        let expected = target.clone().into_type().into_poly();
+        let (ref_t, inner) = expr_t.strip_ref(self.symbols).unzip();
+
+        let constraint = inner.unwrap_or_else(|| expr_t.clone());
+        let result_t = match ref_t {
+            Some(RefType::Weak) => Type::app(predef::WREF, [expected.clone()]).into_poly(),
+            _ if agg.flags().is_mixed_ref() => {
+                Type::app(predef::REF, [expected.clone()]).into_poly()
+            }
+            _ => expected.clone(),
+        };
+        let inferred = expected
+            .constrain_base(&constraint, self.symbols)
+            .map(|_| result_t)
+            .map_err(|err| (err, constraint));
 
         match inferred {
             Err((err, inner)) => {
@@ -2138,8 +2144,19 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             Some(Coercion::FromRef(RefType::Script)) => ir::Intrinsic::Deref,
             Some(Coercion::IntoRef(RefType::Script)) => ir::Intrinsic::AsRef,
             Some(Coercion::IntoVariant) => ir::Intrinsic::ToVariant,
-            Some(Coercion::FromRef(RefType::Strong) | Coercion::IntoRef(RefType::Strong)) => {
-                return Err(Error::RefMismatch(span));
+            Some(Coercion::FromRef(RefType::Strong)) => {
+                if !rhs
+                    .upper_bound(self.symbols)
+                    .and_then(|t| self.symbols[t.id()].schema().as_aggregate())
+                    .is_some_and(|agg| !agg.flags().is_mixed_ref())
+                {
+                    self.reporter.report(Error::RefMismatch(span));
+                }
+                return Ok(());
+            }
+            Some(Coercion::IntoRef(RefType::Strong)) => {
+                self.reporter.report(Error::RefMismatch(span));
+                return Ok(());
             }
             None => return Ok(()),
         };

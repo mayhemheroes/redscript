@@ -13,4 +13,5 @@ func Test() {
   let _ = a as ClassB; // OK
   let _ = a as ClassC; // Impossible
   let _ = b as ClassA; // Redundant
+  let _ = b as Int32; // Invalid
 }

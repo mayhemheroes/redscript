@@ -16,4 +16,10 @@ func Test() {
 
   let withoutRef: MixedRef = MixedRef(); // OK
   let withoutRef: MixedRef = new MixedRef(); // Error
+
+  let val = null;
+  let _: ref<MixedRef> = val as MixedRef; // OK
+
+  IsDefined(withRef); // OK
+  IsDefined(withoutRef); // OK
 }
