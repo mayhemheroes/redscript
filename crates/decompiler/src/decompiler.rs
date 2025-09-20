@@ -490,42 +490,45 @@ impl<'scope, 'ctx: 'i, 'i> Decompiler<'scope, 'ctx, 'i> {
             Instr::Delete => self.consume_intrinsic("Delete", 1)?,
             Instr::This => ast::Expr::This,
             Instr::ArrayClear(_) => self.consume_intrinsic("ArrayClear", 1)?,
-            Instr::ArraySize(_) => self.consume_intrinsic("ArraySize", 1)?,
+            Instr::ArraySize(_) | Instr::StaticArraySize(_) => {
+                self.consume_intrinsic("ArraySize", 1)?
+            }
             Instr::ArrayResize(_) => self.consume_intrinsic("ArrayResize", 2)?,
-            Instr::ArrayFindFirst(_) => self.consume_intrinsic("ArrayFindFirst", 2)?,
-            Instr::ArrayFindFirstFast(_) => self.consume_intrinsic("ArrayFindFirst", 2)?,
-            Instr::ArrayFindLast(_) => self.consume_intrinsic("ArrayFindLast", 2)?,
-            Instr::ArrayFindLastFast(_) => self.consume_intrinsic("ArrayFindLast", 2)?,
-            Instr::ArrayContains(_) => self.consume_intrinsic("ArrayContains", 2)?,
-            Instr::ArrayContainsFast(_) => self.consume_intrinsic("ArrayContains", 2)?,
-            Instr::ArrayCount(_) => self.consume_intrinsic("ArrayCount", 2)?,
-            Instr::ArrayCountFast(_) => self.consume_intrinsic("ArrayCount", 2)?,
+            Instr::ArrayFindFirst(_)
+            | Instr::ArrayFindFirstFast(_)
+            | Instr::StaticArrayFindFirst(_)
+            | Instr::StaticArrayFindFirstFast(_) => self.consume_intrinsic("ArrayFindFirst", 2)?,
+            Instr::ArrayFindLast(_)
+            | Instr::ArrayFindLastFast(_)
+            | Instr::StaticArrayFindLast(_)
+            | Instr::StaticArrayFindLastFast(_) => self.consume_intrinsic("ArrayFindLast", 2)?,
+            Instr::ArrayContains(_)
+            | Instr::ArrayContainsFast(_)
+            | Instr::StaticArrayContains(_)
+            | Instr::StaticArrayContainsFast(_) => self.consume_intrinsic("ArrayContains", 2)?,
+            Instr::ArrayCount(_)
+            | Instr::ArrayCountFast(_)
+            | Instr::StaticArrayCount(_)
+            | Instr::StaticArrayCountFast(_) => self.consume_intrinsic("ArrayCount", 2)?,
             Instr::ArrayPush(_) => self.consume_intrinsic("ArrayPush", 2)?,
             Instr::ArrayPop(_) => self.consume_intrinsic("ArrayPop", 1)?,
             Instr::ArrayInsert(_) => self.consume_intrinsic("ArrayInsert", 3)?,
-            Instr::ArrayRemove(_) => self.consume_intrinsic("ArrayRemove", 2)?,
-            Instr::ArrayRemoveFast(_) => self.consume_intrinsic("ArrayRemove", 2)?,
+            Instr::ArrayRemove(_) | Instr::ArrayRemoveFast(_) => {
+                self.consume_intrinsic("ArrayRemove", 2)?
+            }
             Instr::ArrayGrow(_) => self.consume_intrinsic("ArrayGrow", 2)?,
-            Instr::ArrayErase(_) => self.consume_intrinsic("ArrayErase", 2)?,
-            Instr::ArrayEraseFast(_) => self.consume_intrinsic("ArrayErase", 2)?,
-            Instr::ArrayLast(_) => self.consume_intrinsic("ArrayLast", 1)?,
-            Instr::ArrayElement(_) => ast::Expr::Index {
+            Instr::ArrayErase(_) | Instr::ArrayEraseFast(_) => {
+                self.consume_intrinsic("ArrayErase", 2)?
+            }
+            Instr::ArrayLast(_) | Instr::StaticArrayLast(_) => {
+                self.consume_intrinsic("ArrayLast", 1)?
+            }
+            Instr::ArrayElement(_) | Instr::StaticArrayElement(_) => ast::Expr::Index {
                 expr: self.consume_expr()?.into_expr().into(),
                 index: self.consume_expr()?.into_expr().into(),
             },
             Instr::ArraySort(_) => self.consume_intrinsic("ArraySort", 1)?,
             Instr::ArraySortByPredicate(_) => self.consume_intrinsic("ArraySortByPredicate", 2)?,
-            Instr::StaticArraySize(_) => self.consume_intrinsic("ArraySize", 1)?,
-            Instr::StaticArrayFindFirst(_) => self.consume_intrinsic("ArrayFindFirst", 2)?,
-            Instr::StaticArrayFindFirstFast(_) => self.consume_intrinsic("ArrayFindFirst", 2)?,
-            Instr::StaticArrayFindLast(_) => self.consume_intrinsic("ArrayFindLast", 2)?,
-            Instr::StaticArrayFindLastFast(_) => self.consume_intrinsic("ArrayFindLast", 2)?,
-            Instr::StaticArrayContains(_) => self.consume_intrinsic("ArrayContains", 2)?,
-            Instr::StaticArrayContainsFast(_) => self.consume_intrinsic("ArrayContains", 2)?,
-            Instr::StaticArrayCount(_) => self.consume_intrinsic("ArrayCount", 2)?,
-            Instr::StaticArrayCountFast(_) => self.consume_intrinsic("ArrayCount", 2)?,
-            Instr::StaticArrayLast(_) => self.consume_intrinsic("ArrayLast", 1)?,
-            Instr::StaticArrayElement(_) => self.consume_intrinsic("ArrayElement", 2)?,
             Instr::RefToBool | Instr::WeakRefToBool | Instr::VariantIsDefined => {
                 self.consume_intrinsic("IsDefined", 1)?
             }

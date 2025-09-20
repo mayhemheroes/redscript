@@ -761,8 +761,7 @@ impl<'scope, 'ctx> Lower<'scope, 'ctx> {
             ast::Expr::Lambda { params, body } => {
                 self.lower_closure(params, body, hint, env, *span)?
             }
-            ast::Expr::This => self.resolve_local("this", env, *span)?,
-            ast::Expr::Super => self.resolve_local("this", env, *span)?,
+            ast::Expr::This | ast::Expr::Super => self.resolve_local("this", env, *span)?,
 
             ast::Expr::Null => {
                 let typ =
